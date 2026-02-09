@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useMemo } from "react"
+import { useState, useCallback, useMemo, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { mockQuestions, mockTemplate } from "@/lib/mock-data"
 import { Button } from "@/components/ui/button"
@@ -56,6 +56,21 @@ export default function ScorecardPage() {
   const handleSubmit = useCallback(() => {
     setSubmitted(true)
   }, [])
+
+  const activeInputRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    // Small delay to let the DOM update after question change
+    const timer = setTimeout(() => {
+      if (activeInputRef.current) {
+        const focusable = activeInputRef.current.querySelector<HTMLElement>(
+          "input, textarea, button"
+        )
+        focusable?.focus()
+      }
+    }, 50)
+    return () => clearTimeout(timer)
+  }, [currentQuestion])
 
   if (submitted) {
     return (
@@ -128,7 +143,7 @@ export default function ScorecardPage() {
                         {q.text}
                       </p>
                       {isActive && (
-                        <div className="mt-3">
+                        <div className="mt-3" ref={activeInputRef}>
                           {q.type === "number" && (
                             <Input
                               type="number"
