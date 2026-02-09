@@ -7,17 +7,16 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { AppFooter } from "@/components/app-footer"
 
 function DashboardShell({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isAuthenticatedRef } = useAuth()
+  const { isAuthenticated, ready } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    // Use the ref for initial check to avoid race with state updates
-    if (!isAuthenticatedRef.current && !isAuthenticated) {
+    if (ready && !isAuthenticated) {
       router.push("/")
     }
-  }, [isAuthenticated, isAuthenticatedRef, router])
+  }, [ready, isAuthenticated, router])
 
-  if (!isAuthenticated && !isAuthenticatedRef.current) {
+  if (!ready || !isAuthenticated) {
     return null
   }
 

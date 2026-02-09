@@ -26,22 +26,14 @@ function LoginForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    try {
-      await login(email, password)
-      router.push("/dashboard")
-    } finally {
-      setLoading(false)
-    }
+    await login(email, password)
+    router.push("/dashboard")
   }
 
   async function handleProviderLogin(provider: "google" | "microsoft") {
     setLoading(true)
-    try {
-      await loginWithProvider(provider)
-      router.push("/dashboard")
-    } finally {
-      setLoading(false)
-    }
+    await loginWithProvider(provider)
+    router.push("/dashboard")
   }
 
   return (
