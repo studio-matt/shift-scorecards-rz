@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { mockQuestions, mockTemplate } from "@/lib/mock-data"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,9 +18,22 @@ import { ChevronRight, Save, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export default function ScorecardPage() {
+  const router = useRouter()
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string | number>>({})
   const [submitted, setSubmitted] = useState(false)
+
+  const weekOfLabel = useMemo(() => {
+    const now = new Date()
+    const day = now.getDay()
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - ((day + 6) % 7))
+    return monday.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    })
+  }, [])
 
   const questions = mockQuestions
   const totalQuestions = questions.length
@@ -55,12 +69,8 @@ export default function ScorecardPage() {
         <p className="mt-2 text-muted-foreground">
           Thank you for completing your AI Productivity Scorecard.
         </p>
-        <Button className="mt-6" onClick={() => {
-          setSubmitted(false)
-          setAnswers({})
-          setCurrentQuestion(0)
-        }}>
-          Start New Scorecard
+        <Button className="mt-6" onClick={() => router.push("/dashboard")}>
+          Go to my Dashboard
         </Button>
       </div>
     )
@@ -72,6 +82,9 @@ export default function ScorecardPage() {
         <h1 className="text-2xl font-bold text-foreground">
           {mockTemplate.name}
         </h1>
+        <p className="text-sm font-medium text-primary">
+          Scorecard for the week of {weekOfLabel}
+        </p>
         <p className="mt-1 text-muted-foreground">
           {mockTemplate.description}
         </p>

@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useState } from "react"
 import {
   LayoutDashboard,
   ClipboardList,
@@ -12,6 +13,8 @@ import {
   Users,
   Building2,
   ChevronDown,
+  ChevronRight,
+  History,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
@@ -28,9 +31,13 @@ import { Badge } from "@/components/ui/badge"
 
 const userNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/scorecard", label: "Scorecards", icon: ClipboardList },
   { href: "/faq", label: "FAQ", icon: HelpCircle },
   { href: "/settings", label: "Settings", icon: Settings },
+]
+
+const scorecardSubItems = [
+  { href: "/scorecard", label: "Current Scorecard" },
+  { href: "/scorecard/previous", label: "Previous Scorecards", icon: History },
 ]
 
 const adminNavItems = [
@@ -42,6 +49,8 @@ const adminNavItems = [
 export function AppSidebar() {
   const pathname = usePathname()
   const { user, isAdmin, logout, switchRole } = useAuth()
+  const isScorecardActive = pathname.startsWith("/scorecard")
+  const [scorecardsOpen, setScorecardsOpen] = useState(isScorecardActive)
 
   if (!user) return null
 
@@ -55,26 +64,90 @@ export function AppSidebar() {
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <ul className="flex flex-col gap-1">
-          {userNavItems.map((item) => {
-            const isActive =
-              pathname === item.href || pathname.startsWith(`${item.href}/`)
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-sidebar-accent text-sidebar-primary"
-                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                  )}
-                >
-                  <item.icon className="h-4 w-4" aria-hidden="true" />
-                  {item.label}
-                </Link>
-              </li>
-            )
-          })}
+          {/* Dashboard */}
+          <li>
+            <Link
+              href="/dashboard"
+              className={cn(
+                "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                pathname === "/dashboard"
+                  ? "bg-sidebar-accent text-sidebar-primary"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+              )}
+            >
+              <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
+              Dashboard
+            </Link>
+          </li>
+
+          {/* Scorecards (expandable) */}
+          <li>
+            <button
+              type="button"
+              onClick={() => setScorecardsOpen((prev) => !prev)}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                isScorecardActive
+                  ? "bg-sidebar-accent text-sidebar-primary"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+              )}
+            >
+              <ClipboardList className="h-4 w-4" aria-hidden="true" />
+              <span className="flex-1 text-left">Scorecards</span>
+              <ChevronRight
+                className={cn(
+                  "h-3.5 w-3.5 transition-transform",
+                  scorecardsOpen && "rotate-90",
+                )}
+              />
+            </button>
+            {scorecardsOpen && (
+              <ul className="ml-7 mt-1 flex flex-col gap-0.5 border-l border-sidebar-border pl-3">
+                {scorecardSubItems.map((sub) => {
+                  const isSubActive = pathname === sub.href
+                  return (
+                    <li key={sub.href}>
+                      <Link
+                        href={sub.href}
+                        className={cn(
+                          "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+                          isSubActive
+                            ? "font-medium text-sidebar-primary"
+                            : "text-sidebar-foreground/60 hover:text-sidebar-foreground",
+                        )}
+                      >
+                        {sub.label}
+                      </Link>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </li>
+
+          {/* Remaining nav items */}
+          {userNavItems
+            .filter((item) => item.href !== "/dashboard")
+            .map((item) => {
+              const isActive =
+                pathname === item.href || pathname.startsWith(`${item.href}/`)
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-sidebar-accent text-sidebar-primary"
+                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                    )}
+                  >
+                    <item.icon className="h-4 w-4" aria-hidden="true" />
+                    {item.label}
+                  </Link>
+                </li>
+              )
+            })}
         </ul>
 
         {isAdmin && (
