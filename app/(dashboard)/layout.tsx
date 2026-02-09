@@ -1,10 +1,8 @@
 "use client"
 
-import React from "react"
-
-import { useEffect } from "react"
+import React, { useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { AuthProvider, useAuth } from "@/lib/auth-context"
+import { useAuth } from "@/lib/auth-context"
 import { AppSidebar } from "@/components/app-sidebar"
 import { AppFooter } from "@/components/app-footer"
 
@@ -40,9 +38,5 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  return (
-    <AuthProvider>
-      <DashboardShell>{children}</DashboardShell>
-    </AuthProvider>
-  )
+  return <DashboardShell>{children}</DashboardShell>
 }
