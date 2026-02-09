@@ -137,6 +137,16 @@ export default function ScorecardPage() {
                               onChange={(e) =>
                                 handleAnswer(q.id, e.target.value)
                               }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault()
+                                  if (index < totalQuestions - 1) {
+                                    handleNext()
+                                  } else if (completedCount >= totalQuestions) {
+                                    handleSubmit()
+                                  }
+                                }
+                              }}
                               className="max-w-xs"
                             />
                           )}
@@ -157,6 +167,19 @@ export default function ScorecardPage() {
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     handleAnswer(q.id, val)
+                                    if (index < totalQuestions - 1) {
+                                      setTimeout(() => handleNext(), 200)
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      handleAnswer(q.id, val)
+                                      if (index < totalQuestions - 1) {
+                                        setTimeout(() => handleNext(), 200)
+                                      }
+                                    }
                                   }}
                                   className={cn(
                                     "flex h-10 w-10 items-center justify-center rounded-md border text-sm font-medium transition-colors",
@@ -172,11 +195,21 @@ export default function ScorecardPage() {
                           )}
                           {q.type === "text" && (
                             <Textarea
-                              placeholder="Type your answer..."
+                              placeholder="Type your answer... (Cmd+Enter to submit)"
                               value={(answers[q.id] as string) ?? ""}
                               onChange={(e) =>
                                 handleAnswer(q.id, e.target.value)
                               }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                                  e.preventDefault()
+                                  if (index < totalQuestions - 1) {
+                                    handleNext()
+                                  } else if (completedCount >= totalQuestions) {
+                                    handleSubmit()
+                                  }
+                                }
+                              }}
                               rows={3}
                             />
                           )}
