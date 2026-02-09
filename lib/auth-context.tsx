@@ -5,6 +5,7 @@ import {
   useContext,
   useState,
   useCallback,
+  useRef,
   type ReactNode,
 } from "react"
 import type { User, UserRole } from "./types"
@@ -14,6 +15,7 @@ interface AuthContextType {
   user: User | null
   isAuthenticated: boolean
   isAdmin: boolean
+  isAuthenticatedRef: React.RefObject<boolean>
   login: (email: string, password: string) => Promise<void>
   loginWithProvider: (provider: "google" | "microsoft") => Promise<void>
   logout: () => void
@@ -24,20 +26,23 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const isAuthenticatedRef = useRef(false)
 
   const login = useCallback(async (_email: string, _password: string) => {
-    // Mock login - defaults to admin for demo purposes
+    isAuthenticatedRef.current = true
     setUser(mockAdminUser)
   }, [])
 
   const loginWithProvider = useCallback(
     async (_provider: "google" | "microsoft") => {
+      isAuthenticatedRef.current = true
       setUser(mockAdminUser)
     },
     [],
   )
 
   const logout = useCallback(() => {
+    isAuthenticatedRef.current = false
     setUser(null)
   }, [])
 
@@ -58,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isAuthenticated: !!user,
         isAdmin: user?.role === "admin",
+        isAuthenticatedRef,
         login,
         loginWithProvider,
         logout,
