@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { ShiftLogo } from "@/components/shift-logo"
@@ -20,20 +20,49 @@ function LoginForm() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
-  const { login, loginWithProvider } = useAuth()
+  const [error, setError] = useState("")
+  const { login, loginWithProvider, isAuthenticated, ready } = useAuth()
   const router = useRouter()
+
+  // If already authenticated, redirect to dashboard
+  useEffect(() => {
+    if (ready && isAuthenticated) {
+      router.push("/dashboard")
+    }
+  }, [ready, isAuthenticated, router])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setError("")
     setLoading(true)
-    await login(email, password)
-    router.push("/dashboard")
+    try {
+      await login(email, password)
+      // onAuthStateChanged will set user, then useEffect above navigates
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Login failed"
+      if (msg.includes("user-not-found") || msg.includes("wrong-password") || msg.includes("invalid-credential")) {
+        setError("Invalid email or password. Please try again.")
+      } else {
+        setError(msg)
+      }
+      setLoading(false)
+    }
   }
 
   async function handleProviderLogin(provider: "google" | "microsoft") {
+    setError("")
     setLoading(true)
-    await loginWithProvider(provider)
-    router.push("/dashboard")
+    try {
+      await loginWithProvider(provider)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Login failed"
+      if (msg.includes("popup-closed")) {
+        setError("Sign-in popup was closed. Please try again.")
+      } else {
+        setError(msg)
+      }
+      setLoading(false)
+    }
   }
 
   return (
@@ -50,6 +79,11 @@ function LoginForm() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            {error && (
+              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                {error}
+              </div>
+            )}
             <div className="flex flex-col gap-2">
               <Label htmlFor="email">Email Address</Label>
               <Input

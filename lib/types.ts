@@ -2,6 +2,7 @@ export type UserRole = "admin" | "user"
 
 export interface User {
   id: string
+  authId?: string
   email: string
   firstName: string
   lastName: string
