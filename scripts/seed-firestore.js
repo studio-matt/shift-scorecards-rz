@@ -1,12 +1,12 @@
-import { initializeApp } from "firebase/app";
-import {
+const { initializeApp } = require("firebase/app");
+const {
   getFirestore,
   collection,
   doc,
   setDoc,
   getDocs,
   Timestamp,
-} from "firebase/firestore";
+} = require("firebase/firestore");
 
 const firebaseConfig = {
   apiKey: "AIzaSyD_FPvDabLJFkD_fecfKQJw8YFptLEIxgQ",
@@ -22,7 +22,6 @@ const db = getFirestore(app);
 
 const now = Timestamp.now();
 
-// ─── Organizations ────────────────────────────────────────────────────
 const organizations = [
   {
     id: "org-1",
@@ -53,7 +52,6 @@ const organizations = [
   },
 ];
 
-// ─── Templates ────────────────────────────────────────────────────────
 const templates = [
   {
     id: "tmpl-1",
@@ -93,12 +91,11 @@ const templates = [
   },
 ];
 
-// ─── Seed Function ────────────────────────────────────────────────────
 async function seed() {
   console.log("Checking if Firestore already has data...");
   const orgSnap = await getDocs(collection(db, "organizations"));
   if (!orgSnap.empty) {
-    console.log(`Firestore already has ${orgSnap.size} organizations. Skipping seed to avoid duplicates.`);
+    console.log("Firestore already has " + orgSnap.size + " organizations. Skipping seed to avoid duplicates.");
     console.log("If you want to re-seed, delete the collections in Firebase Console first.");
     return;
   }
@@ -111,7 +108,7 @@ async function seed() {
       createdAt: now,
       updatedAt: now,
     });
-    console.log(`  Created org: ${org.name}`);
+    console.log("  Created org: " + org.name);
   }
 
   console.log("Seeding templates...");
@@ -122,12 +119,12 @@ async function seed() {
       createdAt: now,
       updatedAt: now,
     });
-    console.log(`  Created template: ${tmpl.name}`);
+    console.log("  Created template: " + tmpl.name);
   }
 
   console.log("Seed complete! Your Firestore now has:");
-  console.log(`  - ${organizations.length} organizations`);
-  console.log(`  - ${templates.length} templates`);
+  console.log("  - " + organizations.length + " organizations");
+  console.log("  - " + templates.length + " templates");
   console.log("Sign in via the app to create your user profile automatically.");
 }
 
