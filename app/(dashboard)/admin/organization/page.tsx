@@ -43,6 +43,8 @@ import {
   ArrowLeft,
   MoreVertical,
   Pencil,
+  LayoutGrid,
+  List,
 } from "lucide-react"
 import { mockOrganizations, KNOWN_DEPARTMENTS } from "@/lib/mock-data"
 import type { Organization } from "@/lib/types"
@@ -64,6 +66,13 @@ export default function OrganizationPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+  const [searchQuery, setSearchQuery] = useState("")
+
+  const filteredOrgs = organizations.filter((org) =>
+    org.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (org.industry ?? "").toLowerCase().includes(searchQuery.toLowerCase())
+  )
 
   // Create form state
   const [newName, setNewName] = useState("")
@@ -105,7 +114,7 @@ export default function OrganizationPage() {
   if (!selectedOrg) {
     return (
       <div>
-        <div className="mb-8 flex items-center justify-between">
+        <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Organizations</h1>
             <p className="mt-1 text-muted-foreground">
@@ -118,8 +127,47 @@ export default function OrganizationPage() {
           </Button>
         </div>
 
+        <div className="mb-6 flex items-center gap-3">
+          <Input
+            placeholder="Search organizations..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="max-w-sm"
+          />
+          <div className="flex items-center rounded-md border border-border">
+            <button
+              type="button"
+              onClick={() => setViewMode("grid")}
+              className={`flex items-center justify-center rounded-l-md px-3 py-2 transition-colors ${
+                viewMode === "grid"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+              aria-label="Grid view"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("list")}
+              className={`flex items-center justify-center rounded-r-md px-3 py-2 transition-colors ${
+                viewMode === "list"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+              aria-label="List view"
+            >
+              <List className="h-4 w-4" />
+            </button>
+          </div>
+          <span className="text-sm text-muted-foreground">
+            {filteredOrgs.length} organization{filteredOrgs.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+
+        {viewMode === "grid" ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {organizations.map((org) => (
+          {filteredOrgs.map((org) => (
             <Card
               key={org.id}
               className="cursor-pointer transition-shadow hover:shadow-md"
@@ -214,6 +262,105 @@ export default function OrganizationPage() {
             </Card>
           ))}
         </div>
+        ) : (
+        <div className="flex flex-col gap-2">
+          <div className="hidden items-center gap-4 rounded-md bg-muted px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground md:flex">
+            <span className="flex-1">Organization</span>
+            <span className="w-24 text-center">Industry</span>
+            <span className="w-20 text-center">Members</span>
+            <span className="w-20 text-center">Depts</span>
+            <span className="w-24 text-center">Created</span>
+            <span className="w-16" />
+          </div>
+          {filteredOrgs.map((org) => (
+            <div
+              key={org.id}
+              onClick={() => setSelectedOrgId(org.id)}
+              className="flex cursor-pointer items-center gap-4 rounded-lg border border-border px-4 py-3 transition-colors hover:bg-muted"
+            >
+              <div className="flex flex-1 items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                  <Building2 className="h-4 w-4 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">{org.name}</p>
+                  <div className="mt-0.5 flex flex-wrap gap-1">
+                    {org.departments.slice(0, 3).map((dept) => (
+                      <Badge key={dept} variant="secondary" className="text-[10px] px-1.5 py-0">
+                        {dept}
+                      </Badge>
+                    ))}
+                    {org.departments.length > 3 && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                        +{org.departments.length - 3}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <span className="hidden w-24 text-center text-sm text-muted-foreground md:block">
+                {org.industry ?? "-"}
+              </span>
+              <span className="hidden w-20 text-center text-sm font-medium text-foreground md:block">
+                {org.memberCount ?? 0}
+              </span>
+              <span className="hidden w-20 text-center text-sm font-medium text-foreground md:block">
+                {org.departments.length}
+              </span>
+              <span className="hidden w-24 text-center text-sm text-muted-foreground md:block">
+                {org.createdAt}
+              </span>
+              <div className="w-16 flex justify-end">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                      <span className="sr-only">Actions</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setSelectedOrgId(org.id)
+                      }}
+                    >
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setDeleteTarget(org.id)
+                        setDeleteDialogOpen(true)
+                      }}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+          ))}
+        </div>
+        )}
+
+        {filteredOrgs.length === 0 && (
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-12 text-center">
+            <Building2 className="mb-3 h-8 w-8 text-muted-foreground" />
+            <p className="text-sm font-medium text-foreground">No organizations found</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {searchQuery ? "Try a different search term" : "Create your first organization to get started"}
+            </p>
+          </div>
+        )}
 
         {/* Create Dialog */}
         <CreateOrgDialog

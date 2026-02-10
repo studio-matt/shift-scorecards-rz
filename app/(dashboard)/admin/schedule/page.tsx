@@ -62,6 +62,7 @@ export default function ScheduleReleasePage() {
   const [scheduleType, setScheduleType] = useState("now")
 
   const activeOrg = mockOrganizations.find((o) => o.id === selectedCompany)
+  const [allUsersInGroup, setAllUsersInGroup] = useState(true)
   const [selectedUsers, setSelectedUsers] = useState<string[]>(
     mockAllUsers.filter((u) => u.selected).map((u) => u.id),
   )
@@ -270,7 +271,32 @@ export default function ScheduleReleasePage() {
                 Recipients
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-col gap-4">
+              <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/50 p-3">
+                <Checkbox
+                  id="all-users-group"
+                  checked={allUsersInGroup}
+                  onCheckedChange={(checked) => {
+                    const val = !!checked
+                    setAllUsersInGroup(val)
+                    if (val) selectAll()
+                  }}
+                />
+                <Label htmlFor="all-users-group" className="flex flex-col cursor-pointer">
+                  <span className="text-sm font-medium text-foreground">
+                    All Users in Group
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {selectedCompany
+                      ? selectedDepartment && selectedDepartment !== "all"
+                        ? `Send to all users in ${activeOrg?.name ?? "company"} - ${selectedDepartment} department`
+                        : `Send to all users in ${activeOrg?.name ?? "selected company"}`
+                      : "Select a company above to define the group"}
+                  </span>
+                </Label>
+              </div>
+
+              {!allUsersInGroup && (
               <div className="rounded-lg border border-border">
                 <div className="flex items-center justify-between border-b border-border px-3 py-2">
                   <Input
@@ -322,6 +348,7 @@ export default function ScheduleReleasePage() {
                   {selectedUsers.length} of {mockAllUsers.length} users selected
                 </div>
               </div>
+              )}
             </CardContent>
           </Card>
 
