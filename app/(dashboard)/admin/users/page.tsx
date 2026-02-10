@@ -28,7 +28,7 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Mail, CheckCircle2, Clock, Search } from "lucide-react"
+import { Plus, Mail, CheckCircle2, Clock, Search, Upload, FileDown } from "lucide-react"
 import { mockInvitedUsers, KNOWN_DEPARTMENTS } from "@/lib/mock-data"
 
 export default function ManageUsersPage() {
@@ -37,6 +37,36 @@ export default function ManageUsersPage() {
   const [inviteRole, setInviteRole] = useState("user")
   const [dialogOpen, setDialogOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [csvFile, setCsvFile] = useState<File | null>(null)
+  const [csvPreviewCount, setCsvPreviewCount] = useState(0)
+
+  function handleDownloadTemplate() {
+    const csvContent =
+      "email,department,role\njane@company.com,Engineering,user\njohn@company.com,Sales,admin"
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = "shift-invite-template.csv"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setCsvFile(file)
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const text = event.target?.result as string
+      const lines = text.split("\n").filter((line) => line.trim())
+      // Subtract 1 for header row
+      setCsvPreviewCount(Math.max(0, lines.length - 1))
+    }
+    reader.readAsText(file)
+  }
 
   const filteredUsers = mockInvitedUsers.filter(
     (u) =>
@@ -50,6 +80,8 @@ export default function ManageUsersPage() {
     setInviteEmail("")
     setInviteDepartment("")
     setInviteRole("user")
+    setCsvFile(null)
+    setCsvPreviewCount(0)
   }
 
   return (
@@ -87,6 +119,49 @@ export default function ManageUsersPage() {
                   onChange={(e) => setInviteEmail(e.target.value)}
                 />
               </div>
+
+              {/* CSV Upload */}
+              <div className="flex flex-col gap-2">
+                <div className="relative flex items-center">
+                  <div className="flex-1 border-t border-border" />
+                  <span className="px-3 text-xs text-muted-foreground">
+                    or bulk invite via CSV
+                  </span>
+                  <div className="flex-1 border-t border-border" />
+                </div>
+                <label
+                  htmlFor="csv-upload"
+                  className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+                >
+                  <Upload className="h-4 w-4" />
+                  {csvFile ? (
+                    <span className="font-medium text-foreground">
+                      {csvFile.name}{" "}
+                      <span className="text-muted-foreground">
+                        ({csvPreviewCount} user{csvPreviewCount !== 1 ? "s" : ""})
+                      </span>
+                    </span>
+                  ) : (
+                    "Upload CSV file"
+                  )}
+                </label>
+                <input
+                  id="csv-upload"
+                  type="file"
+                  accept=".csv"
+                  className="sr-only"
+                  onChange={handleCsvUpload}
+                />
+                <button
+                  type="button"
+                  onClick={handleDownloadTemplate}
+                  className="flex items-center gap-1.5 self-start text-xs font-medium text-primary hover:underline"
+                >
+                  <FileDown className="h-3.5 w-3.5" />
+                  Download CSV template
+                </button>
+              </div>
+
               <div className="flex flex-col gap-2">
                 <Label htmlFor="invite-dept">Department</Label>
                 <Select
@@ -124,7 +199,9 @@ export default function ManageUsersPage() {
               </Button>
               <Button onClick={handleInvite}>
                 <Mail className="mr-2 h-4 w-4" />
-                Send Invitation
+                {csvFile
+                  ? `Send ${csvPreviewCount} Invitation${csvPreviewCount !== 1 ? "s" : ""}`
+                  : "Send Invitation"}
               </Button>
             </DialogFooter>
           </DialogContent>
