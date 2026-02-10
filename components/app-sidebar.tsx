@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronRight,
   History,
+  Send,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
@@ -42,6 +43,7 @@ const scorecardSubItems = [
 
 const adminNavItems = [
   { href: "/admin/builder", label: "Templates", icon: FileText },
+  { href: "/admin/schedule", label: "Schedule Release", icon: Send },
   { href: "/admin/users", label: "Manage Users", icon: Users },
   { href: "/admin/organization", label: "Organization", icon: Building2 },
 ]
