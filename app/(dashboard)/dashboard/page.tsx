@@ -19,7 +19,7 @@ import {
   MostImprovedCard,
   RecentScorecardsCard,
 } from "@/components/dashboard/goals-and-recent"
-import { mockOrganizations } from "@/lib/mock-data"
+import { mockOrganizations, mockTopPerformers, mockMostImproved } from "@/lib/mock-data"
 import { Badge } from "@/components/ui/badge"
 
 export default function DashboardPage() {
@@ -55,6 +55,29 @@ export default function DashboardPage() {
     }
     return parts.join(" / ")
   }, [selectedOrg, selectedDept, activeOrg])
+
+  // Filter performers and improved based on selected org/dept
+  const filteredPerformers = useMemo(() => {
+    let data = mockTopPerformers
+    if (selectedOrg !== "all") {
+      data = data.filter((p) => p.companyId === selectedOrg)
+    }
+    if (selectedDept !== "all") {
+      data = data.filter((p) => p.department === selectedDept)
+    }
+    return data
+  }, [selectedOrg, selectedDept])
+
+  const filteredImproved = useMemo(() => {
+    let data = mockMostImproved
+    if (selectedOrg !== "all") {
+      data = data.filter((p) => p.companyId === selectedOrg)
+    }
+    if (selectedDept !== "all") {
+      data = data.filter((p) => p.department === selectedDept)
+    }
+    return data
+  }, [selectedOrg, selectedDept])
 
   const timePeriodLabel: Record<string, string> = {
     "this-week": "This Week",
@@ -154,8 +177,8 @@ export default function DashboardPage() {
 
           {/* Champions + Most Improved */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <TopPerformers showCompany />
-            <MostImprovedCard showCompany />
+            <TopPerformers showCompany data={filteredPerformers} />
+            <MostImprovedCard showCompany data={filteredImproved} />
           </div>
 
           {/* Question Results */}

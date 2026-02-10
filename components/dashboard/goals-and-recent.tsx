@@ -66,9 +66,11 @@ export function GoalsCard() {
 
 interface MostImprovedProps {
   showCompany?: boolean
+  data?: typeof mockMostImproved
 }
 
-export function MostImprovedCard({ showCompany = false }: MostImprovedProps) {
+export function MostImprovedCard({ showCompany = false, data }: MostImprovedProps) {
+  const improved = data ?? mockMostImproved
   return (
     <Card>
       <CardHeader>
@@ -78,7 +80,12 @@ export function MostImprovedCard({ showCompany = false }: MostImprovedProps) {
       </CardHeader>
       <CardContent>
         <div className="flex flex-col gap-3">
-          {mockMostImproved.map((person) => (
+          {improved.length === 0 && (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              No results match the current filters
+            </p>
+          )}
+          {improved.map((person) => (
             <div
               key={person.name}
               className="flex items-center justify-between rounded-lg border border-border p-3"
