@@ -64,7 +64,11 @@ export function GoalsCard() {
   )
 }
 
-export function MostImprovedCard() {
+interface MostImprovedProps {
+  showCompany?: boolean
+}
+
+export function MostImprovedCard({ showCompany = false }: MostImprovedProps) {
   return (
     <Card>
       <CardHeader>
@@ -83,9 +87,15 @@ export function MostImprovedCard() {
                 <p className="text-sm font-medium text-foreground">
                   {person.name}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  {person.department}
-                </p>
+                {showCompany ? (
+                  <p className="text-xs text-muted-foreground">
+                    {person.company} &middot; {person.department}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {person.department}
+                  </p>
+                )}
               </div>
               <div className="text-right">
                 <p className="text-sm font-bold text-success">

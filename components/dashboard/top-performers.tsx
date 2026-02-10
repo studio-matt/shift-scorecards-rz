@@ -10,7 +10,11 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { mockTopPerformers } from "@/lib/mock-data"
 
-export function TopPerformers() {
+interface TopPerformersProps {
+  showCompany?: boolean
+}
+
+export function TopPerformers({ showCompany = false }: TopPerformersProps) {
   return (
     <Card>
       <CardHeader>
@@ -18,7 +22,7 @@ export function TopPerformers() {
           Champions Dashboard
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          Top Performers This Week
+          {showCompany ? "Top Performers Across All Organizations" : "Top Performers This Week"}
         </p>
       </CardHeader>
       <CardContent>
@@ -28,10 +32,10 @@ export function TopPerformers() {
               key={performer.id}
               className="flex items-center gap-3 rounded-lg border border-border p-3"
             >
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
                 {index + 1}
               </span>
-              <Avatar className="h-9 w-9">
+              <Avatar className="h-9 w-9 shrink-0">
                 <AvatarFallback className="bg-muted text-xs font-medium text-foreground">
                   {performer.name
                     .split(" ")
@@ -39,21 +43,27 @@ export function TopPerformers() {
                     .join("")}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex-1">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-foreground">
                   {performer.name}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  {performer.department}
-                </p>
+                {showCompany ? (
+                  <p className="truncate text-xs text-muted-foreground">
+                    {performer.company} &middot; {performer.department}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {performer.department}
+                  </p>
+                )}
               </div>
-              <div className="text-right">
+              <div className="shrink-0 text-right">
                 <p className="text-sm font-bold text-foreground">
                   {performer.avgScore}
                 </p>
                 <p className="text-xs text-muted-foreground">Avg Score</p>
               </div>
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="shrink-0 text-xs">
                 {performer.streak} streak
               </Badge>
             </div>

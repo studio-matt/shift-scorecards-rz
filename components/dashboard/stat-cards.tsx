@@ -1,9 +1,10 @@
 "use client"
 
 import { Card, CardContent } from "@/components/ui/card"
-import { TrendingUp, Flame, CheckCircle2, Target } from "lucide-react"
+import { TrendingUp, Flame, CheckCircle2, Target, Building2, Users, BarChart3, Send } from "lucide-react"
+import { mockAdminStats } from "@/lib/mock-data"
 
-const stats = [
+const userStats = [
   {
     label: "Average Score",
     value: "8.4",
@@ -37,7 +38,7 @@ const stats = [
 export function StatCards() {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {stats.map((stat) => (
+      {userStats.map((stat) => (
         <Card key={stat.label}>
           <CardContent className="flex items-start gap-4 p-5">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
@@ -45,6 +46,67 @@ export function StatCards() {
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">
+                {stat.label}
+              </p>
+              <p className="text-2xl font-bold text-foreground">
+                {stat.value}
+              </p>
+              <p className="mt-0.5 text-xs text-success">
+                {stat.change}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  )
+}
+
+export function AdminStatCards() {
+  const s = mockAdminStats
+  const adminCards = [
+    {
+      label: "Avg Score (Global)",
+      value: s.avgScore.toFixed(1),
+      change: `+${s.avgScoreChange} from last period`,
+      icon: BarChart3,
+    },
+    {
+      label: "Completion Rate",
+      value: `${s.completionRate}%`,
+      change: `+${s.completionRateChange}% from last period`,
+      icon: CheckCircle2,
+    },
+    {
+      label: "Active Users",
+      value: s.activeUsers.toLocaleString(),
+      change: `+${s.activeUsersChange} new this period`,
+      icon: Users,
+    },
+    {
+      label: "Scorecards Sent",
+      value: s.scorecardsSent.toLocaleString(),
+      change: `+${s.scorecardsSentChange} this period`,
+      icon: Send,
+    },
+    {
+      label: "Organizations",
+      value: s.totalOrgs.toString(),
+      change: `${s.totalUsers} total users`,
+      icon: Building2,
+    },
+  ]
+
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      {adminCards.map((stat) => (
+        <Card key={stat.label}>
+          <CardContent className="flex items-start gap-4 p-5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+              <stat.icon className="h-5 w-5 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-muted-foreground">
                 {stat.label}
               </p>
               <p className="text-2xl font-bold text-foreground">

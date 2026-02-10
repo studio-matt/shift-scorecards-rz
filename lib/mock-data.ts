@@ -241,6 +241,8 @@ export const mockTopPerformers: TopPerformer[] = [
   {
     id: "1",
     name: "Sarah Chen",
+    company: "Acme Corp",
+    companyId: "org-1",
     department: "Engineering",
     avgScore: 9.2,
     streak: 15,
@@ -248,6 +250,8 @@ export const mockTopPerformers: TopPerformer[] = [
   {
     id: "2",
     name: "Mike Rodriguez",
+    company: "Globex Industries",
+    companyId: "org-2",
     department: "Sales",
     avgScore: 9.0,
     streak: 12,
@@ -255,6 +259,8 @@ export const mockTopPerformers: TopPerformer[] = [
   {
     id: "3",
     name: "Emma Thompson",
+    company: "Acme Corp",
+    companyId: "org-1",
     department: "Marketing",
     avgScore: 8.8,
     streak: 10,
@@ -262,6 +268,8 @@ export const mockTopPerformers: TopPerformer[] = [
   {
     id: "4",
     name: "David Park",
+    company: "Initech LLC",
+    companyId: "org-3",
     department: "Operations",
     avgScore: 8.6,
     streak: 8,
@@ -269,9 +277,38 @@ export const mockTopPerformers: TopPerformer[] = [
   {
     id: "5",
     name: "Lisa Williams",
+    company: "Umbrella Group",
+    companyId: "org-4",
     department: "HR",
     avgScore: 8.5,
     streak: 9,
+  },
+  {
+    id: "6",
+    name: "Jason Kim",
+    company: "Stark Solutions",
+    companyId: "org-5",
+    department: "Design",
+    avgScore: 8.4,
+    streak: 7,
+  },
+  {
+    id: "7",
+    name: "Anna Patel",
+    company: "Globex Industries",
+    companyId: "org-2",
+    department: "Engineering",
+    avgScore: 8.3,
+    streak: 11,
+  },
+  {
+    id: "8",
+    name: "Chris Nguyen",
+    company: "Acme Corp",
+    companyId: "org-1",
+    department: "Product",
+    avgScore: 8.2,
+    streak: 6,
   },
 ]
 
@@ -325,6 +362,8 @@ export const mockQuestionResults: QuestionResult[] = [
 export const mockMostImproved = [
   {
     name: "Alex Johnson",
+    company: "Acme Corp",
+    companyId: "org-1",
     department: "Engineering",
     improvement: 1.8,
     from: 6.2,
@@ -332,6 +371,8 @@ export const mockMostImproved = [
   },
   {
     name: "Rachel Green",
+    company: "Globex Industries",
+    companyId: "org-2",
     department: "Sales",
     improvement: 1.5,
     from: 6.8,
@@ -339,9 +380,20 @@ export const mockMostImproved = [
   },
   {
     name: "Tom Wilson",
+    company: "Initech LLC",
+    companyId: "org-3",
     department: "Operations",
     improvement: 1.2,
     from: 7.0,
+    to: 8.2,
+  },
+  {
+    name: "Priya Sharma",
+    company: "Umbrella Group",
+    companyId: "org-4",
+    department: "R&D",
+    improvement: 1.1,
+    from: 7.1,
     to: 8.2,
   },
 ]
@@ -497,6 +549,19 @@ export const mockPastScorecards = [
     },
   },
 ]
+
+export const mockAdminStats = {
+  totalOrgs: 5,
+  totalUsers: 225,
+  avgScore: 8.2,
+  avgScoreChange: 0.4,
+  completionRate: 87,
+  completionRateChange: 3,
+  activeUsers: 198,
+  activeUsersChange: 12,
+  scorecardsSent: 1125,
+  scorecardsSentChange: 75,
+}
 
 export const mockSavedTemplates = [
   { id: "t1", name: "Weekly Check-in", questions: 5, author: "Admin User" },

@@ -73,6 +73,8 @@ export interface DepartmentPerformance {
 export interface TopPerformer {
   id: string
   name: string
+  company: string
+  companyId: string
   department: string
   avgScore: number
   streak: number
