@@ -38,6 +38,22 @@ export const mockOrganization: Organization = {
   createdAt: "2024-01-15",
 }
 
+export const mockOrganizations: Organization[] = [
+  mockOrganization,
+  {
+    id: "org-2",
+    name: "Globex Industries",
+    departments: ["Engineering", "Sales", "Marketing", "Finance", "Legal"],
+    createdAt: "2024-03-01",
+  },
+  {
+    id: "org-3",
+    name: "Initech LLC",
+    departments: ["IT", "Operations", "HR", "Customer Success", "Executive"],
+    createdAt: "2024-06-10",
+  },
+]
+
 export const mockAdminUser: User = {
   id: "user-admin",
   email: "john.smith@company.com",

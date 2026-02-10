@@ -26,7 +26,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react"
-import { mockAllUsers, mockSavedTemplates } from "@/lib/mock-data"
+import { mockAllUsers, mockSavedTemplates, mockOrganizations } from "@/lib/mock-data"
 
 const pastReleases = [
   {
@@ -57,7 +57,11 @@ const pastReleases = [
 
 export default function ScheduleReleasePage() {
   const [selectedTemplate, setSelectedTemplate] = useState("")
+  const [selectedCompany, setSelectedCompany] = useState("")
+  const [selectedDepartment, setSelectedDepartment] = useState("")
   const [scheduleType, setScheduleType] = useState("now")
+
+  const activeOrg = mockOrganizations.find((o) => o.id === selectedCompany)
   const [selectedUsers, setSelectedUsers] = useState<string[]>(
     mockAllUsers.filter((u) => u.selected).map((u) => u.id),
   )
@@ -154,17 +158,45 @@ export default function ScheduleReleasePage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div className="flex flex-col gap-2">
-                  <Label>Send To</Label>
-                  <Select defaultValue="all">
+                  <Label>Company</Label>
+                  <Select
+                    value={selectedCompany}
+                    onValueChange={(val) => {
+                      setSelectedCompany(val)
+                      setSelectedDepartment("")
+                    }}
+                  >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select recipients" />
+                      <SelectValue placeholder="Select company..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Users</SelectItem>
-                      <SelectItem value="department">By Department</SelectItem>
-                      <SelectItem value="custom">Custom Selection</SelectItem>
+                      {mockOrganizations.map((org) => (
+                        <SelectItem key={org.id} value={org.id}>
+                          {org.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label>Department</Label>
+                  <Select
+                    value={selectedDepartment}
+                    onValueChange={setSelectedDepartment}
+                    disabled={!selectedCompany}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={selectedCompany ? "All Departments" : "Select company first"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Departments</SelectItem>
+                      {activeOrg?.departments.map((dept) => (
+                        <SelectItem key={dept} value={dept}>
+                          {dept}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -182,6 +214,13 @@ export default function ScheduleReleasePage() {
                   </Select>
                 </div>
               </div>
+
+              {!selectedCompany && (
+                <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <AlertCircle className="h-3 w-3" />
+                  Select a company to configure delivery
+                </p>
+              )}
 
               <p className="text-xs text-muted-foreground">
                 {scheduleType === "now" && "Scorecard will be sent immediately to all selected recipients."}
@@ -290,7 +329,7 @@ export default function ScheduleReleasePage() {
           <div className="flex justify-end">
             <Button
               size="lg"
-              disabled={!selectedTemplate}
+              disabled={!selectedTemplate || !selectedCompany}
               onClick={() => setSent(true)}
             >
               <Send className="mr-2 h-4 w-4" />
