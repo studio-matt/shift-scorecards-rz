@@ -4,12 +4,13 @@ import { getFirestore } from "firebase/firestore"
 import { getStorage } from "firebase/storage"
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  apiKey: "AIzaSyD_FPvDabLJFkD_fecfKQJw8YFptLEIxgQ",
+  authDomain: "shift-fe6e9.firebaseapp.com",
+  projectId: "shift-fe6e9",
+  storageBucket: "shift-fe6e9.appspot.com",
+  messagingSenderId: "160061885682",
+  appId: "1:160061885682:web:d01a65e90002974936146b",
+  measurementId: "G-8SE0NCEGE9",
 }
 
 // Initialize Firebase (prevent duplicate init in dev with HMR)
