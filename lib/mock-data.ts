@@ -22,6 +22,18 @@ export const KNOWN_DEPARTMENTS = [
   "IT",
   "Design",
   "Executive",
+  "Web",
+  "Grounds",
+  "Deliveries",
+  "Logistics",
+  "Accounting",
+  "R&D",
+  "Quality Assurance",
+  "Procurement",
+  "Facilities",
+  "Communications",
+  "Training",
+  "Administration",
 ]
 
 export const mockOrganization: Organization = {
@@ -36,6 +48,10 @@ export const mockOrganization: Organization = {
     "Product",
   ],
   createdAt: "2024-01-15",
+  website: "https://www.acmecorp.com",
+  contactEmail: "admin@acmecorp.com",
+  industry: "Technology",
+  memberCount: 42,
 }
 
 export const mockOrganizations: Organization[] = [
@@ -43,14 +59,42 @@ export const mockOrganizations: Organization[] = [
   {
     id: "org-2",
     name: "Globex Industries",
-    departments: ["Engineering", "Sales", "Marketing", "Finance", "Legal"],
+    departments: ["Engineering", "Sales", "Marketing", "Finance", "Legal", "Web", "Deliveries"],
     createdAt: "2024-03-01",
+    website: "https://www.globex.com",
+    contactEmail: "info@globex.com",
+    industry: "Consulting",
+    memberCount: 68,
   },
   {
     id: "org-3",
     name: "Initech LLC",
-    departments: ["IT", "Operations", "HR", "Customer Success", "Executive"],
+    departments: ["IT", "Operations", "HR", "Customer Success", "Executive", "Grounds", "Facilities"],
     createdAt: "2024-06-10",
+    website: "https://www.initech.com",
+    contactEmail: "support@initech.com",
+    industry: "Finance",
+    memberCount: 35,
+  },
+  {
+    id: "org-4",
+    name: "Umbrella Group",
+    departments: ["R&D", "Marketing", "Logistics", "Procurement", "Quality Assurance"],
+    createdAt: "2024-09-20",
+    website: "https://www.umbrellagroup.com",
+    contactEmail: "hello@umbrellagroup.com",
+    industry: "Healthcare",
+    memberCount: 52,
+  },
+  {
+    id: "org-5",
+    name: "Stark Solutions",
+    departments: ["Engineering", "Design", "Web", "Communications", "Training"],
+    createdAt: "2025-01-05",
+    website: "https://www.starksolutions.com",
+    contactEmail: "team@starksolutions.com",
+    industry: "Education",
+    memberCount: 28,
   },
 ]
 

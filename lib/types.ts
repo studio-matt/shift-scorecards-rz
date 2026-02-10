@@ -20,6 +20,10 @@ export interface Organization {
   name: string
   departments: string[]
   createdAt: string
+  website?: string
+  contactEmail?: string
+  industry?: string
+  memberCount?: number
 }
 
 export interface ScorecardQuestion {

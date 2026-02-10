@@ -25,18 +25,365 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Building2, Plus, Trash2, Users, Globe, Mail } from "lucide-react"
-import { mockOrganization, KNOWN_DEPARTMENTS } from "@/lib/mock-data"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Building2,
+  Plus,
+  Trash2,
+  Users,
+  Globe,
+  Mail,
+  ArrowLeft,
+  MoreVertical,
+  Pencil,
+} from "lucide-react"
+import { mockOrganizations, KNOWN_DEPARTMENTS } from "@/lib/mock-data"
+import type { Organization } from "@/lib/types"
+
+const INDUSTRIES = [
+  "Consulting",
+  "Technology",
+  "Finance",
+  "Healthcare",
+  "Education",
+  "Manufacturing",
+  "Retail",
+  "Other",
+]
 
 export default function OrganizationPage() {
-  const [orgName, setOrgName] = useState(mockOrganization.name)
-  const [departments, setDepartments] = useState(mockOrganization.departments)
+  const [organizations, setOrganizations] = useState<Organization[]>(mockOrganizations)
+  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+
+  // Create form state
+  const [newName, setNewName] = useState("")
+  const [newWebsite, setNewWebsite] = useState("")
+  const [newEmail, setNewEmail] = useState("")
+  const [newIndustry, setNewIndustry] = useState("")
+
+  const selectedOrg = organizations.find((o) => o.id === selectedOrgId)
+
+  function handleCreate() {
+    if (!newName.trim()) return
+    const newOrg: Organization = {
+      id: `org-${Date.now()}`,
+      name: newName.trim(),
+      departments: [],
+      createdAt: new Date().toISOString().split("T")[0],
+      website: newWebsite.trim() || undefined,
+      contactEmail: newEmail.trim() || undefined,
+      industry: newIndustry || undefined,
+      memberCount: 0,
+    }
+    setOrganizations((prev) => [...prev, newOrg])
+    setNewName("")
+    setNewWebsite("")
+    setNewEmail("")
+    setNewIndustry("")
+    setCreateDialogOpen(false)
+    setSelectedOrgId(newOrg.id)
+  }
+
+  function handleDelete(id: string) {
+    setOrganizations((prev) => prev.filter((o) => o.id !== id))
+    if (selectedOrgId === id) setSelectedOrgId(null)
+    setDeleteDialogOpen(false)
+    setDeleteTarget(null)
+  }
+
+  // If no org selected, show the list view
+  if (!selectedOrg) {
+    return (
+      <div>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Organizations</h1>
+            <p className="mt-1 text-muted-foreground">
+              Manage all organizations in the system
+            </p>
+          </div>
+          <Button onClick={() => setCreateDialogOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Organization
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {organizations.map((org) => (
+            <Card
+              key={org.id}
+              className="cursor-pointer transition-shadow hover:shadow-md"
+              onClick={() => setSelectedOrgId(org.id)}
+            >
+              <CardHeader className="flex flex-row items-start justify-between pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                    <Building2 className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">{org.name}</CardTitle>
+                    {org.industry && (
+                      <CardDescription className="text-xs">
+                        {org.industry}
+                      </CardDescription>
+                    )}
+                  </div>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                      <span className="sr-only">Actions</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setSelectedOrgId(org.id)
+                      }}
+                    >
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setDeleteTarget(org.id)
+                        setDeleteDialogOpen(true)
+                      }}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Members</span>
+                    <span className="font-medium text-foreground">
+                      {org.memberCount ?? 0}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Departments</span>
+                    <span className="font-medium text-foreground">
+                      {org.departments.length}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Created</span>
+                    <span className="font-medium text-foreground">
+                      {org.createdAt}
+                    </span>
+                  </div>
+                </div>
+                {org.departments.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {org.departments.slice(0, 4).map((dept) => (
+                      <Badge key={dept} variant="secondary" className="text-xs">
+                        {dept}
+                      </Badge>
+                    ))}
+                    {org.departments.length > 4 && (
+                      <Badge variant="outline" className="text-xs">
+                        +{org.departments.length - 4} more
+                      </Badge>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Create Dialog */}
+        <CreateOrgDialog
+          open={createDialogOpen}
+          onOpenChange={setCreateDialogOpen}
+          name={newName}
+          setName={setNewName}
+          website={newWebsite}
+          setWebsite={setNewWebsite}
+          email={newEmail}
+          setEmail={setNewEmail}
+          industry={newIndustry}
+          setIndustry={setNewIndustry}
+          onCreate={handleCreate}
+        />
+
+        {/* Delete Confirmation */}
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Organization</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete this organization? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => deleteTarget && handleDelete(deleteTarget)}
+              >
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    )
+  }
+
+  // Detail / landing page for selected org
+  return (
+    <OrgDetailView
+      org={selectedOrg}
+      onBack={() => setSelectedOrgId(null)}
+      onUpdate={(updated) =>
+        setOrganizations((prev) =>
+          prev.map((o) => (o.id === updated.id ? updated : o)),
+        )
+      }
+    />
+  )
+}
+
+// ------------------------------------------------------------------
+// Create Organization Dialog
+// ------------------------------------------------------------------
+function CreateOrgDialog({
+  open,
+  onOpenChange,
+  name,
+  setName,
+  website,
+  setWebsite,
+  email,
+  setEmail,
+  industry,
+  setIndustry,
+  onCreate,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  name: string
+  setName: (v: string) => void
+  website: string
+  setWebsite: (v: string) => void
+  email: string
+  setEmail: (v: string) => void
+  industry: string
+  setIndustry: (v: string) => void
+  onCreate: () => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Create New Organization</DialogTitle>
+          <DialogDescription>
+            Set up a new organization to manage a separate team or company.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-4 py-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="new-org-name">Organization Name</Label>
+            <Input
+              id="new-org-name"
+              placeholder="Enter organization name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="new-org-website">Website</Label>
+            <Input
+              id="new-org-website"
+              placeholder="https://company.com"
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="new-org-email">Contact Email</Label>
+            <Input
+              id="new-org-email"
+              type="email"
+              placeholder="admin@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="new-org-industry">Industry</Label>
+            <Select value={industry} onValueChange={setIndustry}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select industry" />
+              </SelectTrigger>
+              <SelectContent>
+                {INDUSTRIES.map((ind) => (
+                  <SelectItem key={ind} value={ind.toLowerCase()}>
+                    {ind}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={onCreate} disabled={!name.trim()}>
+            Create Organization
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ------------------------------------------------------------------
+// Organization Detail / Landing Page
+// ------------------------------------------------------------------
+function OrgDetailView({
+  org,
+  onBack,
+  onUpdate,
+}: {
+  org: Organization
+  onBack: () => void
+  onUpdate: (updated: Organization) => void
+}) {
+  const [orgName, setOrgName] = useState(org.name)
+  const [website, setWebsite] = useState(org.website ?? "")
+  const [contactEmail, setContactEmail] = useState(org.contactEmail ?? "")
+  const [industry, setIndustry] = useState(org.industry ?? "")
+  const [departments, setDepartments] = useState(org.departments)
   const [newDepartment, setNewDepartment] = useState("")
   const [selectedKnownDept, setSelectedKnownDept] = useState("")
-  const [dialogOpen, setDialogOpen] = useState(false)
 
   const availableKnownDepts = KNOWN_DEPARTMENTS.filter(
     (d) => !departments.includes(d),
@@ -60,13 +407,39 @@ export default function OrganizationPage() {
     setDepartments((prev) => prev.filter((d) => d !== dept))
   }
 
+  function handleSave() {
+    onUpdate({
+      ...org,
+      name: orgName,
+      website: website || undefined,
+      contactEmail: contactEmail || undefined,
+      industry: industry || undefined,
+      departments,
+    })
+  }
+
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground">Organization</h1>
-        <p className="mt-1 text-muted-foreground">
-          Manage your organization settings and departments
-        </p>
+        <button
+          type="button"
+          onClick={onBack}
+          className="mb-4 flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Organizations
+        </button>
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+            <Building2 className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">{orgName}</h1>
+            <p className="text-sm text-muted-foreground">
+              Created {org.createdAt}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -78,7 +451,7 @@ export default function OrganizationPage() {
                 Company Information
               </CardTitle>
               <CardDescription>
-                Basic information about your organization
+                Basic information about this organization
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
@@ -94,58 +467,59 @@ export default function OrganizationPage() {
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="org-website">Website</Label>
                   <div className="flex items-center gap-2">
-                    <Globe className="h-4 w-4 text-muted-foreground" />
+                    <Globe className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <Input
                       id="org-website"
                       placeholder="https://company.com"
-                      defaultValue="https://www.shiftthework.com"
+                      value={website}
+                      onChange={(e) => setWebsite(e.target.value)}
                     />
                   </div>
                 </div>
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="org-email">Contact Email</Label>
                   <div className="flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <Input
                       id="org-email"
                       type="email"
                       placeholder="admin@company.com"
-                      defaultValue="team@shiftthework.com"
+                      value={contactEmail}
+                      onChange={(e) => setContactEmail(e.target.value)}
                     />
                   </div>
                 </div>
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="org-industry">Industry</Label>
-                <Select defaultValue="consulting">
+                <Select value={industry.toLowerCase()} onValueChange={setIndustry}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Select industry" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="consulting">Consulting</SelectItem>
-                    <SelectItem value="technology">Technology</SelectItem>
-                    <SelectItem value="finance">Finance</SelectItem>
-                    <SelectItem value="healthcare">Healthcare</SelectItem>
-                    <SelectItem value="education">Education</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    {INDUSTRIES.map((ind) => (
+                      <SelectItem key={ind} value={ind.toLowerCase()}>
+                        {ind}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="flex justify-end">
-                <Button>Save Changes</Button>
+                <Button onClick={handleSave}>Save Changes</Button>
               </div>
             </CardContent>
           </Card>
 
           {/* Departments */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader>
               <div>
                 <CardTitle className="text-base font-semibold">
                   Departments
                 </CardTitle>
                 <CardDescription>
-                  Manage departments within your organization
+                  Manage departments within this organization
                 </CardDescription>
               </div>
             </CardHeader>
@@ -212,6 +586,11 @@ export default function OrganizationPage() {
                     </button>
                   </Badge>
                 ))}
+                {departments.length === 0 && (
+                  <p className="py-2 text-sm text-muted-foreground">
+                    No departments added yet. Select from the list above or add a custom one.
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -227,22 +606,11 @@ export default function OrganizationPage() {
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                    <Building2 className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-foreground">{orgName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Created {mockOrganization.createdAt}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-3 border-t border-border pt-4">
+                <div className="flex flex-col gap-3">
                   {[
                     {
                       label: "Total Members",
-                      value: "42",
+                      value: (org.memberCount ?? 0).toString(),
                       icon: Users,
                     },
                     {
@@ -267,91 +635,31 @@ export default function OrganizationPage() {
                     </div>
                   ))}
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Multi-org switcher (admin) */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">
-                Switch Organization
-              </CardTitle>
-              <CardDescription>
-                View reports for different companies
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Select defaultValue="org-1">
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="org-1">Acme Corp</SelectItem>
-                  <SelectItem value="org-2">TechStart Inc</SelectItem>
-                  <SelectItem value="org-3">Global Solutions</SelectItem>
-                </SelectContent>
-              </Select>
-              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="mt-3 w-full bg-transparent">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create Organization
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Create New Organization</DialogTitle>
-                    <DialogDescription>
-                      Set up a new organization to manage a separate team or
-                      company.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="flex flex-col gap-4 py-4">
-                    <div className="flex flex-col gap-2">
-                      <Label htmlFor="new-org-name">Organization Name</Label>
-                      <Input
-                        id="new-org-name"
-                        placeholder="Enter organization name"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <Label htmlFor="new-org-website">Website</Label>
-                      <Input
-                        id="new-org-website"
-                        placeholder="https://company.com"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <Label htmlFor="new-org-industry">Industry</Label>
-                      <Select>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select industry" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="consulting">Consulting</SelectItem>
-                          <SelectItem value="technology">Technology</SelectItem>
-                          <SelectItem value="finance">Finance</SelectItem>
-                          <SelectItem value="healthcare">Healthcare</SelectItem>
-                          <SelectItem value="education">Education</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      variant="outline"
-                      onClick={() => setDialogOpen(false)}
+                {org.website && (
+                  <div className="flex items-center gap-2 border-t border-border pt-3">
+                    <Globe className="h-4 w-4 text-muted-foreground" />
+                    <a
+                      href={org.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-primary hover:underline"
                     >
-                      Cancel
-                    </Button>
-                    <Button onClick={() => setDialogOpen(false)}>
-                      Create Organization
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+                      {org.website.replace(/^https?:\/\//, "")}
+                    </a>
+                  </div>
+                )}
+                {org.contactEmail && (
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    <a
+                      href={`mailto:${org.contactEmail}`}
+                      className="text-sm text-primary hover:underline"
+                    >
+                      {org.contactEmail}
+                    </a>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>
