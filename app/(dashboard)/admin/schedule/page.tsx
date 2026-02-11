@@ -27,6 +27,9 @@ import {
   AlertCircle,
   Loader2,
   Timer,
+  Trash2,
+  Pause,
+  Play,
 } from "lucide-react"
 import {
   getOrganizations,
@@ -37,6 +40,7 @@ import {
   filterCompletedReleases,
   createDocument,
   updateDocument,
+  deleteDocument,
   COLLECTIONS,
 } from "@/lib/firestore"
 import type { Organization, ScorecardRelease } from "@/lib/types"
@@ -58,6 +62,7 @@ export default function ScheduleReleasePage() {
   const [scheduledReleases, setScheduledReleases] = useState<ScorecardRelease[]>([])
   const [activeRelease, setActiveRelease] = useState<ScorecardRelease | null>(null)
   const [completedReleases, setCompletedReleases] = useState<ScorecardRelease[]>([])
+  const [pausedReleases, setPausedReleases] = useState<ScorecardRelease[]>([])
   const [dataLoading, setDataLoading] = useState(true)
 
   // Form state
@@ -105,9 +110,12 @@ export default function ScheduleReleasePage() {
           questionCount: (d.questionCount as number) ?? (d.questions as unknown[])?.length ?? 0,
         })),
       )
+      const paused = (allReleases as unknown as Record<string, unknown>[])
+        .filter((r) => r.status === "paused")
       setScheduledReleases(scheduled as unknown as ScorecardRelease[])
       setActiveRelease(active as unknown as ScorecardRelease | null)
       setCompletedReleases(completed as unknown as ScorecardRelease[])
+      setPausedReleases(paused as unknown as ScorecardRelease[])
     } catch (err) {
       console.error("Failed to load schedule data:", err)
     } finally {
@@ -166,6 +174,44 @@ export default function ScheduleReleasePage() {
       console.error("Failed to schedule release:", err)
     } finally {
       setSending(false)
+    }
+  }
+
+  async function handleDeleteScheduled(releaseId: string) {
+    try {
+      await deleteDocument(COLLECTIONS.SCHEDULES, releaseId)
+      await fetchData()
+    } catch (err) {
+      console.error("Failed to delete scheduled release:", err)
+    }
+  }
+
+  async function handlePauseActive() {
+    if (!activeRelease) return
+    try {
+      await updateDocument(COLLECTIONS.SCHEDULES, activeRelease.id, {
+        status: "paused",
+      })
+      await fetchData()
+    } catch (err) {
+      console.error("Failed to pause release:", err)
+    }
+  }
+
+  async function handleResumeRelease(releaseId: string) {
+    try {
+      // Expire any currently active release first
+      if (activeRelease) {
+        await updateDocument(COLLECTIONS.SCHEDULES, activeRelease.id, {
+          status: "expired",
+        })
+      }
+      await updateDocument(COLLECTIONS.SCHEDULES, releaseId, {
+        status: "active",
+      })
+      await fetchData()
+    } catch (err) {
+      console.error("Failed to resume release:", err)
     }
   }
 
@@ -473,6 +519,15 @@ export default function ScheduleReleasePage() {
                     Expires {formatDate(activeRelease.activeUntil)}
                   </span>
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 w-full bg-transparent text-amber-600 border-amber-300 hover:bg-amber-50"
+                  onClick={handlePauseActive}
+                >
+                  <Pause className="mr-2 h-3.5 w-3.5" />
+                  Pause Scorecard
+                </Button>
               </CardContent>
             </Card>
           )}
@@ -514,12 +569,68 @@ export default function ScheduleReleasePage() {
                       <p className="text-xs text-muted-foreground">
                         Active for {Math.round((new Date(release.activeUntil).getTime() - new Date(release.activeFrom).getTime()) / (1000 * 60 * 60 * 24))} days
                       </p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="mt-2 h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => handleDeleteScheduled(release.id)}
+                      >
+                        <Trash2 className="mr-1.5 h-3 w-3" />
+                        Delete
+                      </Button>
                     </div>
                   ))}
                 </div>
               )}
             </CardContent>
           </Card>
+
+          {/* Paused Releases */}
+          {pausedReleases.length > 0 && (
+            <Card className="border-amber-300/50">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base font-semibold">Paused</CardTitle>
+                  <Badge variant="secondary" className="bg-amber-100 text-amber-700">Paused</Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col gap-3">
+                  {pausedReleases.map((release) => (
+                    <div key={release.id} className="rounded-lg border border-border p-3">
+                      <p className="text-sm font-medium text-foreground">{release.templateName}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {release.organizationName}
+                        {release.department !== "all" ? ` - ${release.department}` : ""}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Expires {formatDate(release.activeUntil)}
+                      </p>
+                      <div className="mt-2 flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 flex-1 bg-transparent text-xs"
+                          onClick={() => handleResumeRelease(release.id)}
+                        >
+                          <Play className="mr-1.5 h-3 w-3" />
+                          Resume
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => handleDeleteScheduled(release.id)}
+                        >
+                          <Trash2 className="mr-1.5 h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Recent Releases (completed/expired only) */}
           <Card>

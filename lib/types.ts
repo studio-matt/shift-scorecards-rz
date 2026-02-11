@@ -69,7 +69,7 @@ export interface ScorecardRelease {
   recurringFrequency?: "weekly" | "biweekly" | "monthly"
   recipientCount: number
   responseCount: number
-  status: "scheduled" | "active" | "completed" | "expired"
+  status: "scheduled" | "active" | "paused" | "completed" | "expired"
   createdAt: string
   createdBy: string
 }

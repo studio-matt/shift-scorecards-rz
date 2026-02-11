@@ -64,6 +64,7 @@ export default function ScorecardPage() {
       try {
         const allRel = await getAllReleases()
         const activeRel = filterActiveRelease(allRel as unknown as Record<string, unknown>[])
+        // Paused releases are not shown to users -- treat as no active scorecard
         if (!activeRel) {
           setNoActive(true)
           setLoading(false)
