@@ -80,7 +80,6 @@ const distributionPlaceholder = [
 // ---------- Page ----------
 
 export default function NewScorecardBuilderPage() {
-  console.log("[v0] NewScorecardBuilderPage rendering - latest version")
   const router = useRouter()
   const searchParams = useSearchParams()
   const templateId = searchParams.get("template")
@@ -375,28 +374,21 @@ export default function NewScorecardBuilderPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-3 gap-3 mb-4">
-                <div className="text-center">
-                  <p className="text-lg font-bold text-foreground">0</p>
+              <div className="grid grid-cols-3 gap-4 pb-4">
+                <div className="flex flex-col items-center gap-1 rounded-lg border border-border p-3">
+                  <p className="text-2xl font-bold text-foreground">0</p>
                   <p className="text-xs text-muted-foreground">Total Responses</p>
-                  <p className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
-                    <TrendingUp className="h-3 w-3" />--
-                  </p>
                 </div>
-                <div className="text-center">
-                  <p className="text-lg font-bold text-foreground">--</p>
+                <div className="flex flex-col items-center gap-1 rounded-lg border border-border p-3">
+                  <p className="text-2xl font-bold text-foreground">--</p>
                   <p className="text-xs text-muted-foreground">Avg Score</p>
-                  <p className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
-                    <TrendingUp className="h-3 w-3" />--
-                  </p>
                 </div>
-                <div className="text-center">
-                  <p className="text-lg font-bold text-foreground">--</p>
+                <div className="flex flex-col items-center gap-1 rounded-lg border border-border p-3">
+                  <p className="text-2xl font-bold text-foreground">--</p>
                   <p className="text-xs text-muted-foreground">Response Rate</p>
-                  <p className="text-xs text-muted-foreground">--</p>
                 </div>
               </div>
-              <p className="text-center text-xs text-muted-foreground">
+              <p className="rounded-md bg-muted px-3 py-2 text-center text-xs text-muted-foreground">
                 Analytics will populate after the first scorecard response
               </p>
             </CardContent>
