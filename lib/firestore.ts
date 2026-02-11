@@ -150,6 +150,34 @@ export async function getResponsesByOrg(orgId: string) {
   )
 }
 
+// ─── Release Helpers ──────────────────────────────────────────────────
+
+export async function getScheduledReleases() {
+  return getDocuments(
+    COLLECTIONS.SCHEDULES,
+    where("status", "in", ["scheduled"]),
+    orderBy("scheduledAt", "asc"),
+  )
+}
+
+export async function getActiveRelease() {
+  const releases = await getDocuments(
+    COLLECTIONS.SCHEDULES,
+    where("status", "==", "active"),
+    limit(1),
+  )
+  return releases[0] ?? null
+}
+
+export async function getCompletedReleases() {
+  return getDocuments(
+    COLLECTIONS.SCHEDULES,
+    where("status", "in", ["completed", "expired"]),
+    orderBy("scheduledAt", "desc"),
+    limit(20),
+  )
+}
+
 // ─── Invite Helpers ───────────────────────────────────────────────────
 
 export async function getPendingInvites(orgId: string) {

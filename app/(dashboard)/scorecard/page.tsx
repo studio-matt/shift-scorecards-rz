@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useMemo, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { mockQuestions, mockTemplate } from "@/lib/mock-data"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -14,14 +13,104 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { ChevronRight, Save, CheckCircle2 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import {
+  ChevronRight,
+  Save,
+  CheckCircle2,
+  Loader2,
+  Clock,
+  AlertTriangle,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
+import {
+  getActiveRelease,
+  getDocument,
+  createDocument,
+  COLLECTIONS,
+} from "@/lib/firestore"
+import { useAuth } from "@/lib/auth-context"
+import type { ScorecardRelease, ScorecardQuestion } from "@/lib/types"
+
+interface TemplateData {
+  id: string
+  name: string
+  description: string
+  questions: ScorecardQuestion[]
+}
 
 export default function ScorecardPage() {
   const router = useRouter()
+  const { user } = useAuth()
+
+  const [loading, setLoading] = useState(true)
+  const [release, setRelease] = useState<ScorecardRelease | null>(null)
+  const [template, setTemplate] = useState<TemplateData | null>(null)
+  const [expired, setExpired] = useState(false)
+  const [noActive, setNoActive] = useState(false)
+
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string | number>>({})
   const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  // Remaining time countdown
+  const [remainingMs, setRemainingMs] = useState(0)
+
+  // Load active release and its template
+  useEffect(() => {
+    async function load() {
+      try {
+        const activeRel = await getActiveRelease()
+        if (!activeRel) {
+          setNoActive(true)
+          setLoading(false)
+          return
+        }
+
+        const rel = activeRel as unknown as ScorecardRelease
+        const untilDate = new Date(rel.activeUntil)
+        if (untilDate.getTime() < Date.now()) {
+          setExpired(true)
+          setRelease(rel)
+          setLoading(false)
+          return
+        }
+
+        setRelease(rel)
+        setRemainingMs(untilDate.getTime() - Date.now())
+
+        // Load template
+        const tmpl = await getDocument(COLLECTIONS.TEMPLATES, rel.templateId)
+        if (tmpl) {
+          setTemplate(tmpl as unknown as TemplateData)
+        }
+      } catch (err) {
+        console.error("Failed to load scorecard:", err)
+        setNoActive(true)
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [])
+
+  // Countdown timer
+  useEffect(() => {
+    if (!release || expired || submitted) return
+    const interval = setInterval(() => {
+      const untilDate = new Date(release.activeUntil)
+      const diff = untilDate.getTime() - Date.now()
+      if (diff <= 0) {
+        setExpired(true)
+        setRemainingMs(0)
+        clearInterval(interval)
+      } else {
+        setRemainingMs(diff)
+      }
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [release, expired, submitted])
 
   const weekOfLabel = useMemo(() => {
     const now = new Date()
@@ -35,10 +124,10 @@ export default function ScorecardPage() {
     })
   }, [])
 
-  const questions = mockQuestions
+  const questions = template?.questions ?? []
   const totalQuestions = questions.length
   const completedCount = Object.keys(answers).length
-  const progress = (completedCount / totalQuestions) * 100
+  const progress = totalQuestions > 0 ? (completedCount / totalQuestions) * 100 : 0
 
   const handleAnswer = useCallback(
     (questionId: string, value: string | number) => {
@@ -53,14 +142,30 @@ export default function ScorecardPage() {
     }
   }, [currentQuestion, totalQuestions])
 
-  const handleSubmit = useCallback(() => {
-    setSubmitted(true)
-  }, [])
+  const handleSubmit = useCallback(async () => {
+    if (!release || !template || !user) return
+    setSubmitting(true)
+    try {
+      await createDocument(COLLECTIONS.RESPONSES, {
+        templateId: release.templateId,
+        releaseId: release.id,
+        userId: user.id,
+        answers,
+        completedAt: new Date().toISOString(),
+        weekOf: weekOfLabel,
+        organizationId: release.organizationId,
+      })
+      setSubmitted(true)
+    } catch (err) {
+      console.error("Failed to submit scorecard:", err)
+    } finally {
+      setSubmitting(false)
+    }
+  }, [release, template, user, answers, weekOfLabel])
 
   const activeInputRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    // Small delay to let the DOM update after question change
     const timer = setTimeout(() => {
       if (activeInputRef.current) {
         const focusable = activeInputRef.current.querySelector<HTMLElement>(
@@ -72,6 +177,65 @@ export default function ScorecardPage() {
     return () => clearTimeout(timer)
   }, [currentQuestion])
 
+  // Format remaining time
+  function formatRemaining(ms: number) {
+    const totalSeconds = Math.floor(ms / 1000)
+    const days = Math.floor(totalSeconds / 86400)
+    const hours = Math.floor((totalSeconds % 86400) / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    if (days > 0) return `${days}d ${hours}h ${minutes}m`
+    if (hours > 0) return `${hours}h ${minutes}m`
+    return `${minutes}m`
+  }
+
+  const isUrgent = remainingMs > 0 && remainingMs < 1000 * 60 * 60 * 24 // less than 24h
+
+  // Loading
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  // No active scorecard
+  if (noActive) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+          <CheckCircle2 className="h-8 w-8 text-muted-foreground" />
+        </div>
+        <h2 className="text-xl font-bold text-foreground">No Active Scorecard</h2>
+        <p className="mt-2 max-w-md text-muted-foreground">
+          {"There's no scorecard available for you to complete right now. You'll be notified when a new one is released."}
+        </p>
+        <Button className="mt-6" variant="outline" onClick={() => router.push("/dashboard")}>
+          Go to Dashboard
+        </Button>
+      </div>
+    )
+  }
+
+  // Expired
+  if (expired) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
+          <AlertTriangle className="h-8 w-8 text-destructive" />
+        </div>
+        <h2 className="text-xl font-bold text-foreground">Scorecard Expired</h2>
+        <p className="mt-2 max-w-md text-muted-foreground">
+          This scorecard is no longer accepting responses. The active window has closed.
+        </p>
+        <Button className="mt-6" variant="outline" onClick={() => router.push("/dashboard")}>
+          Go to Dashboard
+        </Button>
+      </div>
+    )
+  }
+
+  // Submitted
   if (submitted) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
@@ -82,7 +246,7 @@ export default function ScorecardPage() {
           Scorecard Submitted
         </h2>
         <p className="mt-2 text-muted-foreground">
-          Thank you for completing your AI Productivity Scorecard.
+          Thank you for completing your {template?.name ?? "scorecard"}.
         </p>
         <Button className="mt-6" onClick={() => router.push("/dashboard")}>
           Go to my Dashboard
@@ -93,15 +257,50 @@ export default function ScorecardPage() {
 
   return (
     <div>
+      {/* Remaining time banner */}
+      <div
+        className={cn(
+          "mb-6 flex items-center gap-3 rounded-lg border px-4 py-3",
+          isUrgent
+            ? "border-destructive/30 bg-destructive/5"
+            : "border-primary/30 bg-primary/5"
+        )}
+      >
+        <Clock className={cn("h-5 w-5", isUrgent ? "text-destructive" : "text-primary")} />
+        <div className="flex-1">
+          <p className={cn("text-sm font-medium", isUrgent ? "text-destructive" : "text-primary")}>
+            {isUrgent ? "Hurry! " : ""}Time remaining to complete this scorecard
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Expires {new Date(release!.activeUntil).toLocaleDateString("en-US", {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          </p>
+        </div>
+        <Badge
+          variant="secondary"
+          className={cn(
+            "text-base font-bold px-3 py-1",
+            isUrgent ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"
+          )}
+        >
+          {formatRemaining(remainingMs)}
+        </Badge>
+      </div>
+
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-foreground">
-          {mockTemplate.name}
+          {template?.name ?? "Scorecard"}
         </h1>
         <p className="text-sm font-medium text-primary">
           Scorecard for the week of {weekOfLabel}
         </p>
         <p className="mt-1 text-muted-foreground">
-          {mockTemplate.description}
+          {template?.description}
         </p>
       </div>
 
@@ -157,8 +356,6 @@ export default function ScorecardPage() {
                                   e.preventDefault()
                                   if (index < totalQuestions - 1) {
                                     handleNext()
-                                  } else if (completedCount >= totalQuestions) {
-                                    handleSubmit()
                                   }
                                 }
                               }}
@@ -186,16 +383,6 @@ export default function ScorecardPage() {
                                       setTimeout(() => handleNext(), 200)
                                     }
                                   }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      e.preventDefault()
-                                      e.stopPropagation()
-                                      handleAnswer(q.id, val)
-                                      if (index < totalQuestions - 1) {
-                                        setTimeout(() => handleNext(), 200)
-                                      }
-                                    }
-                                  }}
                                   className={cn(
                                     "flex h-10 w-10 items-center justify-center rounded-md border text-sm font-medium transition-colors",
                                     answers[q.id] === val
@@ -220,8 +407,6 @@ export default function ScorecardPage() {
                                   e.preventDefault()
                                   if (index < totalQuestions - 1) {
                                     handleNext()
-                                  } else if (completedCount >= totalQuestions) {
-                                    handleSubmit()
                                   }
                                 }
                               }}
@@ -276,8 +461,11 @@ export default function ScorecardPage() {
                 <Button
                   className="w-full"
                   onClick={handleSubmit}
-                  disabled={completedCount < totalQuestions}
+                  disabled={completedCount < totalQuestions || submitting}
                 >
+                  {submitting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
                   Submit Scorecard
                 </Button>
               </div>

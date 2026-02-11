@@ -55,13 +55,23 @@ export interface ScorecardResponse {
   weekOf: string
 }
 
-export interface ScorecardSession {
+export interface ScorecardRelease {
   id: string
   templateId: string
-  scheduledAt: string
+  templateName: string
+  organizationId: string
+  organizationName: string
+  department: string // "all" or specific department
   scheduleType: "now" | "scheduled" | "recurring"
-  recipients: string[]
-  status: "draft" | "sent" | "completed"
+  scheduledAt: string // ISO date for when to send
+  activeFrom: string // ISO date when scorecard becomes active
+  activeUntil: string // ISO date when scorecard expires
+  recurringFrequency?: "weekly" | "biweekly" | "monthly"
+  recipientCount: number
+  responseCount: number
+  status: "scheduled" | "active" | "completed" | "expired"
+  createdAt: string
+  createdBy: string
 }
 
 export interface DepartmentPerformance {

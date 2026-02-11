@@ -26,77 +26,87 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
+  Timer,
 } from "lucide-react"
-import { mockAllUsers } from "@/lib/mock-data"
 import {
   getOrganizations,
   getDocuments,
+  getScheduledReleases,
+  getActiveRelease,
+  getCompletedReleases,
+  createDocument,
+  updateDocument,
   COLLECTIONS,
 } from "@/lib/firestore"
-import { orderBy } from "firebase/firestore"
-import type { Organization } from "@/lib/types"
-
-const pastReleases = [
-  {
-    id: "r1",
-    template: "AI Productivity Scorecard",
-    sentAt: "Jan 20, 2025 at 9:00 AM",
-    recipients: 42,
-    responses: 38,
-    status: "completed" as const,
-  },
-  {
-    id: "r2",
-    template: "AI Productivity Scorecard",
-    sentAt: "Jan 13, 2025 at 9:00 AM",
-    recipients: 42,
-    responses: 40,
-    status: "completed" as const,
-  },
-  {
-    id: "r3",
-    template: "Weekly Check-in",
-    sentAt: "Jan 27, 2025 at 9:00 AM",
-    recipients: 42,
-    responses: 15,
-    status: "in-progress" as const,
-  },
-]
+import { orderBy, where } from "firebase/firestore"
+import type { Organization, ScorecardRelease } from "@/lib/types"
+import { useAuth } from "@/lib/auth-context"
 
 interface TemplateOption {
   id: string
   name: string
+  status: string
   questionCount: number
 }
 
 export default function ScheduleReleasePage() {
+  const { user } = useAuth()
+
+  // Data from Firestore
   const [orgs, setOrgs] = useState<Organization[]>([])
   const [templates, setTemplates] = useState<TemplateOption[]>([])
+  const [scheduledReleases, setScheduledReleases] = useState<ScorecardRelease[]>([])
+  const [activeRelease, setActiveRelease] = useState<ScorecardRelease | null>(null)
+  const [completedReleases, setCompletedReleases] = useState<ScorecardRelease[]>([])
   const [dataLoading, setDataLoading] = useState(true)
+
+  // Form state
+  const [selectedTemplate, setSelectedTemplate] = useState("")
+  const [selectedCompany, setSelectedCompany] = useState("")
+  const [selectedDepartment, setSelectedDepartment] = useState("")
+  const [scheduleType, setScheduleType] = useState("now")
+  const [scheduledDateTime, setScheduledDateTime] = useState("")
+  const [recurringFrequency, setRecurringFrequency] = useState("weekly")
+  const [activeDays, setActiveDays] = useState("7")
+  const [allUsersInGroup, setAllUsersInGroup] = useState(true)
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+
+  const activeOrg = orgs.find((o) => o.id === selectedCompany)
+
+  // Only show published (non-draft) templates
+  const publishedTemplates = templates.filter((t) => t.status !== "draft")
 
   const fetchData = useCallback(async () => {
     try {
       setDataLoading(true)
-      const [orgDocs, tmplDocs] = await Promise.all([
+      const [orgDocs, tmplDocs, scheduled, active, completed] = await Promise.all([
         getOrganizations(),
         getDocuments(COLLECTIONS.TEMPLATES, orderBy("name")),
+        getScheduledReleases(),
+        getActiveRelease(),
+        getCompletedReleases(),
       ])
       setOrgs(
-        orgDocs.map((o) => ({
+        orgDocs.map((o: Record<string, unknown> & { id: string }) => ({
           id: o.id,
-          name: (o as Record<string, unknown>).name as string ?? "",
-          departments: ((o as Record<string, unknown>).departments as string[]) ?? [],
+          name: (o.name as string) ?? "",
+          departments: (o.departments as string[]) ?? [],
           createdAt: "",
-          memberCount: ((o as Record<string, unknown>).memberCount as number) ?? 0,
+          memberCount: (o.memberCount as number) ?? 0,
         })) as Organization[],
       )
       setTemplates(
-        tmplDocs.map((d) => ({
+        tmplDocs.map((d: Record<string, unknown> & { id: string }) => ({
           id: d.id,
-          name: (d as Record<string, unknown>).name as string ?? "",
-          questionCount: ((d as Record<string, unknown>).questionCount as number) ?? ((d as Record<string, unknown>).questions as unknown[])?.length ?? 0,
+          name: (d.name as string) ?? "",
+          status: (d.status as string) ?? "active",
+          questionCount: (d.questionCount as number) ?? (d.questions as unknown[])?.length ?? 0,
         })),
       )
+      setScheduledReleases(scheduled as unknown as ScorecardRelease[])
+      setActiveRelease(active as unknown as ScorecardRelease | null)
+      setCompletedReleases(completed as unknown as ScorecardRelease[])
     } catch (err) {
       console.error("Failed to load schedule data:", err)
     } finally {
@@ -108,40 +118,77 @@ export default function ScheduleReleasePage() {
     fetchData()
   }, [fetchData])
 
-  const [selectedTemplate, setSelectedTemplate] = useState("")
-  const [selectedCompany, setSelectedCompany] = useState("")
-  const [selectedDepartment, setSelectedDepartment] = useState("")
-  const [scheduleType, setScheduleType] = useState("now")
+  async function handleSend() {
+    if (!selectedTemplate || !selectedCompany) return
 
-  const activeOrg = orgs.find((o) => o.id === selectedCompany)
-  const [allUsersInGroup, setAllUsersInGroup] = useState(true)
-  const [selectedUsers, setSelectedUsers] = useState<string[]>(
-    mockAllUsers.filter((u) => u.selected).map((u) => u.id),
-  )
-  const [userSearch, setUserSearch] = useState("")
-  const [sent, setSent] = useState(false)
+    setSending(true)
+    try {
+      const template = publishedTemplates.find((t) => t.id === selectedTemplate)
+      const org = orgs.find((o) => o.id === selectedCompany)
+      const now = new Date()
 
-  function toggleUser(userId: string) {
-    setSelectedUsers((prev) =>
-      prev.includes(userId)
-        ? prev.filter((id) => id !== userId)
-        : [...prev, userId],
-    )
+      const activeFrom = scheduleType === "now"
+        ? now.toISOString()
+        : new Date(scheduledDateTime).toISOString()
+
+      const activeFromDate = new Date(activeFrom)
+      const activeUntilDate = new Date(activeFromDate)
+      activeUntilDate.setDate(activeUntilDate.getDate() + parseInt(activeDays))
+
+      // If sending now, expire any currently active release
+      if (scheduleType === "now" && activeRelease) {
+        await updateDocument(COLLECTIONS.SCHEDULES, activeRelease.id, {
+          status: "expired",
+        })
+      }
+
+      await createDocument(COLLECTIONS.SCHEDULES, {
+        templateId: selectedTemplate,
+        templateName: template?.name ?? "",
+        organizationId: selectedCompany,
+        organizationName: org?.name ?? "",
+        department: selectedDepartment || "all",
+        scheduleType,
+        scheduledAt: activeFrom,
+        activeFrom,
+        activeUntil: activeUntilDate.toISOString(),
+        recurringFrequency: scheduleType === "recurring" ? recurringFrequency : null,
+        recipientCount: 0, // Will be computed when actually sent
+        responseCount: 0,
+        status: scheduleType === "now" ? "active" : "scheduled",
+        createdBy: user?.id ?? "",
+      })
+
+      setSent(true)
+      await fetchData()
+    } catch (err) {
+      console.error("Failed to schedule release:", err)
+    } finally {
+      setSending(false)
+    }
   }
 
-  function selectAll() {
-    setSelectedUsers(mockAllUsers.map((u) => u.id))
+  function formatDate(iso: string) {
+    if (!iso) return "--"
+    const d = new Date(iso)
+    return d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    })
   }
 
-  function deselectAll() {
-    setSelectedUsers([])
+  function timeUntil(iso: string) {
+    const diff = new Date(iso).getTime() - Date.now()
+    if (diff <= 0) return "Now"
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+    if (days > 0) return `${days}d ${hours}h`
+    const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+    return `${hours}h ${mins}m`
   }
-
-  const filteredUsers = mockAllUsers.filter(
-    (u) =>
-      u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
-      u.department.toLowerCase().includes(userSearch.toLowerCase()),
-  )
 
   if (dataLoading) {
     return (
@@ -157,9 +204,13 @@ export default function ScheduleReleasePage() {
         <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
           <CheckCircle2 className="h-8 w-8 text-success" />
         </div>
-        <h2 className="text-xl font-bold text-foreground">Scorecard Sent</h2>
+        <h2 className="text-xl font-bold text-foreground">
+          {scheduleType === "now" ? "Scorecard Released" : "Scorecard Scheduled"}
+        </h2>
         <p className="mt-2 text-muted-foreground">
-          Your scorecard has been sent to {selectedUsers.length} recipients.
+          {scheduleType === "now"
+            ? "Your scorecard is now active and available to recipients."
+            : "Your scorecard has been scheduled and will be released at the specified time."}
         </p>
         <Button className="mt-6" onClick={() => setSent(false)}>
           Schedule Another
@@ -195,7 +246,12 @@ export default function ScheduleReleasePage() {
                   <SelectValue placeholder="Choose a scorecard template..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {templates.map((t) => (
+                  {publishedTemplates.length === 0 && (
+                    <div className="px-3 py-2 text-sm text-muted-foreground">
+                      No published templates available. Publish a template first.
+                    </div>
+                  )}
+                  {publishedTemplates.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.name} ({t.questionCount} questions)
                     </SelectItem>
@@ -205,7 +261,7 @@ export default function ScheduleReleasePage() {
               {!selectedTemplate && (
                 <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
                   <AlertCircle className="h-3 w-3" />
-                  You must select a template before sending
+                  You must select a published template before sending
                 </p>
               )}
             </CardContent>
@@ -276,19 +332,6 @@ export default function ScheduleReleasePage() {
                 </div>
               </div>
 
-              {!selectedCompany && (
-                <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <AlertCircle className="h-3 w-3" />
-                  Select a company to configure delivery
-                </p>
-              )}
-
-              <p className="text-xs text-muted-foreground">
-                {scheduleType === "now" && "Scorecard will be sent immediately to all selected recipients."}
-                {scheduleType === "scheduled" && "Set a specific date and time to send the scorecard."}
-                {scheduleType === "recurring" && "Scorecard will be sent automatically on a regular schedule."}
-              </p>
-
               {scheduleType !== "now" && (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="flex flex-col gap-2">
@@ -297,7 +340,8 @@ export default function ScheduleReleasePage() {
                       <Calendar className="h-4 w-4 text-muted-foreground" />
                       <Input
                         type="datetime-local"
-                        defaultValue="2025-01-27T09:00"
+                        value={scheduledDateTime}
+                        onChange={(e) => setScheduledDateTime(e.target.value)}
                       />
                     </div>
                   </div>
@@ -306,7 +350,7 @@ export default function ScheduleReleasePage() {
                       <Label>Frequency</Label>
                       <div className="flex items-center gap-2">
                         <Clock className="h-4 w-4 text-muted-foreground" />
-                        <Select defaultValue="weekly">
+                        <Select value={recurringFrequency} onValueChange={setRecurringFrequency}>
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
@@ -320,6 +364,38 @@ export default function ScheduleReleasePage() {
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* Active Window */}
+              <div className="rounded-lg border border-border bg-muted/50 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Timer className="h-4 w-4 text-primary" />
+                  <Label className="text-sm font-semibold">Active Window</Label>
+                </div>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  How long should this scorecard be available for users to complete?
+                  Only one scorecard can be active at a time. Publishing a new release will expire the previous one.
+                </p>
+                <Select value={activeDays} onValueChange={setActiveDays}>
+                  <SelectTrigger className="max-w-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 day</SelectItem>
+                    <SelectItem value="3">3 days</SelectItem>
+                    <SelectItem value="5">5 days</SelectItem>
+                    <SelectItem value="7">7 days (1 week)</SelectItem>
+                    <SelectItem value="14">14 days (2 weeks)</SelectItem>
+                    <SelectItem value="30">30 days</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {!selectedCompany && (
+                <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <AlertCircle className="h-3 w-3" />
+                  Select a company to configure delivery
+                </p>
               )}
             </CardContent>
           </Card>
@@ -337,9 +413,7 @@ export default function ScheduleReleasePage() {
                   id="all-users-group"
                   checked={allUsersInGroup}
                   onCheckedChange={(checked) => {
-                    const val = !!checked
-                    setAllUsersInGroup(val)
-                    if (val) selectAll()
+                    setAllUsersInGroup(!!checked)
                   }}
                 />
                 <Label htmlFor="all-users-group" className="flex flex-col cursor-pointer">
@@ -355,60 +429,6 @@ export default function ScheduleReleasePage() {
                   </span>
                 </Label>
               </div>
-
-              {!allUsersInGroup && (
-              <div className="rounded-lg border border-border">
-                <div className="flex items-center justify-between border-b border-border px-3 py-2">
-                  <Input
-                    placeholder="Search users..."
-                    value={userSearch}
-                    onChange={(e) => setUserSearch(e.target.value)}
-                    className="border-0 p-0 shadow-none focus-visible:ring-0"
-                  />
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={selectAll}
-                      className="text-xs font-medium text-primary hover:underline"
-                    >
-                      Select all
-                    </button>
-                    <span className="text-xs text-muted-foreground">|</span>
-                    <button
-                      type="button"
-                      onClick={deselectAll}
-                      className="text-xs font-medium text-primary hover:underline"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                </div>
-                <div className="max-h-64 overflow-y-auto">
-                  {filteredUsers.map((user) => (
-                    <div
-                      key={user.id}
-                      className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted"
-                    >
-                      <Checkbox
-                        checked={selectedUsers.includes(user.id)}
-                        onCheckedChange={() => toggleUser(user.id)}
-                      />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-foreground">
-                          {user.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {user.department}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
-                  {selectedUsers.length} of {mockAllUsers.length} users selected
-                </div>
-              </div>
-              )}
             </CardContent>
           </Card>
 
@@ -416,17 +436,91 @@ export default function ScheduleReleasePage() {
           <div className="flex justify-end">
             <Button
               size="lg"
-              disabled={!selectedTemplate || !selectedCompany}
-              onClick={() => setSent(true)}
+              disabled={!selectedTemplate || !selectedCompany || sending}
+              onClick={handleSend}
             >
-              <Send className="mr-2 h-4 w-4" />
-              {scheduleType === "now" ? "Send Scorecard Now" : "Schedule Scorecard"}
+              {sending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              {scheduleType === "now" ? "Release Scorecard Now" : "Schedule Release"}
             </Button>
           </div>
         </div>
 
-        {/* Right column: Past Releases */}
+        {/* Right column */}
         <div className="flex flex-col gap-6">
+          {/* Currently Active */}
+          {activeRelease && (
+            <Card className="border-primary/30">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base font-semibold">Currently Active</CardTitle>
+                  <Badge className="bg-success/10 text-success">Live</Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm font-medium text-foreground">{activeRelease.templateName}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {activeRelease.organizationName}
+                  {activeRelease.department !== "all" ? ` - ${activeRelease.department}` : ""}
+                </p>
+                <div className="mt-3 flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-xs">
+                  <Timer className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-muted-foreground">
+                    Expires {formatDate(activeRelease.activeUntil)}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Scheduled Releases */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base font-semibold">
+                Scheduled Releases
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {scheduledReleases.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  No upcoming releases scheduled
+                </p>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {scheduledReleases.map((release) => (
+                    <div
+                      key={release.id}
+                      className="rounded-lg border border-border p-3"
+                    >
+                      <div className="flex items-start justify-between">
+                        <p className="text-sm font-medium text-foreground">
+                          {release.templateName}
+                        </p>
+                        <Badge variant="secondary" className="bg-blue-500/10 text-blue-600">
+                          {timeUntil(release.scheduledAt)}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {release.organizationName}
+                        {release.department !== "all" ? ` - ${release.department}` : ""}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Scheduled for {formatDate(release.scheduledAt)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Active for {Math.round((new Date(release.activeUntil).getTime() - new Date(release.activeFrom).getTime()) / (1000 * 60 * 60 * 24))} days
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Recent Releases (completed/expired only) */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-semibold">
@@ -434,44 +528,52 @@ export default function ScheduleReleasePage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-col gap-3">
-                {pastReleases.map((release) => (
-                  <div
-                    key={release.id}
-                    className="rounded-lg border border-border p-3"
-                  >
-                    <div className="flex items-start justify-between">
-                      <p className="text-sm font-medium text-foreground">
-                        {release.template}
+              {completedReleases.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  No completed releases yet
+                </p>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {completedReleases.map((release) => (
+                    <div
+                      key={release.id}
+                      className="rounded-lg border border-border p-3"
+                    >
+                      <div className="flex items-start justify-between">
+                        <p className="text-sm font-medium text-foreground">
+                          {release.templateName}
+                        </p>
+                        <Badge
+                          variant="secondary"
+                          className={
+                            release.status === "completed"
+                              ? "bg-success/10 text-success"
+                              : "bg-muted text-muted-foreground"
+                          }
+                        >
+                          {release.status === "completed" ? "Complete" : "Expired"}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {formatDate(release.scheduledAt)}
                       </p>
-                      <Badge
-                        variant="secondary"
-                        className={
-                          release.status === "completed"
-                            ? "bg-success/10 text-success"
-                            : "bg-warning/10 text-warning"
-                        }
-                      >
-                        {release.status === "completed" ? "Complete" : "In Progress"}
-                      </Badge>
+                      <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                        <span>{release.recipientCount} recipients</span>
+                        <span>{release.responseCount} responses</span>
+                        {release.recipientCount > 0 && (
+                          <span className="font-medium text-foreground">
+                            {Math.round((release.responseCount / release.recipientCount) * 100)}% rate
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {release.sentAt}
-                    </p>
-                    <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>{release.recipients} recipients</span>
-                      <span>{release.responses} responses</span>
-                      <span className="font-medium text-foreground">
-                        {Math.round((release.responses / release.recipients) * 100)}%
-                        rate
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
+          {/* Quick Stats */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-semibold">
@@ -481,10 +583,10 @@ export default function ScheduleReleasePage() {
             <CardContent>
               <div className="flex flex-col gap-3">
                 {[
-                  { label: "Scorecards sent this month", value: "4" },
-                  { label: "Average response rate", value: "91%" },
-                  { label: "Total responses collected", value: "1,247" },
-                  { label: "Active recipients", value: "42" },
+                  { label: "Scorecards sent this month", value: "0" },
+                  { label: "Average response rate", value: "0%" },
+                  { label: "Total responses collected", value: "0" },
+                  { label: "Active recipients", value: "0" },
                 ].map((stat) => (
                   <div
                     key={stat.label}
