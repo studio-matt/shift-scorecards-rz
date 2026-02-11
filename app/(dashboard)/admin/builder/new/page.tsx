@@ -217,7 +217,13 @@ export default function NewScorecardBuilderPage() {
         </div>
         <Button onClick={() => saveTemplate("active")} disabled={saving || !scorecardName.trim()}>
           <Save className="mr-2 h-4 w-4" />
-          {saving ? "Saving..." : isEditing ? "Save Changes" : "Create Scorecard"}
+          {saving
+            ? "Saving..."
+            : status === "draft"
+              ? "Publish Scorecard"
+              : isEditing
+                ? "Save Changes"
+                : "Publish Scorecard"}
         </Button>
       </div>
 
@@ -360,7 +366,13 @@ export default function NewScorecardBuilderPage() {
               disabled={saving || !scorecardName.trim()}
             >
               <Save className="mr-2 h-4 w-4" />
-              {saving ? "Saving..." : isEditing ? "Save Changes" : "Publish Scorecard"}
+              {saving
+                ? "Saving..."
+                : status === "draft"
+                  ? "Publish Scorecard"
+                  : isEditing
+                    ? "Save Changes"
+                    : "Publish Scorecard"}
             </Button>
           </div>
         </div>

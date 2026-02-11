@@ -31,14 +31,14 @@ import {
 import {
   getOrganizations,
   getDocuments,
-  getScheduledReleases,
-  getActiveRelease,
-  getCompletedReleases,
+  getAllReleases,
+  filterScheduledReleases,
+  filterActiveRelease,
+  filterCompletedReleases,
   createDocument,
   updateDocument,
   COLLECTIONS,
 } from "@/lib/firestore"
-import { orderBy, where } from "firebase/firestore"
 import type { Organization, ScorecardRelease } from "@/lib/types"
 import { useAuth } from "@/lib/auth-context"
 
@@ -80,13 +80,14 @@ export default function ScheduleReleasePage() {
   const fetchData = useCallback(async () => {
     try {
       setDataLoading(true)
-      const [orgDocs, tmplDocs, scheduled, active, completed] = await Promise.all([
+      const [orgDocs, tmplDocs, allReleases] = await Promise.all([
         getOrganizations(),
-        getDocuments(COLLECTIONS.TEMPLATES, orderBy("name")),
-        getScheduledReleases(),
-        getActiveRelease(),
-        getCompletedReleases(),
+        getDocuments(COLLECTIONS.TEMPLATES),
+        getAllReleases(),
       ])
+      const scheduled = filterScheduledReleases(allReleases as unknown as Record<string, unknown>[])
+      const active = filterActiveRelease(allReleases as unknown as Record<string, unknown>[])
+      const completed = filterCompletedReleases(allReleases as unknown as Record<string, unknown>[])
       setOrgs(
         orgDocs.map((o: Record<string, unknown> & { id: string }) => ({
           id: o.id,

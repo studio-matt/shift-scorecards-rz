@@ -24,7 +24,8 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
-  getActiveRelease,
+  getAllReleases,
+  filterActiveRelease,
   getDocument,
   createDocument,
   COLLECTIONS,
@@ -61,14 +62,15 @@ export default function ScorecardPage() {
   useEffect(() => {
     async function load() {
       try {
-        const activeRel = await getActiveRelease()
+        const allRel = await getAllReleases()
+        const activeRel = filterActiveRelease(allRel as unknown as Record<string, unknown>[])
         if (!activeRel) {
           setNoActive(true)
           setLoading(false)
           return
         }
 
-        const rel = activeRel as unknown as ScorecardRelease
+        const rel = activeRel as ScorecardRelease
         const untilDate = new Date(rel.activeUntil)
         if (untilDate.getTime() < Date.now()) {
           setExpired(true)

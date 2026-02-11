@@ -109,7 +109,6 @@ export async function getUsersByOrg(orgId: string) {
   return getDocuments(
     COLLECTIONS.USERS,
     where("organizationId", "==", orgId),
-    orderBy("lastName"),
   )
 }
 
@@ -125,10 +124,10 @@ export async function getUserByAuthId(authId: string) {
 // ─── Template Helpers ─────────────────────────────────────────────────
 
 export async function getTemplates(orgId?: string) {
-  const constraints: QueryConstraint[] = [orderBy("updatedAt", "desc")]
-  if (orgId) {
-    constraints.unshift(where("organizationId", "==", orgId))
-  }
+  // Simple query -- no composite index needed
+  const constraints: QueryConstraint[] = orgId
+    ? [where("organizationId", "==", orgId)]
+    : []
   return getDocuments(COLLECTIONS.TEMPLATES, ...constraints)
 }
 
@@ -138,7 +137,6 @@ export async function getUserResponses(userId: string) {
   return getDocuments(
     COLLECTIONS.RESPONSES,
     where("userId", "==", userId),
-    orderBy("completedAt", "desc"),
   )
 }
 
@@ -146,36 +144,36 @@ export async function getResponsesByOrg(orgId: string) {
   return getDocuments(
     COLLECTIONS.RESPONSES,
     where("organizationId", "==", orgId),
-    orderBy("completedAt", "desc"),
   )
 }
 
 // ─── Release Helpers ──────────────────────────────────────────────────
+// NOTE: We fetch all releases in one query (no composite index needed)
+// and filter/sort client-side to avoid Firestore composite index requirements.
 
-export async function getScheduledReleases() {
-  return getDocuments(
-    COLLECTIONS.SCHEDULES,
-    where("status", "in", ["scheduled"]),
-    orderBy("scheduledAt", "asc"),
-  )
+export async function getAllReleases() {
+  return getDocuments(COLLECTIONS.SCHEDULES)
 }
 
-export async function getActiveRelease() {
-  const releases = await getDocuments(
-    COLLECTIONS.SCHEDULES,
-    where("status", "==", "active"),
-    limit(1),
-  )
-  return releases[0] ?? null
+export function filterScheduledReleases(releases: Record<string, unknown>[]) {
+  return releases
+    .filter((r) => r.status === "scheduled")
+    .sort((a, b) =>
+      String(a.scheduledAt ?? "").localeCompare(String(b.scheduledAt ?? "")),
+    )
 }
 
-export async function getCompletedReleases() {
-  return getDocuments(
-    COLLECTIONS.SCHEDULES,
-    where("status", "in", ["completed", "expired"]),
-    orderBy("scheduledAt", "desc"),
-    limit(20),
-  )
+export function filterActiveRelease(releases: Record<string, unknown>[]) {
+  return releases.find((r) => r.status === "active") ?? null
+}
+
+export function filterCompletedReleases(releases: Record<string, unknown>[]) {
+  return releases
+    .filter((r) => r.status === "completed" || r.status === "expired")
+    .sort((a, b) =>
+      String(b.scheduledAt ?? "").localeCompare(String(a.scheduledAt ?? "")),
+    )
+    .slice(0, 20)
 }
 
 // ─── Invite Helpers ───────────────────────────────────────────────────
@@ -185,6 +183,5 @@ export async function getPendingInvites(orgId: string) {
     COLLECTIONS.INVITES,
     where("organizationId", "==", orgId),
     where("status", "==", "pending"),
-    orderBy("createdAt", "desc"),
   )
 }
