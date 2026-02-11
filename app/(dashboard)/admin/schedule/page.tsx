@@ -20,6 +20,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
+import {
   Send,
   Calendar,
   Clock,
@@ -76,6 +83,7 @@ export default function ScheduleReleasePage() {
   const [allUsersInGroup, setAllUsersInGroup] = useState(true)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [sentType, setSentType] = useState("")
 
   const activeOrg = orgs.find((o) => o.id === selectedCompany)
 
@@ -168,8 +176,18 @@ export default function ScheduleReleasePage() {
         createdBy: user?.id ?? "",
       })
 
+      setSentType(scheduleType)
       setSent(true)
       await fetchData()
+
+      // Reset form
+      setSelectedTemplate("")
+      setSelectedCompany("")
+      setSelectedDepartment("")
+      setScheduleType("now")
+      setScheduledDateTime("")
+      setRecurringFrequency("weekly")
+      setActiveDays("7")
     } catch (err) {
       console.error("Failed to schedule release:", err)
     } finally {
@@ -241,27 +259,6 @@ export default function ScheduleReleasePage() {
     return (
       <div className="flex items-center justify-center py-24">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    )
-  }
-
-  if (sent) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
-          <CheckCircle2 className="h-8 w-8 text-success" />
-        </div>
-        <h2 className="text-xl font-bold text-foreground">
-          {scheduleType === "now" ? "Scorecard Released" : "Scorecard Scheduled"}
-        </h2>
-        <p className="mt-2 text-muted-foreground">
-          {scheduleType === "now"
-            ? "Your scorecard is now active and available to recipients."
-            : "Your scorecard has been scheduled and will be released at the specified time."}
-        </p>
-        <Button className="mt-6" onClick={() => setSent(false)}>
-          Schedule Another
-        </Button>
       </div>
     )
   }
@@ -717,6 +714,30 @@ export default function ScheduleReleasePage() {
           </Card>
         </div>
       </div>
+
+      {/* Success confirmation modal */}
+      <Dialog open={sent} onOpenChange={setSent}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader className="flex flex-col items-center text-center">
+            <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-success/10">
+              <CheckCircle2 className="h-7 w-7 text-success" />
+            </div>
+            <DialogTitle className="text-lg">
+              {sentType === "now" ? "Scorecard Released" : "Scorecard Scheduled"}
+            </DialogTitle>
+            <DialogDescription>
+              {sentType === "now"
+                ? "Your scorecard is now active and available to recipients."
+                : "Your scorecard has been scheduled and will be released at the specified time."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-center pt-2">
+            <Button onClick={() => setSent(false)}>
+              Done
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
