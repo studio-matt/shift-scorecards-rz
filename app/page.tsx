@@ -21,6 +21,8 @@ function LoginForm() {
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [fullName, setFullName] = useState("")
+  const [companyName, setCompanyName] = useState("")
+  const [departmentName, setDepartmentName] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [mode, setMode] = useState<"login" | "signup">("login")
@@ -56,7 +58,7 @@ function LoginForm() {
     setLoading(true)
     try {
       if (mode === "signup") {
-        await signup(email, password, fullName)
+        await signup(email, password, fullName, companyName, departmentName)
       } else {
         await login(email, password)
       }
@@ -149,17 +151,45 @@ function LoginForm() {
               />
             </div>
             {mode === "signup" && (
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  placeholder="Confirm your password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                />
-              </div>
+              <>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="confirmPassword">Confirm Password</Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    placeholder="Confirm your password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="companyName">
+                      Company <span className="text-muted-foreground font-normal">(optional)</span>
+                    </Label>
+                    <Input
+                      id="companyName"
+                      type="text"
+                      placeholder="Company name"
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="departmentName">
+                      Department <span className="text-muted-foreground font-normal">(optional)</span>
+                    </Label>
+                    <Input
+                      id="departmentName"
+                      type="text"
+                      placeholder="Department"
+                      value={departmentName}
+                      onChange={(e) => setDepartmentName(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </>
             )}
             {mode === "login" && (
               <div className="flex items-center justify-between">
@@ -246,6 +276,8 @@ function LoginForm() {
                 setError("")
                 setPassword("")
                 setConfirmPassword("")
+                setCompanyName("")
+                setDepartmentName("")
               }}
             >
               {mode === "login" ? "Sign Up" : "Sign In"}

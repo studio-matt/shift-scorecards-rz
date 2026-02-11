@@ -20,8 +20,11 @@ import {
   type User as FirebaseUser,
 } from "firebase/auth"
 import { auth } from "./firebase"
-import { getUserByAuthId, createDocument, COLLECTIONS } from "./firestore"
+import { getUserByAuthId, createDocument, updateDocument, COLLECTIONS } from "./firestore"
 import type { User, UserRole } from "./types"
+
+// Temp store for signup extras that get applied after profile creation
+let pendingSignupExtras: { company?: string; department?: string } | null = null
 
 const googleProvider = new GoogleAuthProvider()
 const microsoftProvider = new OAuthProvider("microsoft.com")
@@ -32,7 +35,7 @@ interface AuthContextType {
   isAuthenticated: boolean
   isAdmin: boolean
   login: (email: string, password: string) => Promise<void>
-  signup: (email: string, password: string, name: string) => Promise<void>
+  signup: (email: string, password: string, name: string, company?: string, department?: string) => Promise<void>
   loginWithProvider: (provider: "google" | "microsoft") => Promise<void>
   logout: () => void
   switchRole: (role: UserRole) => void
@@ -57,7 +60,7 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
   const firstName = nameParts[0] ?? "New"
   const lastName = nameParts.slice(1).join(" ") || "User"
 
-  const profile: Omit<User, "id"> = {
+  const profile: Record<string, unknown> = {
     email: fbUser.email ?? "",
     firstName,
     lastName,
@@ -65,15 +68,29 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
     department: "",
     jobTitle: "",
     phone: "",
-    avatar: fbUser.photoURL ?? undefined,
     organizationId: "",
     createdAt: new Date().toISOString(),
     lastLogin: new Date().toISOString(),
     authId: fbUser.uid,
   }
+  // Only include avatar if a real URL exists (Firestore rejects undefined)
+  if (fbUser.photoURL) {
+    profile.avatar = fbUser.photoURL
+  }
+
+  // Apply any pending signup extras (company/department)
+  if (pendingSignupExtras) {
+    if (pendingSignupExtras.company) {
+      profile.organizationId = pendingSignupExtras.company
+    }
+    if (pendingSignupExtras.department) {
+      profile.department = pendingSignupExtras.department
+    }
+    pendingSignupExtras = null
+  }
 
   const docId = await createDocument(COLLECTIONS.USERS, profile)
-  return { id: docId, ...profile } as User
+  return { id: docId, ...profile } as unknown as User
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -106,7 +123,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signInWithEmailAndPassword(auth, email, password)
   }, [])
 
-  const signup = useCallback(async (email: string, password: string, name: string) => {
+  const signup = useCallback(async (email: string, password: string, name: string, company?: string, department?: string) => {
+    // Store extras so resolveUserProfile can pick them up
+    pendingSignupExtras = { company, department }
     const cred = await createUserWithEmailAndPassword(auth, email, password)
     await updateProfile(cred.user, { displayName: name })
   }, [])
