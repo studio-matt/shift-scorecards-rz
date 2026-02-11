@@ -12,6 +12,7 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   createUserWithEmailAndPassword,
+  updateProfile,
   signOut,
   onAuthStateChanged,
   GoogleAuthProvider,
@@ -105,8 +106,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signInWithEmailAndPassword(auth, email, password)
   }, [])
 
-  const signup = useCallback(async (email: string, password: string, _name: string) => {
-    await createUserWithEmailAndPassword(auth, email, password)
+  const signup = useCallback(async (email: string, password: string, name: string) => {
+    const cred = await createUserWithEmailAndPassword(auth, email, password)
+    await updateProfile(cred.user, { displayName: name })
   }, [])
 
   const loginWithProvider = useCallback(

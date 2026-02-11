@@ -19,9 +19,12 @@ import {
 function LoginForm() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [fullName, setFullName] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const { login, loginWithProvider, isAuthenticated, ready } = useAuth()
+  const [mode, setMode] = useState<"login" | "signup">("login")
+  const { login, signup, loginWithProvider, isAuthenticated, ready } = useAuth()
   const router = useRouter()
 
   // If already authenticated, redirect to dashboard
@@ -34,14 +37,38 @@ function LoginForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
+
+    if (mode === "signup") {
+      if (!fullName.trim()) {
+        setError("Please enter your full name.")
+        return
+      }
+      if (password.length < 6) {
+        setError("Password must be at least 6 characters.")
+        return
+      }
+      if (password !== confirmPassword) {
+        setError("Passwords do not match.")
+        return
+      }
+    }
+
     setLoading(true)
     try {
-      await login(email, password)
+      if (mode === "signup") {
+        await signup(email, password, fullName)
+      } else {
+        await login(email, password)
+      }
       // onAuthStateChanged will set user, then useEffect above navigates
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Login failed"
+      const msg = err instanceof Error ? err.message : "Failed"
       if (msg.includes("user-not-found") || msg.includes("wrong-password") || msg.includes("invalid-credential")) {
         setError("Invalid email or password. Please try again.")
+      } else if (msg.includes("email-already-in-use")) {
+        setError("An account with this email already exists. Try signing in.")
+      } else if (msg.includes("weak-password")) {
+        setError("Password is too weak. Use at least 6 characters.")
       } else {
         setError(msg)
       }
@@ -71,10 +98,12 @@ function LoginForm() {
         <CardHeader className="items-center text-center">
           <ShiftLogo size="lg" className="mb-4" />
           <CardTitle className="text-2xl font-bold text-foreground">
-            Welcome Back
+            {mode === "login" ? "Welcome Back" : "Create Account"}
           </CardTitle>
           <CardDescription>
-            Sign in to your account to continue
+            {mode === "login"
+              ? "Sign in to your account to continue"
+              : "Set up your account to get started"}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -82,6 +111,19 @@ function LoginForm() {
             {error && (
               <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
                 {error}
+              </div>
+            )}
+            {mode === "signup" && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="fullName">Full Name</Label>
+                <Input
+                  id="fullName"
+                  type="text"
+                  placeholder="Enter your full name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                />
               </div>
             )}
             <div className="flex flex-col gap-2">
@@ -100,28 +142,43 @@ function LoginForm() {
               <Input
                 id="password"
                 type="password"
-                placeholder="Enter your password"
+                placeholder={mode === "signup" ? "Create a password (min 6 characters)" : "Enter your password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
             </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Checkbox id="remember" />
-                <Label htmlFor="remember" className="text-sm font-normal">
-                  Remember me
-                </Label>
+            {mode === "signup" && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  placeholder="Confirm your password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                />
               </div>
-              <button
-                type="button"
-                className="text-sm font-medium text-primary hover:underline"
-              >
-                Forgot password?
-              </button>
-            </div>
+            )}
+            {mode === "login" && (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Checkbox id="remember" />
+                  <Label htmlFor="remember" className="text-sm font-normal">
+                    Remember me
+                  </Label>
+                </div>
+                <button
+                  type="button"
+                  className="text-sm font-medium text-primary hover:underline"
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
             <Button type="submit" className="w-full" disabled={loading}>
-              Sign In
+              {loading ? "Please wait..." : mode === "login" ? "Sign In" : "Create Account"}
             </Button>
           </form>
 
@@ -180,12 +237,18 @@ function LoginForm() {
           </div>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            {"Don't have an account? "}
+            {mode === "login" ? "Don't have an account? " : "Already have an account? "}
             <button
               type="button"
               className="font-medium text-primary hover:underline"
+              onClick={() => {
+                setMode(mode === "login" ? "signup" : "login")
+                setError("")
+                setPassword("")
+                setConfirmPassword("")
+              }}
             >
-              Sign Up
+              {mode === "login" ? "Sign Up" : "Sign In"}
             </button>
           </p>
 
