@@ -29,13 +29,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { Plus, Mail, CheckCircle2, Clock, Search, Upload, FileDown, Loader2 } from "lucide-react"
-import { KNOWN_DEPARTMENTS } from "@/lib/mock-data"
 import {
   getDocuments,
+  getOrganizations,
   createDocument,
   COLLECTIONS,
 } from "@/lib/firestore"
-import { orderBy } from "firebase/firestore"
+import type { Organization } from "@/lib/types"
 
 interface InvitedUser {
   id: string
@@ -47,22 +47,32 @@ interface InvitedUser {
 }
 
 export default function ManageUsersPage() {
+  // ── Single invite fields ──
   const [inviteEmail, setInviteEmail] = useState("")
-  const [inviteDepartment, setInviteDepartment] = useState("")
   const [inviteRole, setInviteRole] = useState("user")
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState("")
+
+  // ── CSV bulk fields ──
   const [csvFile, setCsvFile] = useState<File | null>(null)
   const [csvPreviewCount, setCsvPreviewCount] = useState(0)
+  const [csvCompany, setCsvCompany] = useState("")
+  const [csvDepartment, setCsvDepartment] = useState("")
+
+  // ── Shared ──
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [orgs, setOrgs] = useState<Organization[]>([])
   const [users, setUsers] = useState<InvitedUser[]>([])
   const [loading, setLoading] = useState(true)
 
-  const fetchUsers = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true)
-      const docs = await getDocuments(COLLECTIONS.USERS, orderBy("lastName"))
+      const [userDocs, orgDocs] = await Promise.all([
+        getDocuments(COLLECTIONS.USERS),
+        getOrganizations(),
+      ])
       setUsers(
-        docs.map((d) => {
+        userDocs.map((d) => {
           const data = d as Record<string, unknown>
           const firstName = (data.firstName as string) ?? ""
           const lastName = (data.lastName as string) ?? ""
@@ -72,24 +82,36 @@ export default function ManageUsersPage() {
             email: (data.email as string) ?? "",
             department: (data.department as string) ?? "",
             role: (data.role as string) ?? "user",
-            status: data.authId ? "accepted" as const : "pending" as const,
+            status: data.authId ? ("accepted" as const) : ("pending" as const),
           }
         }),
       )
+      setOrgs(
+        orgDocs.map((o) => ({
+          id: o.id,
+          name: (o as Record<string, unknown>).name as string,
+          departments: ((o as Record<string, unknown>).departments as string[]) ?? [],
+          createdAt: "",
+          memberCount: 0,
+        })) as Organization[],
+      )
     } catch (err) {
-      console.error("Failed to fetch users:", err)
+      console.error("Failed to fetch data:", err)
     } finally {
       setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    fetchUsers()
-  }, [fetchUsers])
+    fetchData()
+  }, [fetchData])
+
+  // Departments for the selected CSV company
+  const selectedOrg = orgs.find((o) => o.id === csvCompany)
+  const orgDepartments = selectedOrg?.departments ?? []
 
   function handleDownloadTemplate() {
-    const csvContent =
-      "email,department,role\njane@company.com,Engineering,user\njohn@company.com,Sales,admin"
+    const csvContent = "email,department\njane@company.com,Engineering\njohn@company.com,Sales"
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
@@ -123,26 +145,32 @@ export default function ManageUsersPage() {
   async function handleInvite() {
     try {
       if (csvFile) {
-        // Parse CSV and create invite docs for each row
+        // Bulk CSV: all users get role=user
         const text = await csvFile.text()
         const lines = text.split("\n").filter((l) => l.trim())
         for (let i = 1; i < lines.length; i++) {
-          const [email, dept, role] = lines[i].split(",").map((s) => s.trim())
+          const parts = lines[i].split(",").map((s) => s.trim())
+          const email = parts[0]
+          // If a department was selected in the dropdown, override the CSV column
+          const dept = csvDepartment || parts[1] || ""
           if (email) {
             await createDocument(COLLECTIONS.INVITES, {
               email,
-              department: dept ?? inviteDepartment,
-              role: role ?? inviteRole,
+              department: dept,
+              organizationId: csvCompany,
+              role: "user", // Bulk imports are always role=user
               status: "pending",
+              createdAt: new Date().toISOString(),
             })
           }
         }
       } else if (inviteEmail) {
         await createDocument(COLLECTIONS.INVITES, {
           email: inviteEmail,
-          department: inviteDepartment,
+          department: "",
           role: inviteRole,
           status: "pending",
+          createdAt: new Date().toISOString(),
         })
       }
     } catch (err) {
@@ -150,11 +178,12 @@ export default function ManageUsersPage() {
     }
     setDialogOpen(false)
     setInviteEmail("")
-    setInviteDepartment("")
     setInviteRole("user")
     setCsvFile(null)
     setCsvPreviewCount(0)
-    await fetchUsers()
+    setCsvCompany("")
+    setCsvDepartment("")
+    await fetchData()
   }
 
   if (loading) {
@@ -184,7 +213,7 @@ export default function ManageUsersPage() {
               Invite User
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Invite Team Member</DialogTitle>
               <DialogDescription>
@@ -193,6 +222,7 @@ export default function ManageUsersPage() {
               </DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-4 py-4">
+              {/* ── Single Invite Section ── */}
               <div className="flex flex-col gap-2">
                 <Label htmlFor="invite-email">Email Address</Label>
                 <Input
@@ -201,11 +231,33 @@ export default function ManageUsersPage() {
                   placeholder="name@company.com"
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
+                  disabled={!!csvFile}
                 />
               </div>
-
-              {/* CSV Upload */}
               <div className="flex flex-col gap-2">
+                <Label htmlFor="invite-role">Role</Label>
+                <Select
+                  value={inviteRole}
+                  onValueChange={setInviteRole}
+                  disabled={!!csvFile}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="user">User</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+                {csvFile && (
+                  <p className="text-xs text-muted-foreground">
+                    Bulk CSV imports are automatically assigned Role = User
+                  </p>
+                )}
+              </div>
+
+              {/* ── CSV Bulk Upload Section ── */}
+              <div className="flex flex-col gap-3">
                 <div className="relative flex items-center">
                   <div className="flex-1 border-t border-border" />
                   <span className="px-3 text-xs text-muted-foreground">
@@ -222,8 +274,7 @@ export default function ManageUsersPage() {
                     <span className="font-medium text-foreground">
                       {csvFile.name}{" "}
                       <span className="text-muted-foreground">
-                        ({csvPreviewCount} user
-                        {csvPreviewCount !== 1 ? "s" : ""})
+                        ({csvPreviewCount} user{csvPreviewCount !== 1 ? "s" : ""})
                       </span>
                     </span>
                   ) : (
@@ -245,37 +296,61 @@ export default function ManageUsersPage() {
                   <FileDown className="h-3.5 w-3.5" />
                   Download CSV template
                 </button>
-              </div>
 
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="invite-dept">Department</Label>
-                <Select
-                  value={inviteDepartment}
-                  onValueChange={setInviteDepartment}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {KNOWN_DEPARTMENTS.map((dept) => (
-                      <SelectItem key={dept} value={dept.toLowerCase()}>
-                        {dept}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="invite-role">Role</Label>
-                <Select value={inviteRole} onValueChange={setInviteRole}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                  </SelectContent>
-                </Select>
+                {/* Company dropdown (for CSV) */}
+                <div className="flex flex-col gap-2">
+                  <Label>Company</Label>
+                  <Select
+                    value={csvCompany}
+                    onValueChange={(val) => {
+                      setCsvCompany(val)
+                      setCsvDepartment("") // Reset department when company changes
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select company" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {orgs.map((org) => (
+                        <SelectItem key={org.id} value={org.id}>
+                          {org.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Department dropdown (populated from selected company) */}
+                <div className="flex flex-col gap-1.5">
+                  <Label>Department</Label>
+                  <Select
+                    value={csvDepartment}
+                    onValueChange={setCsvDepartment}
+                    disabled={!csvCompany || orgDepartments.length === 0}
+                  >
+                    <SelectTrigger>
+                      <SelectValue
+                        placeholder={
+                          !csvCompany
+                            ? "Select a company first"
+                            : orgDepartments.length === 0
+                              ? "No departments configured"
+                              : "Select department (optional)"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {orgDepartments.map((dept) => (
+                        <SelectItem key={dept} value={dept}>
+                          {dept}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    If a department is selected, all users in the CSV will get the same department assigned.
+                  </p>
+                </div>
               </div>
             </div>
             <DialogFooter>
@@ -396,7 +471,9 @@ export default function ManageUsersPage() {
             ))}
             {filteredUsers.length === 0 && (
               <p className="py-8 text-center text-sm text-muted-foreground">
-                {searchQuery ? "No users match your search" : "No users yet. Invite your first team member."}
+                {searchQuery
+                  ? "No users match your search"
+                  : "No users yet. Invite your first team member."}
               </p>
             )}
           </div>
