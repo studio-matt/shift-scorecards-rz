@@ -138,7 +138,7 @@ export default function TemplatesPage() {
       <div className="mb-8 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">
-            Scorecard Templates
+            Scorecard Builder
           </h1>
           <p className="mt-1 text-muted-foreground">
             Create and manage scorecard templates for your organization
@@ -147,7 +147,7 @@ export default function TemplatesPage() {
         <Link href="/admin/builder/new">
           <Button>
             <Plus className="mr-2 h-4 w-4" />
-            New Template
+            Create New Scorecard
           </Button>
         </Link>
       </div>

@@ -1,12 +1,11 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, useCallback } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import {
   Card,
   CardContent,
@@ -38,8 +37,17 @@ import {
   Save,
   ArrowLeft,
   TrendingUp,
+  Loader2,
+  FileDown,
 } from "lucide-react"
-import { mockWeeklyTrends } from "@/lib/mock-data"
+import {
+  getDocument,
+  createDocument,
+  updateDocument,
+  COLLECTIONS,
+} from "@/lib/firestore"
+
+// ---------- Types ----------
 
 interface BuilderQuestion {
   id: string
@@ -47,39 +55,79 @@ interface BuilderQuestion {
   type: "scale" | "number" | "text"
 }
 
-const distributionData = [
-  { week: "Week 1", score: 6.5 },
-  { week: "Week 2", score: 7.0 },
-  { week: "Week 3", score: 7.2 },
-  { week: "Week 4", score: 7.8 },
-  { week: "Week 5", score: 7.5 },
-  { week: "Week 6", score: 8.0 },
-  { week: "Week 7", score: 8.2 },
+// ---------- Static chart data (placeholder until real responses exist) ----------
+
+const trendPlaceholder = [
+  { week: "W1", score: 0 },
+  { week: "W2", score: 0 },
+  { week: "W3", score: 0 },
+  { week: "W4", score: 0 },
+  { week: "W5", score: 0 },
+  { week: "W6", score: 0 },
+  { week: "W7", score: 0 },
 ]
+
+const distributionPlaceholder = [
+  { week: "W1", score: 0 },
+  { week: "W2", score: 0 },
+  { week: "W3", score: 0 },
+  { week: "W4", score: 0 },
+  { week: "W5", score: 0 },
+  { week: "W6", score: 0 },
+  { week: "W7", score: 0 },
+]
+
+// ---------- Page ----------
 
 export default function NewScorecardBuilderPage() {
   const router = useRouter()
-  const [questions, setQuestions] = useState<BuilderQuestion[]>([
-    {
-      id: "bq1",
-      text: "How satisfied are you with team collaboration?",
-      type: "scale",
-    },
-    {
-      id: "bq2",
-      text: "Rate your productivity this week",
-      type: "scale",
-    },
-    {
-      id: "bq3",
-      text: "How clear are your project goals?",
-      type: "scale",
-    },
-  ])
-  const [scorecardName, setScorecardName] = useState("Weekly Performance Review")
+  const searchParams = useSearchParams()
+  const templateId = searchParams.get("template")
+  const isEditing = !!templateId
+
+  const [loading, setLoading] = useState(isEditing)
+  const [saving, setSaving] = useState(false)
+
+  const [scorecardName, setScorecardName] = useState("")
   const [description, setDescription] = useState("")
+  const [status, setStatus] = useState<"active" | "draft">("draft")
+  const [questions, setQuestions] = useState<BuilderQuestion[]>([])
   const [newQuestionText, setNewQuestionText] = useState("")
   const [newQuestionType, setNewQuestionType] = useState<"scale" | "number" | "text">("scale")
+
+  // ---------- Load existing template ----------
+
+  const loadTemplate = useCallback(async () => {
+    if (!templateId) return
+    try {
+      setLoading(true)
+      const doc = await getDocument(COLLECTIONS.TEMPLATES, templateId)
+      if (doc) {
+        const d = doc as Record<string, unknown>
+        setScorecardName((d.name as string) ?? "")
+        setDescription((d.description as string) ?? "")
+        setStatus((d.status as "active" | "draft") ?? "draft")
+        const rawQ = (d.questions as BuilderQuestion[]) ?? []
+        setQuestions(
+          rawQ.map((q, i) => ({
+            id: q.id || `bq-${i}`,
+            text: q.text ?? "",
+            type: q.type ?? "scale",
+          })),
+        )
+      }
+    } catch (err) {
+      console.error("Failed to load template:", err)
+    } finally {
+      setLoading(false)
+    }
+  }, [templateId])
+
+  useEffect(() => {
+    loadTemplate()
+  }, [loadTemplate])
+
+  // ---------- Question helpers ----------
 
   function addQuestion() {
     if (!newQuestionText.trim()) return
@@ -98,58 +146,96 @@ export default function NewScorecardBuilderPage() {
     setQuestions((prev) => prev.filter((q) => q.id !== id))
   }
 
+  function updateQuestionText(id: string, text: string) {
+    setQuestions((prev) => prev.map((q) => (q.id === id ? { ...q, text } : q)))
+  }
+
   function updateQuestionType(id: string, type: "scale" | "number" | "text") {
-    setQuestions((prev) =>
-      prev.map((q) => (q.id === id ? { ...q, type } : q)),
+    setQuestions((prev) => prev.map((q) => (q.id === id ? { ...q, type } : q)))
+  }
+
+  // ---------- Save helpers ----------
+
+  async function saveTemplate(saveStatus: "active" | "draft") {
+    if (!scorecardName.trim()) return
+    setSaving(true)
+    try {
+      const payload = {
+        name: scorecardName.trim(),
+        description: description.trim(),
+        questions,
+        questionCount: questions.length,
+        status: saveStatus,
+      }
+      if (isEditing && templateId) {
+        await updateDocument(COLLECTIONS.TEMPLATES, templateId, payload)
+      } else {
+        await createDocument(COLLECTIONS.TEMPLATES, payload)
+      }
+      router.push("/admin/builder")
+    } catch (err) {
+      console.error("Failed to save template:", err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // ---------- Loading ----------
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
     )
   }
 
-  const typeLabel: Record<string, string> = {
-    scale: "Scale: 1-10",
-    number: "Number",
-    text: "Text",
-  }
+  // ---------- Render ----------
 
   return (
     <div>
-      <div className="mb-8 flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => router.push("/admin/builder")}
-        >
-          <ArrowLeft className="mr-1 h-4 w-4" />
-          Back to Templates
+      <div className="mb-8 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push("/admin/builder")}
+          >
+            <ArrowLeft className="mr-1 h-4 w-4" />
+            Back
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">
+              {isEditing ? "Edit Scorecard" : "New Scorecard"}
+            </h1>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {isEditing
+                ? "Edit your scorecard template and questions"
+                : "Build a new scorecard template"}
+            </p>
+          </div>
+        </div>
+        <Button onClick={() => saveTemplate("active")} disabled={saving || !scorecardName.trim()}>
+          <Save className="mr-2 h-4 w-4" />
+          {saving ? "Saving..." : isEditing ? "Save Changes" : "Create Scorecard"}
         </Button>
-      </div>
-
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground">
-          Scorecard Builder
-        </h1>
-        <p className="mt-1 text-muted-foreground">
-          Build and configure your scorecard template
-        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         {/* Left column: Builder */}
         <div className="flex flex-col gap-6 xl:col-span-2">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader>
               <CardTitle className="text-base font-semibold">
                 Template Details
               </CardTitle>
-              <Button size="sm">
-                <Plus className="mr-1 h-3 w-3" />
-                New Scorecard
-              </Button>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="sc-name">Scorecard Name</Label>
                 <Input
                   id="sc-name"
+                  placeholder="e.g. Weekly Performance Review"
                   value={scorecardName}
                   onChange={(e) => setScorecardName(e.target.value)}
                 />
@@ -168,18 +254,23 @@ export default function NewScorecardBuilderPage() {
               {/* Questions */}
               <div>
                 <div className="mb-3">
-                  <Label>Questions</Label>
+                  <Label>Questions ({questions.length})</Label>
                 </div>
                 <div className="flex flex-col gap-2">
-                  {questions.map((q) => (
+                  {questions.map((q, idx) => (
                     <div
                       key={q.id}
                       className="flex items-center gap-3 rounded-lg border border-border bg-card p-3"
                     >
                       <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground" />
-                      <p className="flex-1 text-sm text-foreground">
-                        {q.text}
-                      </p>
+                      <span className="w-5 shrink-0 text-xs font-medium text-muted-foreground">
+                        {idx + 1}.
+                      </span>
+                      <Input
+                        value={q.text}
+                        onChange={(e) => updateQuestionText(q.id, e.target.value)}
+                        className="flex-1 border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+                      />
                       <Select
                         value={q.type}
                         onValueChange={(val) =>
@@ -205,6 +296,14 @@ export default function NewScorecardBuilderPage() {
                       </button>
                     </div>
                   ))}
+
+                  {questions.length === 0 && (
+                    <div className="rounded-lg border border-dashed border-border py-8 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        No questions yet. Add your first question below.
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <div className="mt-3 flex gap-2">
                   <Input
@@ -212,7 +311,10 @@ export default function NewScorecardBuilderPage() {
                     value={newQuestionText}
                     onChange={(e) => setNewQuestionText(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") addQuestion()
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        addQuestion()
+                      }
                     }}
                     className="flex-1"
                   />
@@ -240,38 +342,30 @@ export default function NewScorecardBuilderPage() {
             </CardContent>
           </Card>
 
-          {/* Build Session */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">
-                Build Session
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-3">
-                <Button variant="outline" size="sm">
-                  Edit Session Builder Prompt
-                </Button>
-                <Button variant="outline" size="sm">
-                  Copy UX Pilot Prompt
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Save actions */}
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => router.push("/admin/builder")}>
               Cancel
             </Button>
-            <Button onClick={() => router.push("/admin/builder")}>
+            <Button
+              variant="secondary"
+              onClick={() => saveTemplate("draft")}
+              disabled={saving || !scorecardName.trim()}
+            >
+              <FileDown className="mr-2 h-4 w-4" />
+              {saving ? "Saving..." : "Save as Draft"}
+            </Button>
+            <Button
+              onClick={() => saveTemplate("active")}
+              disabled={saving || !scorecardName.trim()}
+            >
               <Save className="mr-2 h-4 w-4" />
-              Save Template
+              {saving ? "Saving..." : isEditing ? "Save Changes" : "Publish Scorecard"}
             </Button>
           </div>
         </div>
 
-        {/* Right column: Analytics */}
+        {/* Right column: Analytics (zeroed until real data) */}
         <div className="flex flex-col gap-6">
           <Card>
             <CardHeader>
@@ -282,38 +376,41 @@ export default function NewScorecardBuilderPage() {
             <CardContent>
               <div className="grid grid-cols-3 gap-3 mb-4">
                 <div className="text-center">
-                  <p className="text-lg font-bold text-foreground">1,247</p>
+                  <p className="text-lg font-bold text-foreground">0</p>
                   <p className="text-xs text-muted-foreground">Total Responses</p>
-                  <p className="text-xs text-success flex items-center justify-center gap-1">
-                    <TrendingUp className="h-3 w-3" />12%
+                  <p className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
+                    <TrendingUp className="h-3 w-3" />--
                   </p>
                 </div>
                 <div className="text-center">
-                  <p className="text-lg font-bold text-foreground">7.8</p>
+                  <p className="text-lg font-bold text-foreground">--</p>
                   <p className="text-xs text-muted-foreground">Avg Score</p>
-                  <p className="text-xs text-success flex items-center justify-center gap-1">
-                    <TrendingUp className="h-3 w-3" />0.3
+                  <p className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
+                    <TrendingUp className="h-3 w-3" />--
                   </p>
                 </div>
                 <div className="text-center">
-                  <p className="text-lg font-bold text-foreground">89%</p>
+                  <p className="text-lg font-bold text-foreground">--</p>
                   <p className="text-xs text-muted-foreground">Response Rate</p>
-                  <p className="text-xs text-destructive">-3%</p>
+                  <p className="text-xs text-muted-foreground">--</p>
                 </div>
               </div>
+              <p className="text-center text-xs text-muted-foreground">
+                Analytics will populate after the first scorecard response
+              </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-semibold">
-                Team Collaboration Trend
+                Score Trend
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-40">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={mockWeeklyTrends.slice(-7)}>
+                  <LineChart data={trendPlaceholder}>
                     <CartesianGrid
                       strokeDasharray="3 3"
                       className="stroke-border"
@@ -324,7 +421,7 @@ export default function NewScorecardBuilderPage() {
                       className="fill-muted-foreground"
                     />
                     <YAxis
-                      domain={[6, 10]}
+                      domain={[0, 10]}
                       tick={{ fontSize: 10 }}
                       className="fill-muted-foreground"
                     />
@@ -352,13 +449,13 @@ export default function NewScorecardBuilderPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-semibold">
-                Productivity Distribution
+                Score Distribution
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-40">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={distributionData} barSize={28}>
+                  <BarChart data={distributionPlaceholder} barSize={28}>
                     <CartesianGrid
                       strokeDasharray="3 3"
                       className="stroke-border"
