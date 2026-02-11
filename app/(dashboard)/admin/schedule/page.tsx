@@ -176,10 +176,6 @@ export default function ScheduleReleasePage() {
         createdBy: user?.id ?? "",
       })
 
-      setSentType(scheduleType)
-      setSent(true)
-      await fetchData()
-
       // Reset form
       setSelectedTemplate("")
       setSelectedCompany("")
@@ -188,6 +184,22 @@ export default function ScheduleReleasePage() {
       setScheduledDateTime("")
       setRecurringFrequency("weekly")
       setActiveDays("7")
+
+      setSentType(scheduleType)
+      setSent(true)
+
+      // Silently refresh sidebar data without triggering the loading spinner
+      try {
+        const allReleases = await getAllReleases()
+        const scheduled = filterScheduledReleases(allReleases as unknown as Record<string, unknown>[])
+        const active = filterActiveRelease(allReleases as unknown as Record<string, unknown>[])
+        const completed = filterCompletedReleases(allReleases as unknown as Record<string, unknown>[])
+        const paused = (allReleases as unknown as Record<string, unknown>[]).filter((r) => r.status === "paused")
+        setScheduledReleases(scheduled as unknown as ScorecardRelease[])
+        setActiveRelease(active as unknown as ScorecardRelease | null)
+        setCompletedReleases(completed as unknown as ScorecardRelease[])
+        setPausedReleases(paused as unknown as ScorecardRelease[])
+      } catch (_) { /* ignore refresh errors */ }
     } catch (err) {
       console.error("Failed to schedule release:", err)
     } finally {
