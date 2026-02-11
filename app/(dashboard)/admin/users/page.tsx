@@ -68,7 +68,7 @@ export default function ManageUsersPage() {
           const lastName = (data.lastName as string) ?? ""
           return {
             id: d.id,
-            name: `${firstName} ${lastName}`.trim() || (data.email as string) ?? "Unknown",
+            name: `${firstName} ${lastName}`.trim() || ((data.email as string) ?? "Unknown"),
             email: (data.email as string) ?? "",
             department: (data.department as string) ?? "",
             role: (data.role as string) ?? "user",
