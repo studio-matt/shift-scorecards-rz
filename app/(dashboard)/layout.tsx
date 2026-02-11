@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { AppSidebar } from "@/components/app-sidebar"
 import { AppFooter } from "@/components/app-footer"
+import { Loader2 } from "lucide-react"
 
 function DashboardShell({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, ready } = useAuth()
@@ -16,7 +17,15 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     }
   }, [ready, isAuthenticated, router])
 
-  if (!ready || !isAuthenticated) {
+  if (!ready) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
     return null
   }
 

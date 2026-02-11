@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -45,9 +45,18 @@ import {
   Pencil,
   LayoutGrid,
   List,
+  Loader2,
 } from "lucide-react"
-import { mockOrganizations, KNOWN_DEPARTMENTS } from "@/lib/mock-data"
+import { KNOWN_DEPARTMENTS } from "@/lib/mock-data"
 import type { Organization } from "@/lib/types"
+import {
+  getOrganizations,
+  createDocument,
+  updateDocument,
+  deleteDocument,
+  setDocument,
+  COLLECTIONS,
+} from "@/lib/firestore"
 
 const INDUSTRIES = [
   "Consulting",
@@ -61,7 +70,8 @@ const INDUSTRIES = [
 ]
 
 export default function OrganizationPage() {
-  const [organizations, setOrganizations] = useState<Organization[]>(mockOrganizations)
+  const [organizations, setOrganizations] = useState<Organization[]>([])
+  const [loading, setLoading] = useState(true)
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -69,9 +79,43 @@ export default function OrganizationPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [searchQuery, setSearchQuery] = useState("")
 
-  const filteredOrgs = organizations.filter((org) =>
-    org.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (org.industry ?? "").toLowerCase().includes(searchQuery.toLowerCase())
+  const fetchOrgs = useCallback(async () => {
+    try {
+      setLoading(true)
+      const orgs = await getOrganizations()
+      setOrganizations(
+        orgs.map((o) => ({
+          id: o.id,
+          name: o.name ?? "",
+          departments: o.departments ?? [],
+          createdAt: o.createdAt
+            ? typeof o.createdAt === "string"
+              ? o.createdAt
+              : new Date((o.createdAt as { seconds: number }).seconds * 1000)
+                  .toISOString()
+                  .split("T")[0]
+            : "",
+          website: o.website,
+          contactEmail: o.contactEmail,
+          industry: o.industry,
+          memberCount: o.memberCount ?? 0,
+        })) as Organization[],
+      )
+    } catch (err) {
+      console.error("Failed to fetch organizations:", err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchOrgs()
+  }, [fetchOrgs])
+
+  const filteredOrgs = organizations.filter(
+    (org) =>
+      org.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (org.industry ?? "").toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
   // Create form state
@@ -82,32 +126,48 @@ export default function OrganizationPage() {
 
   const selectedOrg = organizations.find((o) => o.id === selectedOrgId)
 
-  function handleCreate() {
+  async function handleCreate() {
     if (!newName.trim()) return
-    const newOrg: Organization = {
-      id: `org-${Date.now()}`,
-      name: newName.trim(),
-      departments: [],
-      createdAt: new Date().toISOString().split("T")[0],
-      website: newWebsite.trim() || undefined,
-      contactEmail: newEmail.trim() || undefined,
-      industry: newIndustry || undefined,
-      memberCount: 0,
+    try {
+      const docId = await createDocument(COLLECTIONS.ORGANIZATIONS, {
+        name: newName.trim(),
+        departments: [],
+        website: newWebsite.trim() || undefined,
+        contactEmail: newEmail.trim() || undefined,
+        industry: newIndustry || undefined,
+        memberCount: 0,
+      })
+      setNewName("")
+      setNewWebsite("")
+      setNewEmail("")
+      setNewIndustry("")
+      setCreateDialogOpen(false)
+      await fetchOrgs()
+      setSelectedOrgId(docId)
+    } catch (err) {
+      console.error("Failed to create organization:", err)
     }
-    setOrganizations((prev) => [...prev, newOrg])
-    setNewName("")
-    setNewWebsite("")
-    setNewEmail("")
-    setNewIndustry("")
-    setCreateDialogOpen(false)
-    setSelectedOrgId(newOrg.id)
   }
 
-  function handleDelete(id: string) {
-    setOrganizations((prev) => prev.filter((o) => o.id !== id))
-    if (selectedOrgId === id) setSelectedOrgId(null)
-    setDeleteDialogOpen(false)
-    setDeleteTarget(null)
+  async function handleDelete(id: string) {
+    try {
+      await deleteDocument(COLLECTIONS.ORGANIZATIONS, id)
+      if (selectedOrgId === id) setSelectedOrgId(null)
+      setDeleteDialogOpen(false)
+      setDeleteTarget(null)
+      await fetchOrgs()
+    } catch (err) {
+      console.error("Failed to delete organization:", err)
+    }
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
   }
 
   // If no org selected, show the list view
@@ -116,7 +176,9 @@ export default function OrganizationPage() {
       <div>
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Organizations</h1>
+            <h1 className="text-2xl font-bold text-foreground">
+              Organizations
+            </h1>
             <p className="mt-1 text-muted-foreground">
               Manage all organizations in the system
             </p>
@@ -161,203 +223,217 @@ export default function OrganizationPage() {
             </button>
           </div>
           <span className="text-sm text-muted-foreground">
-            {filteredOrgs.length} organization{filteredOrgs.length !== 1 ? "s" : ""}
+            {filteredOrgs.length} organization
+            {filteredOrgs.length !== 1 ? "s" : ""}
           </span>
         </div>
 
         {viewMode === "grid" ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredOrgs.map((org) => (
-            <Card
-              key={org.id}
-              className="cursor-pointer transition-shadow hover:shadow-md"
-              onClick={() => setSelectedOrgId(org.id)}
-            >
-              <CardHeader className="flex flex-row items-start justify-between pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                    <Building2 className="h-5 w-5 text-primary" />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {filteredOrgs.map((org) => (
+              <Card
+                key={org.id}
+                className="cursor-pointer transition-shadow hover:shadow-md"
+                onClick={() => setSelectedOrgId(org.id)}
+              >
+                <CardHeader className="flex flex-row items-start justify-between pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                      <Building2 className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">{org.name}</CardTitle>
+                      {org.industry && (
+                        <CardDescription className="text-xs">
+                          {org.industry}
+                        </CardDescription>
+                      )}
+                    </div>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                        <span className="sr-only">Actions</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedOrgId(org.id)
+                        }}
+                      >
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setDeleteTarget(org.id)
+                          setDeleteDialogOpen(true)
+                        }}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Members</span>
+                      <span className="font-medium text-foreground">
+                        {org.memberCount ?? 0}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Departments</span>
+                      <span className="font-medium text-foreground">
+                        {org.departments.length}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Created</span>
+                      <span className="font-medium text-foreground">
+                        {org.createdAt}
+                      </span>
+                    </div>
+                  </div>
+                  {org.departments.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1">
+                      {org.departments.slice(0, 4).map((dept) => (
+                        <Badge key={dept} variant="secondary" className="text-xs">
+                          {dept}
+                        </Badge>
+                      ))}
+                      {org.departments.length > 4 && (
+                        <Badge variant="outline" className="text-xs">
+                          +{org.departments.length - 4} more
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <div className="hidden items-center gap-4 rounded-md bg-muted px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground md:flex">
+              <span className="flex-1">Organization</span>
+              <span className="w-24 text-center">Industry</span>
+              <span className="w-20 text-center">Members</span>
+              <span className="w-20 text-center">Depts</span>
+              <span className="w-24 text-center">Created</span>
+              <span className="w-16" />
+            </div>
+            {filteredOrgs.map((org) => (
+              <div
+                key={org.id}
+                onClick={() => setSelectedOrgId(org.id)}
+                className="flex cursor-pointer items-center gap-4 rounded-lg border border-border px-4 py-3 transition-colors hover:bg-muted"
+              >
+                <div className="flex flex-1 items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                    <Building2 className="h-4 w-4 text-primary" />
                   </div>
                   <div>
-                    <CardTitle className="text-base">{org.name}</CardTitle>
-                    {org.industry && (
-                      <CardDescription className="text-xs">
-                        {org.industry}
-                      </CardDescription>
-                    )}
+                    <p className="text-sm font-medium text-foreground">
+                      {org.name}
+                    </p>
+                    <div className="mt-0.5 flex flex-wrap gap-1">
+                      {org.departments.slice(0, 3).map((dept) => (
+                        <Badge
+                          key={dept}
+                          variant="secondary"
+                          className="px-1.5 py-0 text-[10px]"
+                        >
+                          {dept}
+                        </Badge>
+                      ))}
+                      {org.departments.length > 3 && (
+                        <Badge
+                          variant="outline"
+                          className="px-1.5 py-0 text-[10px]"
+                        >
+                          +{org.departments.length - 3}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                      <span className="sr-only">Actions</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setSelectedOrgId(org.id)
-                      }}
-                    >
-                      <Pencil className="mr-2 h-4 w-4" />
-                      Edit
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="text-destructive focus:text-destructive"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setDeleteTarget(org.id)
-                        setDeleteDialogOpen(true)
-                      }}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Members</span>
-                    <span className="font-medium text-foreground">
-                      {org.memberCount ?? 0}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Departments</span>
-                    <span className="font-medium text-foreground">
-                      {org.departments.length}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Created</span>
-                    <span className="font-medium text-foreground">
-                      {org.createdAt}
-                    </span>
-                  </div>
+                <span className="hidden w-24 text-center text-sm text-muted-foreground md:block">
+                  {org.industry ?? "-"}
+                </span>
+                <span className="hidden w-20 text-center text-sm font-medium text-foreground md:block">
+                  {org.memberCount ?? 0}
+                </span>
+                <span className="hidden w-20 text-center text-sm font-medium text-foreground md:block">
+                  {org.departments.length}
+                </span>
+                <span className="hidden w-24 text-center text-sm text-muted-foreground md:block">
+                  {org.createdAt}
+                </span>
+                <div className="flex w-16 justify-end">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                        <span className="sr-only">Actions</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedOrgId(org.id)
+                        }}
+                      >
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setDeleteTarget(org.id)
+                          setDeleteDialogOpen(true)
+                        }}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
-                {org.departments.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-1">
-                    {org.departments.slice(0, 4).map((dept) => (
-                      <Badge key={dept} variant="secondary" className="text-xs">
-                        {dept}
-                      </Badge>
-                    ))}
-                    {org.departments.length > 4 && (
-                      <Badge variant="outline" className="text-xs">
-                        +{org.departments.length - 4} more
-                      </Badge>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-        ) : (
-        <div className="flex flex-col gap-2">
-          <div className="hidden items-center gap-4 rounded-md bg-muted px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground md:flex">
-            <span className="flex-1">Organization</span>
-            <span className="w-24 text-center">Industry</span>
-            <span className="w-20 text-center">Members</span>
-            <span className="w-20 text-center">Depts</span>
-            <span className="w-24 text-center">Created</span>
-            <span className="w-16" />
+              </div>
+            ))}
           </div>
-          {filteredOrgs.map((org) => (
-            <div
-              key={org.id}
-              onClick={() => setSelectedOrgId(org.id)}
-              className="flex cursor-pointer items-center gap-4 rounded-lg border border-border px-4 py-3 transition-colors hover:bg-muted"
-            >
-              <div className="flex flex-1 items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-                  <Building2 className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">{org.name}</p>
-                  <div className="mt-0.5 flex flex-wrap gap-1">
-                    {org.departments.slice(0, 3).map((dept) => (
-                      <Badge key={dept} variant="secondary" className="text-[10px] px-1.5 py-0">
-                        {dept}
-                      </Badge>
-                    ))}
-                    {org.departments.length > 3 && (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                        +{org.departments.length - 3}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <span className="hidden w-24 text-center text-sm text-muted-foreground md:block">
-                {org.industry ?? "-"}
-              </span>
-              <span className="hidden w-20 text-center text-sm font-medium text-foreground md:block">
-                {org.memberCount ?? 0}
-              </span>
-              <span className="hidden w-20 text-center text-sm font-medium text-foreground md:block">
-                {org.departments.length}
-              </span>
-              <span className="hidden w-24 text-center text-sm text-muted-foreground md:block">
-                {org.createdAt}
-              </span>
-              <div className="w-16 flex justify-end">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                      <span className="sr-only">Actions</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setSelectedOrgId(org.id)
-                      }}
-                    >
-                      <Pencil className="mr-2 h-4 w-4" />
-                      Edit
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="text-destructive focus:text-destructive"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setDeleteTarget(org.id)
-                        setDeleteDialogOpen(true)
-                      }}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-          ))}
-        </div>
         )}
 
         {filteredOrgs.length === 0 && (
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-12 text-center">
             <Building2 className="mb-3 h-8 w-8 text-muted-foreground" />
-            <p className="text-sm font-medium text-foreground">No organizations found</p>
+            <p className="text-sm font-medium text-foreground">
+              No organizations found
+            </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {searchQuery ? "Try a different search term" : "Create your first organization to get started"}
+              {searchQuery
+                ? "Try a different search term"
+                : "Create your first organization to get started"}
             </p>
           </div>
         )}
@@ -383,11 +459,15 @@ export default function OrganizationPage() {
             <DialogHeader>
               <DialogTitle>Delete Organization</DialogTitle>
               <DialogDescription>
-                Are you sure you want to delete this organization? This action cannot be undone.
+                Are you sure you want to delete this organization? This action
+                cannot be undone.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setDeleteDialogOpen(false)}
+              >
                 Cancel
               </Button>
               <Button
@@ -408,11 +488,20 @@ export default function OrganizationPage() {
     <OrgDetailView
       org={selectedOrg}
       onBack={() => setSelectedOrgId(null)}
-      onUpdate={(updated) =>
-        setOrganizations((prev) =>
-          prev.map((o) => (o.id === updated.id ? updated : o)),
-        )
-      }
+      onUpdate={async (updated) => {
+        try {
+          await updateDocument(COLLECTIONS.ORGANIZATIONS, updated.id, {
+            name: updated.name,
+            departments: updated.departments,
+            website: updated.website ?? null,
+            contactEmail: updated.contactEmail ?? null,
+            industry: updated.industry ?? null,
+          })
+          await fetchOrgs()
+        } catch (err) {
+          console.error("Failed to update organization:", err)
+        }
+      }}
     />
   )
 }
@@ -531,6 +620,7 @@ function OrgDetailView({
   const [departments, setDepartments] = useState(org.departments)
   const [newDepartment, setNewDepartment] = useState("")
   const [selectedKnownDept, setSelectedKnownDept] = useState("")
+  const [saving, setSaving] = useState(false)
 
   const availableKnownDepts = KNOWN_DEPARTMENTS.filter(
     (d) => !departments.includes(d),
@@ -554,7 +644,8 @@ function OrgDetailView({
     setDepartments((prev) => prev.filter((d) => d !== dept))
   }
 
-  function handleSave() {
+  async function handleSave() {
+    setSaving(true)
     onUpdate({
       ...org,
       name: orgName,
@@ -563,6 +654,7 @@ function OrgDetailView({
       industry: industry || undefined,
       departments,
     })
+    setSaving(false)
   }
 
   return (
@@ -639,7 +731,10 @@ function OrgDetailView({
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="org-industry">Industry</Label>
-                <Select value={industry.toLowerCase()} onValueChange={setIndustry}>
+                <Select
+                  value={industry.toLowerCase()}
+                  onValueChange={setIndustry}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select industry" />
                   </SelectTrigger>
@@ -653,7 +748,10 @@ function OrgDetailView({
                 </Select>
               </div>
               <div className="flex justify-end">
-                <Button onClick={handleSave}>Save Changes</Button>
+                <Button onClick={handleSave} disabled={saving}>
+                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save Changes
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -735,7 +833,8 @@ function OrgDetailView({
                 ))}
                 {departments.length === 0 && (
                   <p className="py-2 text-sm text-muted-foreground">
-                    No departments added yet. Select from the list above or add a custom one.
+                    No departments added yet. Select from the list above or add
+                    a custom one.
                   </p>
                 )}
               </div>

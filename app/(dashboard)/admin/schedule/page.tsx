@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -25,8 +25,16 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
+  Loader2,
 } from "lucide-react"
-import { mockAllUsers, mockSavedTemplates, mockOrganizations } from "@/lib/mock-data"
+import { mockAllUsers } from "@/lib/mock-data"
+import {
+  getOrganizations,
+  getDocuments,
+  COLLECTIONS,
+} from "@/lib/firestore"
+import { orderBy } from "firebase/firestore"
+import type { Organization } from "@/lib/types"
 
 const pastReleases = [
   {
@@ -55,13 +63,57 @@ const pastReleases = [
   },
 ]
 
+interface TemplateOption {
+  id: string
+  name: string
+  questionCount: number
+}
+
 export default function ScheduleReleasePage() {
+  const [orgs, setOrgs] = useState<Organization[]>([])
+  const [templates, setTemplates] = useState<TemplateOption[]>([])
+  const [dataLoading, setDataLoading] = useState(true)
+
+  const fetchData = useCallback(async () => {
+    try {
+      setDataLoading(true)
+      const [orgDocs, tmplDocs] = await Promise.all([
+        getOrganizations(),
+        getDocuments(COLLECTIONS.TEMPLATES, orderBy("name")),
+      ])
+      setOrgs(
+        orgDocs.map((o) => ({
+          id: o.id,
+          name: (o as Record<string, unknown>).name as string ?? "",
+          departments: ((o as Record<string, unknown>).departments as string[]) ?? [],
+          createdAt: "",
+          memberCount: ((o as Record<string, unknown>).memberCount as number) ?? 0,
+        })) as Organization[],
+      )
+      setTemplates(
+        tmplDocs.map((d) => ({
+          id: d.id,
+          name: (d as Record<string, unknown>).name as string ?? "",
+          questionCount: ((d as Record<string, unknown>).questionCount as number) ?? ((d as Record<string, unknown>).questions as unknown[])?.length ?? 0,
+        })),
+      )
+    } catch (err) {
+      console.error("Failed to load schedule data:", err)
+    } finally {
+      setDataLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
   const [selectedTemplate, setSelectedTemplate] = useState("")
   const [selectedCompany, setSelectedCompany] = useState("")
   const [selectedDepartment, setSelectedDepartment] = useState("")
   const [scheduleType, setScheduleType] = useState("now")
 
-  const activeOrg = mockOrganizations.find((o) => o.id === selectedCompany)
+  const activeOrg = orgs.find((o) => o.id === selectedCompany)
   const [allUsersInGroup, setAllUsersInGroup] = useState(true)
   const [selectedUsers, setSelectedUsers] = useState<string[]>(
     mockAllUsers.filter((u) => u.selected).map((u) => u.id),
@@ -90,6 +142,14 @@ export default function ScheduleReleasePage() {
       u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
       u.department.toLowerCase().includes(userSearch.toLowerCase()),
   )
+
+  if (dataLoading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
 
   if (sent) {
     return (
@@ -135,9 +195,9 @@ export default function ScheduleReleasePage() {
                   <SelectValue placeholder="Choose a scorecard template..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockSavedTemplates.map((t) => (
+                  {templates.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
-                      {t.name} ({t.questions} questions)
+                      {t.name} ({t.questionCount} questions)
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -173,7 +233,7 @@ export default function ScheduleReleasePage() {
                       <SelectValue placeholder="Select company..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {mockOrganizations.map((org) => (
+                      {orgs.map((org) => (
                         <SelectItem key={org.id} value={org.id}>
                           {org.name}
                         </SelectItem>

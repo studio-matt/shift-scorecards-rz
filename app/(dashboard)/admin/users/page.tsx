@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -28,8 +28,23 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Mail, CheckCircle2, Clock, Search, Upload, FileDown } from "lucide-react"
-import { mockInvitedUsers, KNOWN_DEPARTMENTS } from "@/lib/mock-data"
+import { Plus, Mail, CheckCircle2, Clock, Search, Upload, FileDown, Loader2 } from "lucide-react"
+import { KNOWN_DEPARTMENTS } from "@/lib/mock-data"
+import {
+  getDocuments,
+  createDocument,
+  COLLECTIONS,
+} from "@/lib/firestore"
+import { orderBy } from "firebase/firestore"
+
+interface InvitedUser {
+  id: string
+  name: string
+  email: string
+  department: string
+  role: string
+  status: "accepted" | "pending"
+}
 
 export default function ManageUsersPage() {
   const [inviteEmail, setInviteEmail] = useState("")
@@ -39,6 +54,38 @@ export default function ManageUsersPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [csvFile, setCsvFile] = useState<File | null>(null)
   const [csvPreviewCount, setCsvPreviewCount] = useState(0)
+  const [users, setUsers] = useState<InvitedUser[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchUsers = useCallback(async () => {
+    try {
+      setLoading(true)
+      const docs = await getDocuments(COLLECTIONS.USERS, orderBy("lastName"))
+      setUsers(
+        docs.map((d) => {
+          const data = d as Record<string, unknown>
+          const firstName = (data.firstName as string) ?? ""
+          const lastName = (data.lastName as string) ?? ""
+          return {
+            id: d.id,
+            name: `${firstName} ${lastName}`.trim() || (data.email as string) ?? "Unknown",
+            email: (data.email as string) ?? "",
+            department: (data.department as string) ?? "",
+            role: (data.role as string) ?? "user",
+            status: data.authId ? "accepted" as const : "pending" as const,
+          }
+        }),
+      )
+    } catch (err) {
+      console.error("Failed to fetch users:", err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchUsers()
+  }, [fetchUsers])
 
   function handleDownloadTemplate() {
     const csvContent =
@@ -62,27 +109,64 @@ export default function ManageUsersPage() {
     reader.onload = (event) => {
       const text = event.target?.result as string
       const lines = text.split("\n").filter((line) => line.trim())
-      // Subtract 1 for header row
       setCsvPreviewCount(Math.max(0, lines.length - 1))
     }
     reader.readAsText(file)
   }
 
-  const filteredUsers = mockInvitedUsers.filter(
+  const filteredUsers = users.filter(
     (u) =>
       u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.email.toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
-  function handleInvite() {
-    // Mock invite action
+  async function handleInvite() {
+    try {
+      if (csvFile) {
+        // Parse CSV and create invite docs for each row
+        const text = await csvFile.text()
+        const lines = text.split("\n").filter((l) => l.trim())
+        for (let i = 1; i < lines.length; i++) {
+          const [email, dept, role] = lines[i].split(",").map((s) => s.trim())
+          if (email) {
+            await createDocument(COLLECTIONS.INVITES, {
+              email,
+              department: dept ?? inviteDepartment,
+              role: role ?? inviteRole,
+              status: "pending",
+            })
+          }
+        }
+      } else if (inviteEmail) {
+        await createDocument(COLLECTIONS.INVITES, {
+          email: inviteEmail,
+          department: inviteDepartment,
+          role: inviteRole,
+          status: "pending",
+        })
+      }
+    } catch (err) {
+      console.error("Failed to send invite:", err)
+    }
     setDialogOpen(false)
     setInviteEmail("")
     setInviteDepartment("")
     setInviteRole("user")
     setCsvFile(null)
     setCsvPreviewCount(0)
+    await fetchUsers()
   }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  const activeCount = users.filter((u) => u.status === "accepted").length
+  const pendingCount = users.filter((u) => u.status === "pending").length
 
   return (
     <div>
@@ -138,7 +222,8 @@ export default function ManageUsersPage() {
                     <span className="font-medium text-foreground">
                       {csvFile.name}{" "}
                       <span className="text-muted-foreground">
-                        ({csvPreviewCount} user{csvPreviewCount !== 1 ? "s" : ""})
+                        ({csvPreviewCount} user
+                        {csvPreviewCount !== 1 ? "s" : ""})
                       </span>
                     </span>
                   ) : (
@@ -217,9 +302,7 @@ export default function ManageUsersPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Active Members</p>
-              <p className="text-2xl font-bold text-foreground">
-                {mockInvitedUsers.filter((u) => u.status === "accepted").length}
-              </p>
+              <p className="text-2xl font-bold text-foreground">{activeCount}</p>
             </div>
           </CardContent>
         </Card>
@@ -230,9 +313,7 @@ export default function ManageUsersPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Pending Invites</p>
-              <p className="text-2xl font-bold text-foreground">
-                {mockInvitedUsers.filter((u) => u.status === "pending").length}
-              </p>
+              <p className="text-2xl font-bold text-foreground">{pendingCount}</p>
             </div>
           </CardContent>
         </Card>
@@ -242,10 +323,8 @@ export default function ManageUsersPage() {
               <Mail className="h-5 w-5 text-muted-foreground" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Total Invited</p>
-              <p className="text-2xl font-bold text-foreground">
-                {mockInvitedUsers.length}
-              </p>
+              <p className="text-sm text-muted-foreground">Total Users</p>
+              <p className="text-2xl font-bold text-foreground">{users.length}</p>
             </div>
           </CardContent>
         </Card>
@@ -274,7 +353,7 @@ export default function ManageUsersPage() {
           <div className="flex flex-col gap-2">
             {filteredUsers.map((user) => (
               <div
-                key={user.email}
+                key={user.id}
                 className="flex items-center justify-between rounded-lg border border-border p-4"
               >
                 <div className="flex items-center gap-3">
@@ -282,7 +361,9 @@ export default function ManageUsersPage() {
                     {user.name
                       .split(" ")
                       .map((n) => n[0])
-                      .join("")}
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase()}
                   </div>
                   <div>
                     <p className="text-sm font-medium text-foreground">
@@ -294,6 +375,9 @@ export default function ManageUsersPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="capitalize text-xs">
+                    {user.role}
+                  </Badge>
                   <Badge
                     variant={
                       user.status === "accepted" ? "default" : "secondary"
@@ -310,6 +394,11 @@ export default function ManageUsersPage() {
                 </div>
               </div>
             ))}
+            {filteredUsers.length === 0 && (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                {searchQuery ? "No users match your search" : "No users yet. Invite your first team member."}
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>

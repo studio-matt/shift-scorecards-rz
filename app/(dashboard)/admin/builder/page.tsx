@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,8 +8,6 @@ import { Badge } from "@/components/ui/badge"
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card"
 import {
   DropdownMenu,
@@ -25,61 +23,26 @@ import {
   Edit,
   Copy,
   Trash2,
+  Loader2,
 } from "lucide-react"
+import {
+  getDocuments,
+  createDocument,
+  deleteDocument,
+  COLLECTIONS,
+} from "@/lib/firestore"
+import { orderBy } from "firebase/firestore"
 
 interface Template {
   id: string
   name: string
   description: string
-  questions: number
-  author: string
-  lastModified: string
+  questions: unknown[]
+  questionCount: number
   status: "active" | "draft" | "archived"
-  usedCount: number
+  updatedAt?: unknown
+  createdAt?: unknown
 }
-
-const templates: Template[] = [
-  {
-    id: "t1",
-    name: "AI Productivity Scorecard",
-    description: "Track AI productivity gains across email, meetings, documents, and research",
-    questions: 14,
-    author: "John Smith",
-    lastModified: "Jan 24, 2025",
-    status: "active",
-    usedCount: 12,
-  },
-  {
-    id: "t2",
-    name: "Weekly Check-in",
-    description: "Quick weekly pulse check for team satisfaction and workload",
-    questions: 5,
-    author: "John Smith",
-    lastModified: "Jan 20, 2025",
-    status: "active",
-    usedCount: 8,
-  },
-  {
-    id: "t3",
-    name: "Monthly Review",
-    description: "Comprehensive monthly performance and goal review",
-    questions: 8,
-    author: "John Smith",
-    lastModified: "Jan 15, 2025",
-    status: "draft",
-    usedCount: 3,
-  },
-  {
-    id: "t4",
-    name: "Onboarding Feedback",
-    description: "Collect feedback from new hires about the onboarding experience",
-    questions: 10,
-    author: "John Smith",
-    lastModified: "Dec 10, 2024",
-    status: "archived",
-    usedCount: 6,
-  },
-]
 
 const statusColors: Record<string, string> = {
   active: "bg-success/10 text-success",
@@ -87,9 +50,50 @@ const statusColors: Record<string, string> = {
   archived: "bg-muted text-muted-foreground",
 }
 
+function formatDate(val: unknown): string {
+  if (!val) return "-"
+  if (typeof val === "string") return val
+  if (typeof val === "object" && val !== null && "seconds" in val) {
+    return new Date((val as { seconds: number }).seconds * 1000).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })
+  }
+  return "-"
+}
+
 export default function TemplatesPage() {
   const [search, setSearch] = useState("")
-  const [items, setItems] = useState(templates)
+  const [items, setItems] = useState<Template[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchTemplates = useCallback(async () => {
+    try {
+      setLoading(true)
+      const docs = await getDocuments(COLLECTIONS.TEMPLATES, orderBy("name"))
+      setItems(
+        docs.map((d) => ({
+          id: d.id,
+          name: (d as Record<string, unknown>).name as string ?? "",
+          description: (d as Record<string, unknown>).description as string ?? "",
+          questions: ((d as Record<string, unknown>).questions as unknown[]) ?? [],
+          questionCount: ((d as Record<string, unknown>).questionCount as number) ?? ((d as Record<string, unknown>).questions as unknown[])?.length ?? 0,
+          status: ((d as Record<string, unknown>).status as "active" | "draft" | "archived") ?? "draft",
+          updatedAt: (d as Record<string, unknown>).updatedAt,
+          createdAt: (d as Record<string, unknown>).createdAt,
+        })),
+      )
+    } catch (err) {
+      console.error("Failed to fetch templates:", err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchTemplates()
+  }, [fetchTemplates])
 
   const filtered = items.filter(
     (t) =>
@@ -97,8 +101,36 @@ export default function TemplatesPage() {
       t.description.toLowerCase().includes(search.toLowerCase()),
   )
 
-  function handleDelete(id: string) {
-    setItems((prev) => prev.filter((t) => t.id !== id))
+  async function handleDelete(id: string) {
+    try {
+      await deleteDocument(COLLECTIONS.TEMPLATES, id)
+      await fetchTemplates()
+    } catch (err) {
+      console.error("Failed to delete template:", err)
+    }
+  }
+
+  async function handleDuplicate(tmpl: Template) {
+    try {
+      await createDocument(COLLECTIONS.TEMPLATES, {
+        name: `${tmpl.name} (Copy)`,
+        description: tmpl.description,
+        questions: tmpl.questions,
+        questionCount: tmpl.questionCount,
+        status: "draft",
+      })
+      await fetchTemplates()
+    } catch (err) {
+      console.error("Failed to duplicate template:", err)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
   }
 
   return (
@@ -158,9 +190,8 @@ export default function TemplatesPage() {
                   {tmpl.description}
                 </p>
                 <div className="mt-1.5 flex items-center gap-4 text-xs text-muted-foreground">
-                  <span>{tmpl.questions} questions</span>
-                  <span>Used {tmpl.usedCount} times</span>
-                  <span>Last modified {tmpl.lastModified}</span>
+                  <span>{tmpl.questionCount} questions</span>
+                  <span>Modified {formatDate(tmpl.updatedAt)}</span>
                 </div>
               </div>
               <DropdownMenu>
@@ -177,7 +208,7 @@ export default function TemplatesPage() {
                       Edit
                     </DropdownMenuItem>
                   </Link>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleDuplicate(tmpl)}>
                     <Copy className="mr-2 h-4 w-4" />
                     Duplicate
                   </DropdownMenuItem>
