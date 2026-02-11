@@ -64,6 +64,7 @@ function formatDate(val: unknown): string {
 }
 
 export default function TemplatesPage() {
+  console.log("[v0] TemplatesPage rendering - latest version")
   const [search, setSearch] = useState("")
   const [items, setItems] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)

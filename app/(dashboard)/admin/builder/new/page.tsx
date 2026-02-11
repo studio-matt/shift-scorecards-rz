@@ -80,6 +80,7 @@ const distributionPlaceholder = [
 // ---------- Page ----------
 
 export default function NewScorecardBuilderPage() {
+  console.log("[v0] NewScorecardBuilderPage rendering - latest version")
   const router = useRouter()
   const searchParams = useSearchParams()
   const templateId = searchParams.get("template")
