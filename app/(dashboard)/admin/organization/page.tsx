@@ -877,7 +877,6 @@ function OrgDetailView({
               </div>
             </CardContent>
           </Card>
-        </div>
 
           {/* Members */}
           <Card>

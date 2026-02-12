@@ -33,6 +33,7 @@ import {
   getDocuments,
   getOrganizations,
   createDocument,
+  updateDocument,
   COLLECTIONS,
 } from "@/lib/firestore"
 import type { Organization } from "@/lib/types"
@@ -137,6 +138,17 @@ export default function ManageUsersPage() {
       setCsvPreviewCount(Math.max(0, lines.length - 1))
     }
     reader.readAsText(file)
+  }
+
+  async function handleRoleChange(userId: string, newRole: string) {
+    try {
+      await updateDocument(COLLECTIONS.USERS, userId, { role: newRole })
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u)),
+      )
+    } catch (err) {
+      console.error("Failed to update role:", err)
+    }
   }
 
   const filteredUsers = users.filter(
@@ -463,22 +475,27 @@ export default function ManageUsersPage() {
                       {user.department}
                     </Badge>
                   )}
-                  <Badge variant="outline" className="capitalize text-xs">
-                    {user.role}
-                  </Badge>
-                  <Badge
-                    variant={
-                      user.status === "accepted" ? "default" : "secondary"
-                    }
-                    className="capitalize"
+                  <Select
+                    value={user.role}
+                    onValueChange={(val) => handleRoleChange(user.id, val)}
+                  >
+                    <SelectTrigger className="h-7 w-24 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="user">User</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span
+                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${
+                      user.status === "accepted"
+                        ? "bg-primary/10 text-primary"
+                        : "bg-muted text-muted-foreground"
+                    }`}
                   >
                     {user.status}
-                  </Badge>
-                  {user.status === "pending" && (
-                    <Button variant="ghost" size="sm">
-                      Resend
-                    </Button>
-                  )}
+                  </span>
                 </div>
               </div>
             ))}
