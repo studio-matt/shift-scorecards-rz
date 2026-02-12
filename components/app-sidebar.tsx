@@ -61,7 +61,7 @@ export function AppSidebar() {
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
       <div className="flex items-center gap-2 border-b border-sidebar-border px-5 py-4">
-        <ShiftLogo size="sm" />
+        <ShiftLogo size="sm" variant="white" />
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">

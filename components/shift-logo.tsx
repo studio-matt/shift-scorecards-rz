@@ -1,38 +1,40 @@
+import Image from "next/image"
+
 export function ShiftLogo({
   className = "",
   size = "default",
+  variant = "color",
 }: {
   className?: string
   size?: "sm" | "default" | "lg"
+  variant?: "color" | "white"
 }) {
-  const sizeClasses = {
-    sm: "text-lg",
-    default: "text-xl",
-    lg: "text-3xl",
+  const sizeMap = {
+    sm: { img: 28, text: "text-lg" },
+    default: { img: 32, text: "text-xl" },
+    lg: { img: 44, text: "text-3xl" },
   }
 
+  const { img, text } = sizeMap[size]
+  const src = variant === "white" ? "/shift-white.png" : "/shift-logo.webp"
+
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <div className="flex items-center justify-center rounded-lg bg-primary p-1.5">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          className={`${size === "sm" ? "h-5 w-5" : size === "lg" ? "h-8 w-8" : "h-6 w-6"} text-primary-foreground`}
-          aria-hidden="true"
-        >
-          <path
-            d="M13 3L4 14h7l-1 7 9-11h-7l1-7z"
-            fill="currentColor"
-            stroke="currentColor"
-            strokeWidth="1"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </div>
-      <div className={`font-sans font-bold tracking-tight ${sizeClasses[size]}`}>
-        <span className="text-foreground">Shift</span>{" "}
-        <span className="text-primary">Scorecard</span>
+    <div className={`flex items-center gap-2.5 ${className}`}>
+      <Image
+        src={src}
+        alt="Shift logo"
+        width={img}
+        height={img}
+        className="object-contain"
+        priority
+      />
+      <div className={`font-sans font-bold tracking-tight ${text}`}>
+        <span className={variant === "white" ? "text-white" : "text-foreground"}>
+          Shift
+        </span>{" "}
+        <span className={variant === "white" ? "text-white/80" : "text-primary"}>
+          Scorecard
+        </span>
       </div>
     </div>
   )
