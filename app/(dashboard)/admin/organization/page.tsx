@@ -47,16 +47,22 @@ import {
   List,
   Loader2,
 } from "lucide-react"
-import { KNOWN_DEPARTMENTS } from "@/lib/mock-data"
 import type { Organization } from "@/lib/types"
 import {
   getOrganizations,
+  getUsersByOrg,
   createDocument,
   updateDocument,
   deleteDocument,
   setDocument,
   COLLECTIONS,
 } from "@/lib/firestore"
+
+const KNOWN_DEPARTMENTS = [
+  "Engineering", "Design", "Product", "Marketing", "Sales",
+  "Operations", "HR", "Finance", "Customer Success", "IT",
+  "Legal", "Executive",
+]
 
 const INDUSTRIES = [
   "Consulting",
@@ -486,6 +492,7 @@ export default function OrganizationPage() {
   // Detail / landing page for selected org
   return (
     <OrgDetailView
+      key={selectedOrg.id}
       org={selectedOrg}
       onBack={() => setSelectedOrgId(null)}
       onUpdate={async (updated) => {
@@ -621,6 +628,36 @@ function OrgDetailView({
   const [newDepartment, setNewDepartment] = useState("")
   const [selectedKnownDept, setSelectedKnownDept] = useState("")
   const [saving, setSaving] = useState(false)
+  const [members, setMembers] = useState<{ id: string; name: string; email: string; department: string; role: string }[]>([])
+  const [membersLoading, setMembersLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchMembers() {
+      try {
+        setMembersLoading(true)
+        const docs = await getUsersByOrg(org.id)
+        setMembers(
+          docs.map((d) => {
+            const data = d as Record<string, unknown>
+            const first = (data.firstName as string) ?? ""
+            const last = (data.lastName as string) ?? ""
+            return {
+              id: d.id,
+              name: `${first} ${last}`.trim() || ((data.email as string) ?? "Unknown"),
+              email: (data.email as string) ?? "",
+              department: (data.department as string) ?? "",
+              role: (data.role as string) ?? "user",
+            }
+          }),
+        )
+      } catch (err) {
+        console.error("Failed to fetch members:", err)
+      } finally {
+        setMembersLoading(false)
+      }
+    }
+    fetchMembers()
+  }, [org.id])
 
   const availableKnownDepts = KNOWN_DEPARTMENTS.filter(
     (d) => !departments.includes(d),
@@ -838,6 +875,64 @@ function OrgDetailView({
                   </p>
                 )}
               </div>
+            </CardContent>
+          </Card>
+        </div>
+
+          {/* Members */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base font-semibold">
+                Members ({members.length})
+              </CardTitle>
+              <CardDescription>
+                Users assigned to this organization
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {membersLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : members.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  No members assigned to this organization yet.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {members.map((m) => (
+                    <div
+                      key={m.id}
+                      className="flex items-center justify-between rounded-lg border border-border p-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground">
+                          {m.name
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")
+                            .slice(0, 2)
+                            .toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{m.name}</p>
+                          <p className="text-xs text-muted-foreground">{m.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {m.department && (
+                          <Badge variant="secondary" className="text-xs">
+                            {m.department}
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className="capitalize text-xs">
+                          {m.role}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

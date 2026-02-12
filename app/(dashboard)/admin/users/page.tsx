@@ -43,6 +43,7 @@ interface InvitedUser {
   email: string
   department: string
   role: string
+  orgName: string
   status: "accepted" | "pending"
 }
 
@@ -71,29 +72,31 @@ export default function ManageUsersPage() {
         getDocuments(COLLECTIONS.USERS),
         getOrganizations(),
       ])
+      const orgList = orgDocs.map((o) => ({
+        id: o.id,
+        name: (o as Record<string, unknown>).name as string,
+        departments: ((o as Record<string, unknown>).departments as string[]) ?? [],
+        createdAt: "",
+        memberCount: 0,
+      })) as Organization[]
+      const orgMap = new Map(orgList.map((o) => [o.id, o.name]))
+      setOrgs(orgList)
       setUsers(
         userDocs.map((d) => {
           const data = d as Record<string, unknown>
           const firstName = (data.firstName as string) ?? ""
           const lastName = (data.lastName as string) ?? ""
+          const orgId = (data.organizationId as string) ?? ""
           return {
             id: d.id,
             name: `${firstName} ${lastName}`.trim() || ((data.email as string) ?? "Unknown"),
             email: (data.email as string) ?? "",
             department: (data.department as string) ?? "",
             role: (data.role as string) ?? "user",
+            orgName: orgMap.get(orgId) ?? "",
             status: data.authId ? ("accepted" as const) : ("pending" as const),
           }
         }),
-      )
-      setOrgs(
-        orgDocs.map((o) => ({
-          id: o.id,
-          name: (o as Record<string, unknown>).name as string,
-          departments: ((o as Record<string, unknown>).departments as string[]) ?? [],
-          createdAt: "",
-          memberCount: 0,
-        })) as Organization[],
       )
     } catch (err) {
       console.error("Failed to fetch data:", err)
@@ -450,6 +453,16 @@ export default function ManageUsersPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  {user.orgName && (
+                    <Badge variant="outline" className="text-xs">
+                      {user.orgName}
+                    </Badge>
+                  )}
+                  {user.department && (
+                    <Badge variant="secondary" className="text-xs">
+                      {user.department}
+                    </Badge>
+                  )}
                   <Badge variant="outline" className="capitalize text-xs">
                     {user.role}
                   </Badge>
