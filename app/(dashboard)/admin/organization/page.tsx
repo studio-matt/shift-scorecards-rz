@@ -82,6 +82,7 @@ export default function OrganizationPage() {
   const [organizations, setOrganizations] = useState<Organization[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null)
+  const [scrollToMembers, setScrollToMembers] = useState(false)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
@@ -312,6 +313,7 @@ export default function OrganizationPage() {
                       onClick={(e) => {
                         e.stopPropagation()
                         setSelectedOrgId(org.id)
+                        setScrollToMembers(true)
                       }}
                     >
                       <span className="flex items-center gap-1.5 text-muted-foreground">
@@ -407,6 +409,7 @@ export default function OrganizationPage() {
                   onClick={(e) => {
                     e.stopPropagation()
                     setSelectedOrgId(org.id)
+                    setScrollToMembers(true)
                   }}
                 >
                   {org.memberCount ?? 0}
@@ -523,6 +526,8 @@ export default function OrganizationPage() {
     <OrgDetailView
       key={selectedOrg.id}
       org={selectedOrg}
+      scrollToMembers={scrollToMembers}
+      onScrollToMembersDone={() => setScrollToMembers(false)}
       onBack={() => setSelectedOrgId(null)}
       onUpdate={async (updated) => {
         try {
@@ -642,13 +647,17 @@ function CreateOrgDialog({
 // ------------------------------------------------------------------
 function OrgDetailView({
   org,
+  scrollToMembers: shouldScrollToMembers,
+  onScrollToMembersDone,
   onBack,
   onUpdate,
-}: {
+  }: {
   org: Organization
+  scrollToMembers?: boolean
+  onScrollToMembersDone?: () => void
   onBack: () => void
   onUpdate: (updated: Organization) => void
-}) {
+  }) {
   const [orgName, setOrgName] = useState(org.name)
   const [website, setWebsite] = useState(org.website ?? "")
   const [contactEmail, setContactEmail] = useState(org.contactEmail ?? "")
@@ -692,6 +701,16 @@ function OrgDetailView({
     }
     fetchMembers()
   }, [org.id])
+
+  useEffect(() => {
+    if (shouldScrollToMembers && !membersLoading) {
+      const el = document.getElementById("members-section")
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth" })
+      }
+      onScrollToMembersDone?.()
+    }
+  }, [shouldScrollToMembers, membersLoading, onScrollToMembersDone])
 
   const availableKnownDepts = KNOWN_DEPARTMENTS.filter(
     (d) => !departments.includes(d),
