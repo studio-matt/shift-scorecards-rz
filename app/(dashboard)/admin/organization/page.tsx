@@ -51,6 +51,7 @@ import type { Organization } from "@/lib/types"
 import {
   getOrganizations,
   getUsersByOrg,
+  getDocuments,
   createDocument,
   updateDocument,
   deleteDocument,
@@ -88,7 +89,16 @@ export default function OrganizationPage() {
   const fetchOrgs = useCallback(async () => {
     try {
       setLoading(true)
-      const orgs = await getOrganizations()
+      const [orgs, allUsers] = await Promise.all([
+        getOrganizations(),
+        getDocuments(COLLECTIONS.USERS),
+      ])
+      // Build a real member count per org from the users collection
+      const countMap = new Map<string, number>()
+      for (const u of allUsers) {
+        const orgId = (u as Record<string, unknown>).organizationId as string
+        if (orgId) countMap.set(orgId, (countMap.get(orgId) ?? 0) + 1)
+      }
       setOrganizations(
         orgs.map((o) => ({
           id: o.id,
@@ -104,7 +114,7 @@ export default function OrganizationPage() {
           website: o.website,
           contactEmail: o.contactEmail,
           industry: o.industry,
-          memberCount: o.memberCount ?? 0,
+          memberCount: countMap.get(o.id) ?? 0,
         })) as Organization[],
       )
     } catch (err) {
@@ -294,12 +304,22 @@ export default function OrganizationPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Members</span>
-                      <span className="font-medium text-foreground">
+                    <button
+                      type="button"
+                      className="flex items-center justify-between rounded-md px-2 py-1.5 -mx-2 text-sm transition-colors hover:bg-primary/5"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setSelectedOrgId(org.id)
+                      }}
+                    >
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <Users className="h-3.5 w-3.5" />
+                        Members
+                      </span>
+                      <span className="font-medium text-primary">
                         {org.memberCount ?? 0}
                       </span>
-                    </div>
+                    </button>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">Departments</span>
                       <span className="font-medium text-foreground">
@@ -379,9 +399,16 @@ export default function OrganizationPage() {
                 <span className="hidden w-24 text-center text-sm text-muted-foreground md:block">
                   {org.industry ?? "-"}
                 </span>
-                <span className="hidden w-20 text-center text-sm font-medium text-foreground md:block">
+                <button
+                  type="button"
+                  className="hidden w-20 rounded px-1 py-0.5 text-center text-sm font-medium text-primary transition-colors hover:bg-primary/5 md:block"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setSelectedOrgId(org.id)
+                  }}
+                >
                   {org.memberCount ?? 0}
-                </span>
+                </button>
                 <span className="hidden w-20 text-center text-sm font-medium text-foreground md:block">
                   {org.departments.length}
                 </span>

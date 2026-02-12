@@ -43,7 +43,7 @@ const organizations = [
     website: "https://www.acmecorp.com",
     contactEmail: "admin@acmecorp.com",
     industry: "Technology",
-    memberCount: 42,
+    memberCount: 5,
   },
   {
     id: "org-envoy",
@@ -52,7 +52,7 @@ const organizations = [
     website: "https://www.envoydesign.co",
     contactEmail: "hello@envoydesign.co",
     industry: "Design",
-    memberCount: 28,
+    memberCount: 5,
   },
   {
     id: "org-initech",
@@ -61,7 +61,7 @@ const organizations = [
     website: "https://www.initech.com",
     contactEmail: "support@initech.com",
     industry: "Finance",
-    memberCount: 35,
+    memberCount: 5,
   },
 ]
 
@@ -238,7 +238,7 @@ export async function POST(request: Request) {
           organizationId: org.id,
           createdAt: weeksAgo(12).toISOString(),
           lastLogin: new Date().toISOString(),
-          authId: "",
+          authId: `seed-${userId}`,
         })
 
         allUserIds.push({
