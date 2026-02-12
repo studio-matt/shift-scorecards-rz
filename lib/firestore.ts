@@ -96,7 +96,7 @@ export async function deleteDocument(
 // ─── Organization Helpers ─────────────────────────────────────────────
 
 export async function getOrganizations() {
-  return getDocuments(COLLECTIONS.ORGANIZATIONS, orderBy("name"))
+  return getDocuments(COLLECTIONS.ORGANIZATIONS)
 }
 
 export async function getOrganization(orgId: string) {

@@ -158,6 +158,9 @@ export default function ManageUsersPage() {
   )
 
   async function handleInvite() {
+    const emailsToSend: string[] = []
+    const orgName = orgs.find((o) => o.id === csvCompany)?.name ?? ""
+
     try {
       if (csvFile) {
         // Bulk CSV: all users get role=user
@@ -177,6 +180,7 @@ export default function ManageUsersPage() {
               status: "pending",
               createdAt: new Date().toISOString(),
             })
+            emailsToSend.push(email)
           }
         }
       } else if (inviteEmail) {
@@ -187,6 +191,20 @@ export default function ManageUsersPage() {
           status: "pending",
           createdAt: new Date().toISOString(),
         })
+        emailsToSend.push(inviteEmail)
+      }
+
+      // Send invite emails via API
+      if (emailsToSend.length > 0) {
+        try {
+          await fetch("/api/invite", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ emails: emailsToSend, orgName }),
+          })
+        } catch (emailErr) {
+          console.warn("Email delivery failed, but invites were recorded:", emailErr)
+        }
       }
     } catch (err) {
       console.error("Failed to send invite:", err)

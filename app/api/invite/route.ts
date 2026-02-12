@@ -1,0 +1,63 @@
+import { Resend } from "resend"
+import { NextResponse } from "next/server"
+
+const resend = process.env.RESEND_API_KEY
+  ? new Resend(process.env.RESEND_API_KEY)
+  : null
+
+export async function POST(req: Request) {
+  try {
+    const { emails, orgName } = await req.json()
+
+    if (!emails || !Array.isArray(emails) || emails.length === 0) {
+      return NextResponse.json({ error: "No emails provided" }, { status: 400 })
+    }
+
+    if (!resend) {
+      // No API key -- log and return success so the invite records still work
+      console.warn("[invite] RESEND_API_KEY not set, skipping email delivery")
+      return NextResponse.json({
+        sent: 0,
+        skipped: emails.length,
+        message: "Emails skipped -- RESEND_API_KEY not configured",
+      })
+    }
+
+    const results = await Promise.allSettled(
+      emails.map((email: string) =>
+        resend.emails.send({
+          from: "Shift Scorecards <onboarding@resend.dev>",
+          to: email,
+          subject: `You've been invited to ${orgName || "Shift Scorecards"}`,
+          html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
+              <h2 style="color: #111; margin-bottom: 8px;">You're invited!</h2>
+              <p style="color: #555; line-height: 1.6;">
+                You've been invited to join <strong>${orgName || "Shift Scorecards"}</strong>.
+                Click the link below to create your account and get started.
+              </p>
+              <a href="${process.env.NEXT_PUBLIC_APP_URL || "https://shift-scorecards.vercel.app"}"
+                 style="display: inline-block; margin-top: 20px; padding: 12px 24px; background: #111; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 500;">
+                Accept Invitation
+              </a>
+              <p style="color: #999; font-size: 13px; margin-top: 32px;">
+                If you didn't expect this invitation, you can safely ignore this email.
+              </p>
+            </div>
+          `,
+        }),
+      ),
+    )
+
+    const sent = results.filter((r) => r.status === "fulfilled").length
+    const failed = results.filter((r) => r.status === "rejected").length
+
+    return NextResponse.json({ sent, failed, total: emails.length })
+  } catch (err) {
+    console.error("[invite] Error sending emails:", err)
+    return NextResponse.json(
+      { error: "Failed to send invitations" },
+      { status: 500 },
+    )
+  }
+}
