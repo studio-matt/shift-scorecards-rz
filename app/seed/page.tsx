@@ -37,8 +37,9 @@ export default function SeedPage() {
         <CardHeader>
           <CardTitle>Seed Database</CardTitle>
           <CardDescription>
-            Populate Firestore with 3 organizations (Acme Corp, Envoy Design, Initech LLC),
-            15 fake employees, 3 scorecard templates, 3 releases, and 45 scorecard responses.
+            Populate Firestore with 4 organizations (Acme Corp 8 users, Envoy Design 5 users,
+            Globex Corporation 10 users, Initech LLC 9 users), 3 scorecard templates,
+            12 releases, and 288 scorecard responses.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">

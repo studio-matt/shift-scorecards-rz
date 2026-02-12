@@ -17,6 +17,9 @@ const fakeEmployees: Record<string, { firstName: string; lastName: string; depar
     { firstName: "Priya", lastName: "Patel", department: "Product" },
     { firstName: "James", lastName: "O'Brien", department: "Sales" },
     { firstName: "Elena", lastName: "Rodriguez", department: "Marketing" },
+    { firstName: "Tyler", lastName: "Brooks", department: "Operations" },
+    { firstName: "Nadia", lastName: "Hassan", department: "HR" },
+    { firstName: "Derek", lastName: "Fong", department: "Engineering" },
   ],
   "org-envoy": [
     { firstName: "Alex", lastName: "Kim", department: "Design" },
@@ -25,12 +28,28 @@ const fakeEmployees: Record<string, { firstName: string; lastName: string; depar
     { firstName: "Liam", lastName: "Foster", department: "Operations" },
     { firstName: "Olivia", lastName: "Nakamura", department: "Marketing" },
   ],
+  "org-globex": [
+    { firstName: "Hannah", lastName: "Cho", department: "Engineering" },
+    { firstName: "Brandon", lastName: "Meyers", department: "Engineering" },
+    { firstName: "Fatima", lastName: "Al-Rashid", department: "Product" },
+    { firstName: "Connor", lastName: "Walsh", department: "Sales" },
+    { firstName: "Simone", lastName: "Dubois", department: "Marketing" },
+    { firstName: "Raj", lastName: "Kapoor", department: "Data Science" },
+    { firstName: "Megan", lastName: "Schultz", department: "Operations" },
+    { firstName: "Tomoko", lastName: "Sato", department: "Design" },
+    { firstName: "Andre", lastName: "Jackson", department: "Customer Success" },
+    { firstName: "Ines", lastName: "Pereira", department: "HR" },
+  ],
   "org-initech": [
     { firstName: "David", lastName: "Thompson", department: "IT" },
     { firstName: "Rachel", lastName: "Greene", department: "IT" },
     { firstName: "Carlos", lastName: "Martinez", department: "Customer Success" },
     { firstName: "Amara", lastName: "Johnson", department: "Operations" },
     { firstName: "Ethan", lastName: "Burke", department: "HR" },
+    { firstName: "Suki", lastName: "Tanaka", department: "IT" },
+    { firstName: "Frank", lastName: "Novak", department: "Customer Success" },
+    { firstName: "Layla", lastName: "Benali", department: "Operations" },
+    { firstName: "Kevin", lastName: "O'Connell", department: "Executive" },
   ],
 }
 
@@ -43,7 +62,6 @@ const organizations = [
     website: "https://www.acmecorp.com",
     contactEmail: "admin@acmecorp.com",
     industry: "Technology",
-    memberCount: 5,
   },
   {
     id: "org-envoy",
@@ -52,7 +70,14 @@ const organizations = [
     website: "https://www.envoydesign.co",
     contactEmail: "hello@envoydesign.co",
     industry: "Design",
-    memberCount: 5,
+  },
+  {
+    id: "org-globex",
+    name: "Globex Corporation",
+    departments: ["Engineering", "Sales", "Marketing", "Product", "Data Science", "Operations", "Design", "Customer Success", "HR"],
+    website: "https://www.globexcorp.com",
+    contactEmail: "info@globexcorp.com",
+    industry: "Consulting",
   },
   {
     id: "org-initech",
@@ -61,7 +86,6 @@ const organizations = [
     website: "https://www.initech.com",
     contactEmail: "support@initech.com",
     industry: "Finance",
-    memberCount: 5,
   },
 ]
 
@@ -124,8 +148,8 @@ function generateAnswers(
   weekOffset: number,
 ): Record<string, number | string> {
   const answers: Record<string, number | string> = {}
-  const baseQuality = 5 + (employeeIdx % 3) // 5, 6, 7 base
-  const weekBoost = weekOffset * 0.3 // slight improvement over time
+  const baseQuality = 5 + (employeeIdx % 4) // 5, 6, 7, 8 base
+  const weekBoost = weekOffset * 0.4
 
   const textResponses = [
     "Used Copilot to refactor our auth module - saved 3 hours",
@@ -143,22 +167,27 @@ function generateAnswers(
     "Mentoring new hire on AI tools, both learning a lot",
     "Async communication experiment is working well",
     "The new brainstorm framework generated 12 viable ideas",
+    "Integrated AI summarization into our support pipeline",
+    "Used Claude for contract review - caught two issues",
+    "Built a Slack bot with AI to answer common questions",
+    "AI-powered dashboards helped spot trends faster",
+    "Automated onboarding docs with generative AI",
   ]
 
   for (const q of questions) {
     if (q.type === "scale") {
-      const raw = baseQuality + weekBoost + (Math.random() * 2 - 0.5)
+      const raw = baseQuality + weekBoost + (Math.random() * 2.5 - 0.75)
       answers[q.id] = Math.min(10, Math.max(1, Math.round(raw * 10) / 10))
     } else if (q.type === "number") {
       if (q.text.toLowerCase().includes("hours") || q.text.toLowerCase().includes("save")) {
-        answers[q.id] = Math.floor(2 + employeeIdx + weekOffset * 0.5 + Math.random() * 3)
+        answers[q.id] = Math.floor(2 + employeeIdx * 0.5 + weekOffset * 0.5 + Math.random() * 3)
       } else if (q.text.toLowerCase().includes("unnecessary")) {
         answers[q.id] = Math.max(0, Math.floor(4 - weekOffset * 0.5 - Math.random() * 2))
       } else {
         answers[q.id] = Math.floor(1 + Math.random() * 5 + weekOffset * 0.3)
       }
     } else if (q.type === "text") {
-      const idx = (employeeIdx * 3 + weekOffset) % textResponses.length
+      const idx = (employeeIdx * 3 + weekOffset * 2) % textResponses.length
       answers[q.id] = textResponses[idx]
     }
   }
@@ -200,10 +229,12 @@ export async function POST(request: Request) {
       }
     }
 
-    // Seed organizations
+    // Seed organizations (memberCount computed from actual employees)
     for (const org of organizations) {
+      const empCount = fakeEmployees[org.id]?.length ?? 0
       await setDoc(doc(db, "organizations", org.id), {
         ...org,
+        memberCount: empCount,
         createdAt: Timestamp.now(),
       })
     }
@@ -218,14 +249,15 @@ export async function POST(request: Request) {
       })
     }
 
-    // Seed users (5 per org = 15 total)
+    // Seed users across all 4 orgs (8 + 5 + 10 + 9 = 32 total)
     const allUserIds: { orgId: string; userId: string; dept: string; name: string }[] = []
     for (const org of organizations) {
       const employees = fakeEmployees[org.id]
       for (let i = 0; i < employees.length; i++) {
         const emp = employees[i]
         const userId = `user-${org.id}-${i}`
-        const email = `${emp.firstName.toLowerCase()}.${emp.lastName.toLowerCase()}@${org.name.toLowerCase().replace(/\s+/g, "")}.com`
+        const emailDomain = org.name.toLowerCase().replace(/[^a-z]/g, "") + ".com"
+        const email = `${emp.firstName.toLowerCase()}.${emp.lastName.toLowerCase().replace(/'/g, "")}@${emailDomain}`
 
         await setDoc(doc(db, "users", userId), {
           email,
@@ -250,63 +282,59 @@ export async function POST(request: Request) {
       }
     }
 
-    // Seed 3 releases (one per template, each assigned to a different org)
-    // Each covers the last 3 weeks of responses
-    const releaseOrgMap = [
-      { tmplIdx: 0, orgIdx: 0 }, // AI Productivity -> Acme Corp
-      { tmplIdx: 1, orgIdx: 1 }, // Team Collaboration -> Envoy Design
-      { tmplIdx: 2, orgIdx: 2 }, // Innovation -> Initech LLC
-    ]
-
-    for (const mapping of releaseOrgMap) {
-      const tmpl = templates[mapping.tmplIdx]
-      const org = organizations[mapping.orgIdx]
-      const releaseId = `release-${tmpl.id}-${org.id}`
-
-      await setDoc(doc(db, "schedules", releaseId), {
-        templateId: tmpl.id,
-        templateName: tmpl.name,
-        organizationId: org.id,
-        organizationName: org.name,
-        department: "all",
-        scheduleType: "now",
-        scheduledAt: weeksAgo(3).toISOString(),
-        activeFrom: weeksAgo(3).toISOString(),
-        activeUntil: weeksAgo(0).toISOString(),
-        recipientCount: 5,
-        responseCount: 15, // 5 users x 3 weeks
-        status: "completed",
-        createdAt: weeksAgo(3).toISOString(),
-        createdBy: "seed",
-      })
-
-      // Generate 3 weeks of responses for all 5 employees in this org
+    // Seed releases and responses -- each org gets all 3 templates over 3 weeks
+    for (const org of organizations) {
       const orgEmployees = allUserIds.filter((u) => u.orgId === org.id)
-      for (let week = 0; week < 3; week++) {
-        for (let empIdx = 0; empIdx < orgEmployees.length; empIdx++) {
-          const emp = orgEmployees[empIdx]
-          const responseId = `resp-${releaseId}-w${week}-${empIdx}`
-          const completedDate = weeksAgo(2 - week) // week 0 = 2 weeks ago, week 2 = this week
+      for (const tmpl of templates) {
+        const releaseId = `release-${tmpl.id}-${org.id}`
 
-          await setDoc(doc(db, "responses", responseId), {
-            templateId: tmpl.id,
-            releaseId,
-            userId: emp.userId,
-            userName: emp.name,
-            organizationId: org.id,
-            department: emp.dept,
-            answers: generateAnswers(tmpl.questions, empIdx, week),
-            completedAt: completedDate.toISOString(),
-            weekOf: weekLabel(2 - week),
-            weekDate: completedDate.toISOString(),
-          })
+        await setDoc(doc(db, "schedules", releaseId), {
+          templateId: tmpl.id,
+          templateName: tmpl.name,
+          organizationId: org.id,
+          organizationName: org.name,
+          department: "all",
+          scheduleType: "now",
+          scheduledAt: weeksAgo(3).toISOString(),
+          activeFrom: weeksAgo(3).toISOString(),
+          activeUntil: weeksAgo(0).toISOString(),
+          recipientCount: orgEmployees.length,
+          responseCount: orgEmployees.length * 3,
+          status: "completed",
+          createdAt: weeksAgo(3).toISOString(),
+          createdBy: "seed",
+        })
+
+        // 3 weeks of responses per employee
+        for (let week = 0; week < 3; week++) {
+          for (let empIdx = 0; empIdx < orgEmployees.length; empIdx++) {
+            const emp = orgEmployees[empIdx]
+            const responseId = `resp-${releaseId}-w${week}-${empIdx}`
+            const completedDate = weeksAgo(2 - week)
+
+            await setDoc(doc(db, "responses", responseId), {
+              templateId: tmpl.id,
+              releaseId,
+              userId: emp.userId,
+              userName: emp.name,
+              organizationId: org.id,
+              department: emp.dept,
+              answers: generateAnswers(tmpl.questions, empIdx, week),
+              completedAt: completedDate.toISOString(),
+              weekOf: weekLabel(2 - week),
+              weekDate: completedDate.toISOString(),
+            })
+          }
         }
       }
     }
 
+    const totalUsers = Object.values(fakeEmployees).reduce((sum, arr) => sum + arr.length, 0)
+    const totalResponses = totalUsers * 3 * templates.length // users x weeks x templates
+
     return NextResponse.json({
       success: true,
-      message: "Seeded 3 orgs, 15 users, 3 templates, 3 releases, 45 scorecard responses",
+      message: `Seeded 4 orgs, ${totalUsers} users, ${templates.length} templates, ${organizations.length * templates.length} releases, ${totalResponses} scorecard responses`,
     })
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error"
