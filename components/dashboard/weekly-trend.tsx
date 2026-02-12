@@ -15,20 +15,43 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import { mockWeeklyTrends } from "@/lib/mock-data"
+import type { WeeklyTrend } from "@/lib/types"
 
-export function WeeklyTrendChart() {
+interface WeeklyTrendChartProps {
+  data: WeeklyTrend[]
+}
+
+export function WeeklyTrendChart({ data }: WeeklyTrendChartProps) {
+  if (data.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base font-semibold">
+            Score Trend
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex h-64 items-center justify-center">
+            <p className="text-sm text-muted-foreground">
+              No trend data available yet
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base font-semibold">
-          Score Trend - Last 12 Weeks
+          Score Trend - Last {data.length} Weeks
         </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={mockWeeklyTrends}>
+            <LineChart data={data}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis
                 dataKey="week"
@@ -36,7 +59,7 @@ export function WeeklyTrendChart() {
                 className="fill-muted-foreground"
               />
               <YAxis
-                domain={[6, 10]}
+                domain={[0, 10]}
                 tick={{ fontSize: 12 }}
                 className="fill-muted-foreground"
               />

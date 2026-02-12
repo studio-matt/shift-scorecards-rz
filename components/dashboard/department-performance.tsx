@@ -15,9 +15,32 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import { mockDepartmentPerformance } from "@/lib/mock-data"
+import type { DepartmentPerformance } from "@/lib/types"
 
-export function DepartmentPerformanceChart() {
+interface DepartmentPerformanceChartProps {
+  data: DepartmentPerformance[]
+}
+
+export function DepartmentPerformanceChart({ data }: DepartmentPerformanceChartProps) {
+  if (data.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base font-semibold">
+            Department Performance Overview
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex h-64 items-center justify-center">
+            <p className="text-sm text-muted-foreground">
+              No department data available yet
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -28,7 +51,7 @@ export function DepartmentPerformanceChart() {
       <CardContent>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={mockDepartmentPerformance} barSize={40}>
+            <BarChart data={data} barSize={40}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis
                 dataKey="department"
@@ -58,7 +81,7 @@ export function DepartmentPerformanceChart() {
           </ResponsiveContainer>
         </div>
         <div className="mt-4 flex flex-wrap gap-4">
-          {mockDepartmentPerformance.slice(0, 3).map((dept) => (
+          {data.slice(0, 3).map((dept) => (
             <div
               key={dept.department}
               className="flex items-center gap-2 text-sm"

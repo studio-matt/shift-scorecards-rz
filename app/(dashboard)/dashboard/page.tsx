@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { useAuth } from "@/lib/auth-context"
 import {
   Select,
@@ -19,8 +19,29 @@ import {
   MostImprovedCard,
   RecentScorecardsCard,
 } from "@/components/dashboard/goals-and-recent"
-import { mockOrganizations, mockTopPerformers, mockMostImproved } from "@/lib/mock-data"
+import { getOrganizations } from "@/lib/firestore"
+import {
+  fetchAllResponses,
+  computeAdminStats,
+  computeWeeklyTrend,
+  computeDepartmentPerformance,
+  computeTopPerformers,
+  computeMostImproved,
+  computeQuestionResults,
+  computeRecentScorecards,
+  type AdminStats,
+  type MostImprovedEntry,
+  type RecentScorecard,
+} from "@/lib/dashboard-data"
+import type {
+  Organization,
+  WeeklyTrend,
+  DepartmentPerformance,
+  TopPerformer,
+  QuestionResult,
+} from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
+import { Loader2 } from "lucide-react"
 
 export default function DashboardPage() {
   const { isAdmin, user } = useAuth()
@@ -30,18 +51,68 @@ export default function DashboardPage() {
   const [selectedDept, setSelectedDept] = useState("all")
   const [timePeriod, setTimePeriod] = useState("this-week")
 
-  const activeOrg = mockOrganizations.find((o) => o.id === selectedOrg)
+  // Data state
+  const [orgs, setOrgs] = useState<Organization[]>([])
+  const [loading, setLoading] = useState(true)
+  const [adminStats, setAdminStats] = useState<AdminStats | null>(null)
+  const [weeklyTrend, setWeeklyTrend] = useState<WeeklyTrend[]>([])
+  const [deptPerformance, setDeptPerformance] = useState<DepartmentPerformance[]>([])
+  const [topPerformers, setTopPerformers] = useState<TopPerformer[]>([])
+  const [mostImproved, setMostImproved] = useState<MostImprovedEntry[]>([])
+  const [questionResults, setQuestionResults] = useState<QuestionResult[]>([])
+  const [recentScorecards, setRecentScorecards] = useState<RecentScorecard[]>([])
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true)
+      const [orgDocs, responses] = await Promise.all([
+        getOrganizations(),
+        fetchAllResponses(selectedOrg, selectedDept),
+      ])
+      setOrgs(orgDocs as unknown as Organization[])
+
+      // Compute all aggregations in parallel
+      const [stats, trend, dept, performers, improved, questions, recent] =
+        await Promise.all([
+          computeAdminStats(responses),
+          Promise.resolve(computeWeeklyTrend(responses)),
+          Promise.resolve(computeDepartmentPerformance(responses)),
+          computeTopPerformers(responses),
+          computeMostImproved(responses),
+          computeQuestionResults(responses),
+          computeRecentScorecards(responses),
+        ])
+
+      setAdminStats(stats)
+      setWeeklyTrend(trend)
+      setDeptPerformance(dept)
+      setTopPerformers(performers)
+      setMostImproved(improved)
+      setQuestionResults(questions)
+      setRecentScorecards(recent)
+    } catch (err) {
+      console.error("Failed to load dashboard data:", err)
+    } finally {
+      setLoading(false)
+    }
+  }, [selectedOrg, selectedDept])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  const activeOrg = orgs.find((o) => o.id === selectedOrg)
 
   const departments = useMemo(() => {
     if (selectedOrg === "all") {
       const allDepts = new Set<string>()
-      mockOrganizations.forEach((org) =>
-        org.departments.forEach((d) => allDepts.add(d)),
+      orgs.forEach((org) =>
+        (org.departments || []).forEach((d: string) => allDepts.add(d)),
       )
       return Array.from(allDepts).sort()
     }
     return activeOrg?.departments ?? []
-  }, [selectedOrg, activeOrg])
+  }, [selectedOrg, activeOrg, orgs])
 
   const filterLabel = useMemo(() => {
     const parts: string[] = []
@@ -56,29 +127,6 @@ export default function DashboardPage() {
     return parts.join(" / ")
   }, [selectedOrg, selectedDept, activeOrg])
 
-  // Filter performers and improved based on selected org/dept
-  const filteredPerformers = useMemo(() => {
-    let data = mockTopPerformers
-    if (selectedOrg !== "all") {
-      data = data.filter((p) => p.companyId === selectedOrg)
-    }
-    if (selectedDept !== "all") {
-      data = data.filter((p) => p.department === selectedDept)
-    }
-    return data
-  }, [selectedOrg, selectedDept])
-
-  const filteredImproved = useMemo(() => {
-    let data = mockMostImproved
-    if (selectedOrg !== "all") {
-      data = data.filter((p) => p.companyId === selectedOrg)
-    }
-    if (selectedDept !== "all") {
-      data = data.filter((p) => p.department === selectedDept)
-    }
-    return data
-  }, [selectedOrg, selectedDept])
-
   const timePeriodLabel: Record<string, string> = {
     "this-week": "This Week",
     "last-week": "Last Week",
@@ -87,6 +135,14 @@ export default function DashboardPage() {
     "this-quarter": "This Quarter",
     "last-quarter": "Last Quarter",
     "ytd": "Year to Date",
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
   }
 
   if (isAdmin) {
@@ -119,7 +175,7 @@ export default function DashboardPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Organizations</SelectItem>
-                {mockOrganizations.map((org) => (
+                {orgs.map((org) => (
                   <SelectItem key={org.id} value={org.id}>
                     {org.name}
                   </SelectItem>
@@ -166,26 +222,21 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex flex-col gap-6">
-          {/* Admin-specific key metrics */}
-          <AdminStatCards />
+          {adminStats && <AdminStatCards data={adminStats} />}
 
-          {/* Charts row */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <WeeklyTrendChart />
-            <DepartmentPerformanceChart />
+            <WeeklyTrendChart data={weeklyTrend} />
+            <DepartmentPerformanceChart data={deptPerformance} />
           </div>
 
-          {/* Champions + Most Improved */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <TopPerformers showCompany data={filteredPerformers} />
-            <MostImprovedCard showCompany data={filteredImproved} />
+            <TopPerformers showCompany data={topPerformers} />
+            <MostImprovedCard showCompany data={mostImproved} />
           </div>
 
-          {/* Question Results */}
-          <QuestionResults />
+          <QuestionResults data={questionResults} />
 
-          {/* Recent Scorecards */}
-          <RecentScorecardsCard />
+          <RecentScorecardsCard data={recentScorecards} />
         </div>
       </div>
     )
@@ -205,13 +256,13 @@ export default function DashboardPage() {
         <StatCards />
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <WeeklyTrendChart />
+          <WeeklyTrendChart data={weeklyTrend} />
           <GoalsCard />
         </div>
 
-        <QuestionResults />
+        <QuestionResults data={questionResults} />
 
-        <RecentScorecardsCard />
+        <RecentScorecardsCard data={recentScorecards} />
       </div>
     </div>
   )

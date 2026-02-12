@@ -7,9 +7,30 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { TrendingUp } from "lucide-react"
-import { mockQuestionResults } from "@/lib/mock-data"
+import type { QuestionResult } from "@/lib/types"
 
-export function QuestionResults() {
+interface QuestionResultsProps {
+  data: QuestionResult[]
+}
+
+export function QuestionResults({ data }: QuestionResultsProps) {
+  if (data.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base font-semibold">
+            Question Results
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="py-4 text-center text-sm text-muted-foreground">
+            No question data available yet
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -19,7 +40,7 @@ export function QuestionResults() {
       </CardHeader>
       <CardContent>
         <div className="flex flex-col gap-3">
-          {mockQuestionResults.map((result) => (
+          {data.map((result) => (
             <div
               key={result.question}
               className="flex items-center justify-between rounded-lg border border-border p-3"

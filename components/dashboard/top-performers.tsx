@@ -8,16 +8,14 @@ import {
 } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { mockTopPerformers } from "@/lib/mock-data"
 import type { TopPerformer } from "@/lib/types"
 
 interface TopPerformersProps {
   showCompany?: boolean
-  data?: TopPerformer[]
+  data: TopPerformer[]
 }
 
 export function TopPerformers({ showCompany = false, data }: TopPerformersProps) {
-  const performers = data ?? mockTopPerformers
   return (
     <Card>
       <CardHeader>
@@ -30,12 +28,12 @@ export function TopPerformers({ showCompany = false, data }: TopPerformersProps)
       </CardHeader>
       <CardContent>
         <div className="flex flex-col gap-3">
-          {performers.length === 0 && (
+          {data.length === 0 && (
             <p className="py-4 text-center text-sm text-muted-foreground">
               No performers match the current filters
             </p>
           )}
-          {performers.map((performer, index) => (
+          {data.map((performer, index) => (
             <div
               key={performer.id}
               className="flex items-center gap-3 rounded-lg border border-border p-3"
@@ -72,7 +70,7 @@ export function TopPerformers({ showCompany = false, data }: TopPerformersProps)
                 <p className="text-xs text-muted-foreground">Avg Score</p>
               </div>
               <Badge variant="secondary" className="shrink-0 text-xs">
-                {performer.streak} streak
+                {performer.streak} wk streak
               </Badge>
             </div>
           ))}

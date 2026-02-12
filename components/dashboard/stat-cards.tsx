@@ -2,7 +2,7 @@
 
 import { Card, CardContent } from "@/components/ui/card"
 import { TrendingUp, Flame, CheckCircle2, Target, Building2, Users, BarChart3, Send } from "lucide-react"
-import { mockAdminStats } from "@/lib/mock-data"
+import type { AdminStats } from "@/lib/dashboard-data"
 
 const userStats = [
   {
@@ -62,8 +62,11 @@ export function StatCards() {
   )
 }
 
-export function AdminStatCards() {
-  const s = mockAdminStats
+interface AdminStatCardsProps {
+  data: AdminStats
+}
+
+export function AdminStatCards({ data: s }: AdminStatCardsProps) {
   const adminCards = [
     {
       label: "Avg Score (Global)",

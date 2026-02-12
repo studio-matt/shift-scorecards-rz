@@ -9,8 +9,15 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CheckCircle2, Clock, Circle, Download } from "lucide-react"
-import { mockGoals, mockRecentScorecards, mockMostImproved } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
+import type { MostImprovedEntry, RecentScorecard } from "@/lib/dashboard-data"
+
+const defaultGoals = [
+  { text: "Complete weekly scorecard", status: "completed" },
+  { text: "Score 8+ on AI productivity", status: "in-progress" },
+  { text: "Explore one new AI tool", status: "in-progress" },
+  { text: "Share an AI tip with a teammate", status: "not-started" },
+]
 
 function GoalIcon({ status }: { status: string }) {
   if (status === "completed")
@@ -28,7 +35,7 @@ export function GoalsCard() {
       </CardHeader>
       <CardContent>
         <div className="flex flex-col gap-2">
-          {mockGoals.map((goal) => (
+          {defaultGoals.map((goal) => (
             <div
               key={goal.text}
               className="flex items-center gap-3 rounded-md p-2"
@@ -66,11 +73,10 @@ export function GoalsCard() {
 
 interface MostImprovedProps {
   showCompany?: boolean
-  data?: typeof mockMostImproved
+  data: MostImprovedEntry[]
 }
 
 export function MostImprovedCard({ showCompany = false, data }: MostImprovedProps) {
-  const improved = data ?? mockMostImproved
   return (
     <Card>
       <CardHeader>
@@ -80,12 +86,12 @@ export function MostImprovedCard({ showCompany = false, data }: MostImprovedProp
       </CardHeader>
       <CardContent>
         <div className="flex flex-col gap-3">
-          {improved.length === 0 && (
+          {data.length === 0 && (
             <p className="py-4 text-center text-sm text-muted-foreground">
               No results match the current filters
             </p>
           )}
-          {improved.map((person) => (
+          {data.map((person) => (
             <div
               key={person.name}
               className="flex items-center justify-between rounded-lg border border-border p-3"
@@ -120,7 +126,11 @@ export function MostImprovedCard({ showCompany = false, data }: MostImprovedProp
   )
 }
 
-export function RecentScorecardsCard() {
+interface RecentScorecardsCardProps {
+  data: RecentScorecard[]
+}
+
+export function RecentScorecardsCard({ data }: RecentScorecardsCardProps) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -133,29 +143,35 @@ export function RecentScorecardsCard() {
         </Button>
       </CardHeader>
       <CardContent>
-        <div className="flex flex-col gap-2">
-          {mockRecentScorecards.map((sc) => (
-            <div
-              key={sc.name}
-              className="flex items-center justify-between rounded-md border border-border p-3"
-            >
-              <div>
-                <p className="text-sm font-medium text-foreground">
-                  {sc.name}
-                </p>
-                <p className="text-xs text-muted-foreground">{sc.date}</p>
+        {data.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">
+            No scorecard submissions yet
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {data.map((sc, idx) => (
+              <div
+                key={`${sc.name}-${idx}`}
+                className="flex items-center justify-between rounded-md border border-border p-3"
+              >
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    {sc.name}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {sc.templateName} &middot; {sc.date}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-bold text-foreground">
+                    {sc.score}
+                  </span>
+                  <span className="text-xs text-muted-foreground">avg</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-bold text-foreground">
-                  {sc.score}
-                </span>
-                <Badge variant="secondary" className="text-xs">
-                  Completion Rate
-                </Badge>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   )
