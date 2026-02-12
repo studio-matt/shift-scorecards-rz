@@ -683,7 +683,7 @@ export default function ScheduleReleasePage() {
                         <span>{release.responseCount} responses</span>
                         {release.recipientCount > 0 && (
                           <span className="font-medium text-foreground">
-                            {Math.round((release.responseCount / release.recipientCount) * 100)}% rate
+                            {Math.min(100, Math.round((release.responseCount / release.recipientCount) * 100))}% rate
                           </span>
                         )}
                       </div>

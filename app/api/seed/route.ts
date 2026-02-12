@@ -299,7 +299,7 @@ export async function POST(request: Request) {
           activeFrom: weeksAgo(3).toISOString(),
           activeUntil: weeksAgo(0).toISOString(),
           recipientCount: orgEmployees.length,
-          responseCount: orgEmployees.length * 3,
+          responseCount: orgEmployees.length,
           status: "completed",
           createdAt: weeksAgo(3).toISOString(),
           createdBy: "seed",

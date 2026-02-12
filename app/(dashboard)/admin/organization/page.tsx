@@ -46,6 +46,8 @@ import {
   LayoutGrid,
   List,
   Loader2,
+  Search,
+  Save,
 } from "lucide-react"
 import type { Organization } from "@/lib/types"
 import {
@@ -655,8 +657,11 @@ function OrgDetailView({
   const [newDepartment, setNewDepartment] = useState("")
   const [selectedKnownDept, setSelectedKnownDept] = useState("")
   const [saving, setSaving] = useState(false)
-  const [members, setMembers] = useState<{ id: string; name: string; email: string; department: string; role: string }[]>([])
+  const [members, setMembers] = useState<{ id: string; firstName: string; lastName: string; name: string; email: string; department: string; role: string }[]>([])
   const [membersLoading, setMembersLoading] = useState(true)
+  const [memberSearch, setMemberSearch] = useState("")
+  const [editingMember, setEditingMember] = useState<{ id: string; firstName: string; lastName: string; email: string; department: string; role: string } | null>(null)
+  const [editSaving, setEditSaving] = useState(false)
 
   useEffect(() => {
     async function fetchMembers() {
@@ -670,6 +675,8 @@ function OrgDetailView({
             const last = (data.lastName as string) ?? ""
             return {
               id: d.id,
+              firstName: first,
+              lastName: last,
               name: `${first} ${last}`.trim() || ((data.email as string) ?? "Unknown"),
               email: (data.email as string) ?? "",
               department: (data.department as string) ?? "",
@@ -720,6 +727,47 @@ function OrgDetailView({
     })
     setSaving(false)
   }
+
+  async function handleSaveMember() {
+    if (!editingMember) return
+    setEditSaving(true)
+    try {
+      await updateDocument(COLLECTIONS.USERS, editingMember.id, {
+        firstName: editingMember.firstName,
+        lastName: editingMember.lastName,
+        email: editingMember.email,
+        department: editingMember.department,
+        role: editingMember.role,
+      })
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.id === editingMember.id
+            ? {
+                ...m,
+                firstName: editingMember.firstName,
+                lastName: editingMember.lastName,
+                name: `${editingMember.firstName} ${editingMember.lastName}`.trim() || editingMember.email,
+                email: editingMember.email,
+                department: editingMember.department,
+                role: editingMember.role,
+              }
+            : m,
+        ),
+      )
+      setEditingMember(null)
+    } catch (err) {
+      console.error("Failed to update member:", err)
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  const filteredMembers = members.filter(
+    (m) =>
+      m.name.toLowerCase().includes(memberSearch.toLowerCase()) ||
+      m.email.toLowerCase().includes(memberSearch.toLowerCase()) ||
+      m.department.toLowerCase().includes(memberSearch.toLowerCase()),
+  )
 
   return (
     <div>
@@ -906,14 +954,29 @@ function OrgDetailView({
           </Card>
 
           {/* Members */}
-          <Card>
+          <Card id="members-section">
             <CardHeader>
-              <CardTitle className="text-base font-semibold">
-                Members ({members.length})
-              </CardTitle>
-              <CardDescription>
-                Users assigned to this organization
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base font-semibold">
+                    Members ({members.length})
+                  </CardTitle>
+                  <CardDescription>
+                    Users assigned to this organization
+                  </CardDescription>
+                </div>
+              </div>
+              {members.length > 0 && (
+                <div className="relative mt-3">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search members by name, email, or department..."
+                    value={memberSearch}
+                    onChange={(e) => setMemberSearch(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+              )}
             </CardHeader>
             <CardContent>
               {membersLoading ? (
@@ -924,9 +987,13 @@ function OrgDetailView({
                 <p className="py-4 text-center text-sm text-muted-foreground">
                   No members assigned to this organization yet.
                 </p>
+              ) : filteredMembers.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  No members matching &ldquo;{memberSearch}&rdquo;
+                </p>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {members.map((m) => (
+                  {filteredMembers.map((m) => (
                     <div
                       key={m.id}
                       className="flex items-center justify-between rounded-lg border border-border p-3"
@@ -954,6 +1021,24 @@ function OrgDetailView({
                         <Badge variant="outline" className="capitalize text-xs">
                           {m.role}
                         </Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() =>
+                            setEditingMember({
+                              id: m.id,
+                              firstName: m.firstName,
+                              lastName: m.lastName,
+                              email: m.email,
+                              department: m.department,
+                              role: m.role,
+                            })
+                          }
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          <span className="sr-only">Edit {m.name}</span>
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -961,6 +1046,102 @@ function OrgDetailView({
               )}
             </CardContent>
           </Card>
+
+          {/* Edit Member Dialog */}
+          <Dialog
+            open={!!editingMember}
+            onOpenChange={(open) => !open && setEditingMember(null)}
+          >
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Edit Member</DialogTitle>
+                <DialogDescription>
+                  Update this user&apos;s information.
+                </DialogDescription>
+              </DialogHeader>
+              {editingMember && (
+                <div className="flex flex-col gap-4 py-2">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-2">
+                      <Label>First Name</Label>
+                      <Input
+                        value={editingMember.firstName}
+                        onChange={(e) =>
+                          setEditingMember({ ...editingMember, firstName: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Label>Last Name</Label>
+                      <Input
+                        value={editingMember.lastName}
+                        onChange={(e) =>
+                          setEditingMember({ ...editingMember, lastName: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label>Email</Label>
+                    <Input
+                      type="email"
+                      value={editingMember.email}
+                      onChange={(e) =>
+                        setEditingMember({ ...editingMember, email: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label>Department</Label>
+                    <Select
+                      value={editingMember.department}
+                      onValueChange={(val) =>
+                        setEditingMember({ ...editingMember, department: val })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {departments.map((d) => (
+                          <SelectItem key={d} value={d}>
+                            {d}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label>Role</Label>
+                    <Select
+                      value={editingMember.role}
+                      onValueChange={(val) =>
+                        setEditingMember({ ...editingMember, role: val })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="user">User</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEditingMember(null)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSaveMember} disabled={editSaving}>
+                  {editSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  <Save className="mr-2 h-4 w-4" />
+                  Save Changes
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Right sidebar */}
@@ -974,33 +1155,36 @@ function OrgDetailView({
             <CardContent>
               <div className="flex flex-col gap-4">
                 <div className="flex flex-col gap-3">
-                  {[
-                    {
-                      label: "Total Members",
-                      value: (org.memberCount ?? 0).toString(),
-                      icon: Users,
-                    },
-                    {
-                      label: "Departments",
-                      value: departments.length.toString(),
-                      icon: Building2,
-                    },
-                  ].map((stat) => (
-                    <div
-                      key={stat.label}
-                      className="flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-2">
-                        <stat.icon className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">
-                          {stat.label}
-                        </span>
-                      </div>
-                      <span className="text-sm font-medium text-foreground">
-                        {stat.value}
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between rounded-md px-2 py-1.5 -mx-2 transition-colors hover:bg-primary/5"
+                    onClick={() =>
+                      document
+                        .getElementById("members-section")
+                        ?.scrollIntoView({ behavior: "smooth" })
+                    }
+                  >
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">
+                        Total Members
                       </span>
                     </div>
-                  ))}
+                    <span className="text-sm font-medium text-primary">
+                      {members.length}
+                    </span>
+                  </button>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">
+                        Departments
+                      </span>
+                    </div>
+                    <span className="text-sm font-medium text-foreground">
+                      {departments.length}
+                    </span>
+                  </div>
                 </div>
                 {org.website && (
                   <div className="flex items-center gap-2 border-t border-border pt-3">
