@@ -39,13 +39,13 @@ export function StatCards() {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {userStats.map((stat) => (
-        <Card key={stat.label}>
-          <CardContent className="flex items-start gap-4 p-5">
+        <Card key={stat.label} className="min-h-[120px]">
+          <CardContent className="flex h-full items-start gap-4 p-5">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
               <stat.icon className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">
+              <p className="text-sm font-medium leading-snug text-muted-foreground">
                 {stat.label}
               </p>
               <p className="text-2xl font-bold text-foreground">
@@ -103,13 +103,13 @@ export function AdminStatCards({ data: s }: AdminStatCardsProps) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
       {adminCards.map((stat) => (
-        <Card key={stat.label}>
-          <CardContent className="flex items-start gap-4 p-5">
+        <Card key={stat.label} className="min-h-[120px]">
+          <CardContent className="flex h-full items-start gap-4 p-5">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
               <stat.icon className="h-5 w-5 text-primary" />
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-muted-foreground">
+              <p className="text-sm font-medium leading-snug text-muted-foreground">
                 {stat.label}
               </p>
               <p className="text-2xl font-bold text-foreground">
