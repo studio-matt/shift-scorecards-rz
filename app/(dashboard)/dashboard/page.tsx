@@ -160,17 +160,17 @@ export default function DashboardPage() {
       setAlerts(computeAlerts(responses, dept, vel))
 
       // User-specific metrics (uses full response set for anonymized comparisons)
-      if (user?.uid) {
-        setPersonalStreak(computePersonalStreak(responses, user.uid))
-        setPersonalTrend(computePersonalTrend(responses, user.uid))
-        setPersonalBenchmark(computePersonalBenchmark(responses, user.uid))
+      if (user?.id) {
+        setPersonalStreak(computePersonalStreak(responses, user.id))
+        setPersonalTrend(computePersonalTrend(responses, user.id))
+        setPersonalBenchmark(computePersonalBenchmark(responses, user.id))
       }
     } catch (err) {
       console.error("Failed to load dashboard data:", err)
     } finally {
       setLoading(false)
     }
-  }, [selectedOrg, selectedDept])
+  }, [selectedOrg, selectedDept, user])
 
   useEffect(() => {
     loadData()
@@ -378,29 +378,41 @@ export default function DashboardPage() {
         <StatCards />
 
         {/* Your Performance */}
-        {(personalStreak || personalBenchmark) && (
-          <div className="border-t border-border pt-4">
-            <h2 className="text-lg font-semibold text-foreground">Your Performance</h2>
-            <p className="mb-4 text-sm text-muted-foreground">
-              Personal stats and how you compare (all comparisons are anonymized)
-            </p>
+        <div className="border-t border-border pt-4">
+          <h2 className="text-lg font-semibold text-foreground">Your Performance</h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Personal stats and how you compare (all comparisons are anonymized)
+          </p>
+          {personalStreak || personalBenchmark ? (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               {personalStreak && <PersonalStreakCard data={personalStreak} />}
               {personalBenchmark && <PersonalBenchmarkCard data={personalBenchmark} />}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="rounded-lg border border-dashed border-border bg-muted/30 px-6 py-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                Complete your first scorecard to see your personal performance metrics here.
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Your Trend */}
-        {personalTrend.length > 0 && (
-          <div className="border-t border-border pt-4">
-            <h2 className="text-lg font-semibold text-foreground">Your Trend</h2>
-            <p className="mb-4 text-sm text-muted-foreground">
-              Your scores over time compared to anonymized averages
-            </p>
+        <div className="border-t border-border pt-4">
+          <h2 className="text-lg font-semibold text-foreground">Your Trend</h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Your scores over time compared to anonymized averages
+          </p>
+          {personalTrend.length > 0 ? (
             <PersonalTrendChart data={personalTrend} />
-          </div>
-        )}
+          ) : (
+            <div className="rounded-lg border border-dashed border-border bg-muted/30 px-6 py-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                Your trend chart will appear after you complete at least one scorecard.
+              </p>
+            </div>
+          )}
+        </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <WeeklyTrendChart data={weeklyTrend} />
