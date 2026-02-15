@@ -375,3 +375,236 @@ export async function computeRecentScorecards(
     .slice(0, limit)
     .map(({ _completedAt: _, ...rest }) => rest)
 }
+
+// ── Engagement: Streak tracking ───────────────────────────────────────
+export interface UserStreak {
+  userId: string
+  name: string
+  department: string
+  currentStreak: number
+  maxStreak: number
+  totalResponses: number
+}
+
+export function computeStreaks(responses: RawResponse[]): UserStreak[] {
+  const userMap = new Map<string, { name: string; dept: string; weeks: Set<string>; total: number }>()
+  for (const r of responses) {
+    if (!userMap.has(r.userId)) userMap.set(r.userId, { name: r.userName || r.userId, dept: r.department, weeks: new Set(), total: 0 })
+    const entry = userMap.get(r.userId)!
+    entry.weeks.add(r.weekOf)
+    entry.total += 1
+  }
+  const allWeeks = Array.from(new Set(responses.map((r) => r.weekOf))).sort()
+  return Array.from(userMap.entries())
+    .map(([userId, { name, dept, weeks, total }]) => {
+      let maxStreak = 0, streak = 0
+      for (const w of allWeeks) { if (weeks.has(w)) { streak++; maxStreak = Math.max(maxStreak, streak) } else { streak = 0 } }
+      return { userId, name, department: dept, currentStreak: streak, maxStreak, totalResponses: total }
+    })
+    .sort((a, b) => b.currentStreak - a.currentStreak)
+}
+
+// ── Engagement: Non-responders ────────────────────────────────────────
+export interface NonResponder {
+  userId: string
+  name: string
+  department: string
+  orgName: string
+  missedWeeks: number
+  lastResponseWeek: string
+}
+
+export async function computeNonResponders(responses: RawResponse[]): Promise<NonResponder[]> {
+  const allUsers = await getDocuments(COLLECTIONS.USERS)
+  const orgs = await getOrganizations()
+  const orgNameMap = new Map(orgs.map((o) => [o.id, (o as Record<string, unknown>).name as string]))
+  const allWeeks = Array.from(new Set(responses.map((r) => r.weekOf))).sort()
+  const totalWeeks = allWeeks.length || 1
+  const respondedWeeks = new Map<string, Set<string>>()
+  for (const r of responses) {
+    if (!respondedWeeks.has(r.userId)) respondedWeeks.set(r.userId, new Set())
+    respondedWeeks.get(r.userId)!.add(r.weekOf)
+  }
+  const result: NonResponder[] = []
+  for (const u of allUsers) {
+    const data = u as Record<string, unknown>
+    const weeks = respondedWeeks.get(u.id)
+    const missedWeeks = totalWeeks - (weeks?.size ?? 0)
+    if (missedWeeks > 0) {
+      const lastWeek = weeks ? Array.from(weeks).sort().pop() ?? "Never" : "Never"
+      result.push({
+        userId: u.id,
+        name: `${(data.firstName as string) ?? ""} ${(data.lastName as string) ?? ""}`.trim() || (data.email as string) ?? "",
+        department: (data.department as string) ?? "",
+        orgName: orgNameMap.get((data.organizationId as string) ?? "") ?? "",
+        missedWeeks,
+        lastResponseWeek: lastWeek,
+      })
+    }
+  }
+  return result.sort((a, b) => b.missedWeeks - a.missedWeeks)
+}
+
+// ── Trend: Score velocity ─────────────────────────────────────────────
+export interface ScoreVelocity {
+  userId: string
+  name: string
+  department: string
+  velocity: number
+  currentAvg: number
+}
+
+export function computeScoreVelocity(responses: RawResponse[]): ScoreVelocity[] {
+  const userWeeks = new Map<string, { name: string; dept: string; weeks: Map<string, { total: number; count: number; date: string }> }>()
+  for (const r of responses) {
+    if (!userWeeks.has(r.userId)) userWeeks.set(r.userId, { name: r.userName, dept: r.department, weeks: new Map() })
+    const entry = userWeeks.get(r.userId)!
+    const scaleVals = Object.values(r.answers).filter((v) => typeof v === "number" && v >= 1 && v <= 10) as number[]
+    if (scaleVals.length === 0) continue
+    const avg = scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length
+    const date = r.weekDate || r.completedAt
+    if (!entry.weeks.has(r.weekOf)) entry.weeks.set(r.weekOf, { total: 0, count: 0, date })
+    const w = entry.weeks.get(r.weekOf)!
+    w.total += avg; w.count += 1
+  }
+  const results: ScoreVelocity[] = []
+  for (const [userId, user] of userWeeks) {
+    const sorted = Array.from(user.weeks.entries()).map(([, { total, count, date }]) => ({ avg: total / count, date })).sort((a, b) => a.date.localeCompare(b.date))
+    if (sorted.length < 2) continue
+    const n = sorted.length
+    let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0
+    for (let i = 0; i < n; i++) { sumX += i; sumY += sorted[i].avg; sumXY += i * sorted[i].avg; sumXX += i * i }
+    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX)
+    results.push({ userId, name: user.name, department: user.dept, velocity: Math.round(slope * 100) / 100, currentAvg: Math.round(sorted[sorted.length - 1].avg * 10) / 10 })
+  }
+  return results.sort((a, b) => Math.abs(b.velocity) - Math.abs(a.velocity))
+}
+
+// ── Trend: Dept variance ──────────────────────────────────────────────
+export interface DepartmentVariance {
+  department: string
+  avgScore: number
+  stdDev: number
+  responseCount: number
+}
+
+export function computeDepartmentVariance(responses: RawResponse[]): DepartmentVariance[] {
+  const deptScores = new Map<string, number[]>()
+  for (const r of responses) {
+    const dept = r.department || "Unknown"
+    if (!deptScores.has(dept)) deptScores.set(dept, [])
+    const scaleVals = Object.values(r.answers).filter((v) => typeof v === "number" && v >= 1 && v <= 10) as number[]
+    if (scaleVals.length === 0) continue
+    deptScores.get(dept)!.push(scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length)
+  }
+  return Array.from(deptScores.entries()).map(([department, scores]) => {
+    const mean = scores.reduce((a, b) => a + b, 0) / scores.length
+    const variance = scores.reduce((sum, s) => sum + (s - mean) ** 2, 0) / scores.length
+    return { department, avgScore: Math.round(mean * 10) / 10, stdDev: Math.round(Math.sqrt(variance) * 100) / 100, responseCount: scores.length }
+  }).sort((a, b) => b.stdDev - a.stdDev)
+}
+
+// ── Trend: Question correlation ───────────────────────────────────────
+export interface QuestionCorrelation {
+  question1: string
+  question2: string
+  correlation: number
+}
+
+export async function computeQuestionCorrelations(responses: RawResponse[]): Promise<QuestionCorrelation[]> {
+  const templates = await fetchTemplates()
+  const qTextMap = new Map<string, string>()
+  for (const t of templates) for (const q of t.questions || []) qTextMap.set(q.id, q.text)
+  const qIds = new Set<string>()
+  for (const r of responses) for (const [qId, val] of Object.entries(r.answers)) { if (typeof val === "number" && val >= 1 && val <= 10) qIds.add(qId) }
+  const qIdArr = Array.from(qIds)
+  const results: QuestionCorrelation[] = []
+  for (let i = 0; i < qIdArr.length; i++) {
+    for (let j = i + 1; j < qIdArr.length; j++) {
+      const q1 = qIdArr[i], q2 = qIdArr[j]
+      const pairs: [number, number][] = []
+      for (const r of responses) {
+        const v1 = r.answers[q1], v2 = r.answers[q2]
+        if (typeof v1 === "number" && typeof v2 === "number" && v1 >= 1 && v1 <= 10 && v2 >= 1 && v2 <= 10) pairs.push([v1, v2])
+      }
+      if (pairs.length < 3) continue
+      const n = pairs.length
+      let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0, sumYY = 0
+      for (const [x, y] of pairs) { sumX += x; sumY += y; sumXY += x * y; sumXX += x * x; sumYY += y * y }
+      const denom = Math.sqrt((n * sumXX - sumX ** 2) * (n * sumYY - sumY ** 2))
+      const corr = denom === 0 ? 0 : (n * sumXY - sumX * sumY) / denom
+      results.push({ question1: qTextMap.get(q1) ?? q1, question2: qTextMap.get(q2) ?? q2, correlation: Math.round(corr * 100) / 100 })
+    }
+  }
+  return results.sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation))
+}
+
+// ── Org Intelligence: Dept over time ──────────────────────────────────
+export interface DeptOverTime { week: string; [department: string]: string | number }
+
+export function computeDeptOverTime(responses: RawResponse[]): DeptOverTime[] {
+  const weekDeptMap = new Map<string, Map<string, { total: number; count: number }>>()
+  const allDepts = new Set<string>()
+  for (const r of responses) {
+    const dept = r.department || "Unknown"
+    allDepts.add(dept)
+    if (!weekDeptMap.has(r.weekOf)) weekDeptMap.set(r.weekOf, new Map())
+    const deptMap = weekDeptMap.get(r.weekOf)!
+    if (!deptMap.has(dept)) deptMap.set(dept, { total: 0, count: 0 })
+    const scaleVals = Object.values(r.answers).filter((v) => typeof v === "number" && v >= 1 && v <= 10) as number[]
+    if (scaleVals.length === 0) continue
+    const avg = scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length
+    const entry = deptMap.get(dept)!
+    entry.total += avg; entry.count += 1
+  }
+  return Array.from(weekDeptMap.keys()).sort().map((week) => {
+    const row: DeptOverTime = { week }
+    const deptMap = weekDeptMap.get(week)!
+    for (const dept of allDepts) { const e = deptMap.get(dept); row[dept] = e ? Math.round((e.total / e.count) * 10) / 10 : 0 }
+    return row
+  })
+}
+
+// ── Org Intelligence: Cross-org benchmarking ──────────────────────────
+export interface OrgBenchmark { orgName: string; avgScore: number; responseRate: number; totalResponses: number; userCount: number }
+
+export async function computeOrgBenchmarks(responses: RawResponse[]): Promise<OrgBenchmark[]> {
+  const orgs = await getOrganizations()
+  const orgNameMap = new Map(orgs.map((o) => [o.id, (o as Record<string, unknown>).name as string]))
+  const users = await getDocuments(COLLECTIONS.USERS)
+  const orgUsers = new Map<string, number>()
+  for (const u of users) { const orgId = (u as Record<string, unknown>).organizationId as string; if (orgId) orgUsers.set(orgId, (orgUsers.get(orgId) ?? 0) + 1) }
+  const orgMap = new Map<string, { total: number; count: number; users: Set<string> }>()
+  for (const r of responses) {
+    if (!orgMap.has(r.organizationId)) orgMap.set(r.organizationId, { total: 0, count: 0, users: new Set() })
+    const entry = orgMap.get(r.organizationId)!
+    const scaleVals = Object.values(r.answers).filter((v) => typeof v === "number" && v >= 1 && v <= 10) as number[]
+    if (scaleVals.length === 0) continue
+    entry.total += scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length; entry.count += 1; entry.users.add(r.userId)
+  }
+  return Array.from(orgMap.entries()).map(([orgId, { total, count, users }]) => {
+    const userCount = orgUsers.get(orgId) ?? 0
+    return { orgName: orgNameMap.get(orgId) ?? orgId, avgScore: Math.round((total / count) * 10) / 10, responseRate: userCount > 0 ? Math.min(100, Math.round((users.size / userCount) * 100)) : 0, totalResponses: count, userCount }
+  }).sort((a, b) => b.avgScore - a.avgScore)
+}
+
+// ── Actionable: Threshold alerts ──────────────────────────────────────
+export interface ThresholdAlert {
+  type: "low_score" | "declining"
+  severity: "warning" | "critical"
+  entity: string
+  entityType: "department" | "user"
+  message: string
+  value: number
+}
+
+export function computeAlerts(responses: RawResponse[], deptPerf: DepartmentPerformance[], velocities: ScoreVelocity[]): ThresholdAlert[] {
+  const alerts: ThresholdAlert[] = []
+  for (const d of deptPerf) {
+    if (d.avgScore < 5.0) alerts.push({ type: "low_score", severity: d.avgScore < 4.0 ? "critical" : "warning", entity: d.department, entityType: "department", message: `${d.department} avg score is ${d.avgScore}/10`, value: d.avgScore })
+  }
+  for (const v of velocities) {
+    if (v.velocity < -0.3) alerts.push({ type: "declining", severity: v.velocity < -0.6 ? "critical" : "warning", entity: v.name, entityType: "user", message: `${v.name} scores declining at ${v.velocity}/week`, value: v.velocity })
+  }
+  return alerts.sort((a, b) => (a.severity === "critical" ? -1 : 1) - (b.severity === "critical" ? -1 : 1))
+}

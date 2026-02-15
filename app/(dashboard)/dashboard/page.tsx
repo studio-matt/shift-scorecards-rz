@@ -19,6 +19,16 @@ import {
   MostImprovedCard,
   RecentScorecardsCard,
 } from "@/components/dashboard/goals-and-recent"
+import {
+  StreaksCard,
+  NonRespondersCard,
+  ScoreVelocityCard,
+  DepartmentVarianceCard,
+  QuestionCorrelationsCard,
+  DeptOverTimeChart,
+  OrgBenchmarkCard,
+  AlertsCard,
+} from "@/components/dashboard/analytics-sections"
 import { getOrganizations } from "@/lib/firestore"
 import {
   fetchAllResponses,
@@ -29,9 +39,25 @@ import {
   computeMostImproved,
   computeQuestionResults,
   computeRecentScorecards,
+  computeStreaks,
+  computeNonResponders,
+  computeScoreVelocity,
+  computeDepartmentVariance,
+  computeQuestionCorrelations,
+  computeDeptOverTime,
+  computeOrgBenchmarks,
+  computeAlerts,
   type AdminStats,
   type MostImprovedEntry,
   type RecentScorecard,
+  type UserStreak,
+  type NonResponder,
+  type ScoreVelocity,
+  type DepartmentVariance,
+  type QuestionCorrelation,
+  type DeptOverTime,
+  type OrgBenchmark,
+  type ThresholdAlert,
 } from "@/lib/dashboard-data"
 import type {
   Organization,
@@ -61,6 +87,14 @@ export default function DashboardPage() {
   const [mostImproved, setMostImproved] = useState<MostImprovedEntry[]>([])
   const [questionResults, setQuestionResults] = useState<QuestionResult[]>([])
   const [recentScorecards, setRecentScorecards] = useState<RecentScorecard[]>([])
+  const [streaks, setStreaks] = useState<UserStreak[]>([])
+  const [nonResponders, setNonResponders] = useState<NonResponder[]>([])
+  const [velocities, setVelocities] = useState<ScoreVelocity[]>([])
+  const [deptVariance, setDeptVariance] = useState<DepartmentVariance[]>([])
+  const [correlations, setCorrelations] = useState<QuestionCorrelation[]>([])
+  const [deptOverTime, setDeptOverTime] = useState<DeptOverTime[]>([])
+  const [orgBenchmarks, setOrgBenchmarks] = useState<OrgBenchmark[]>([])
+  const [alerts, setAlerts] = useState<ThresholdAlert[]>([])
 
   const loadData = useCallback(async () => {
     try {
@@ -90,6 +124,26 @@ export default function DashboardPage() {
       setMostImproved(improved)
       setQuestionResults(questions)
       setRecentScorecards(recent)
+
+      // New analytics
+      const [streakData, nonResp, vel, variance, corr, dot, benchmarks] =
+        await Promise.all([
+          Promise.resolve(computeStreaks(responses)),
+          computeNonResponders(responses),
+          Promise.resolve(computeScoreVelocity(responses)),
+          Promise.resolve(computeDepartmentVariance(responses)),
+          computeQuestionCorrelations(responses),
+          Promise.resolve(computeDeptOverTime(responses)),
+          computeOrgBenchmarks(responses),
+        ])
+      setStreaks(streakData)
+      setNonResponders(nonResp)
+      setVelocities(vel)
+      setDeptVariance(variance)
+      setCorrelations(corr)
+      setDeptOverTime(dot)
+      setOrgBenchmarks(benchmarks)
+      setAlerts(computeAlerts(responses, dept, vel))
     } catch (err) {
       console.error("Failed to load dashboard data:", err)
     } finally {
@@ -229,9 +283,56 @@ export default function DashboardPage() {
             <DepartmentPerformanceChart data={deptPerformance} />
           </div>
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <TopPerformers showCompany data={topPerformers} />
-            <MostImprovedCard showCompany data={mostImproved} />
+          {/* ── Engagement Metrics ────────────────────── */}
+          <div className="border-t border-border pt-4">
+            <h2 className="text-lg font-semibold text-foreground">Engagement Metrics</h2>
+            <p className="mb-4 text-sm text-muted-foreground">Participation streaks and non-responders</p>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <StreaksCard data={streaks} />
+              <NonRespondersCard data={nonResponders} />
+            </div>
+          </div>
+
+          {/* ── Trend & Sentiment ─────────────────────── */}
+          <div className="border-t border-border pt-4">
+            <h2 className="text-lg font-semibold text-foreground">Trend & Sentiment</h2>
+            <p className="mb-4 text-sm text-muted-foreground">Score velocity, variance, and question correlations</p>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <ScoreVelocityCard data={velocities} />
+              <DepartmentVarianceCard data={deptVariance} />
+            </div>
+            <div className="mt-4">
+              <QuestionCorrelationsCard data={correlations} />
+            </div>
+          </div>
+
+          {/* ── Organizational Intelligence ────────────── */}
+          <div className="border-t border-border pt-4">
+            <h2 className="text-lg font-semibold text-foreground">Organizational Intelligence</h2>
+            <p className="mb-4 text-sm text-muted-foreground">Cross-department and cross-org comparisons</p>
+            <DeptOverTimeChart data={deptOverTime} />
+            <div className="mt-4">
+              <OrgBenchmarkCard data={orgBenchmarks} />
+            </div>
+          </div>
+
+          {/* ── Actionable Alerts ──────────────────────── */}
+          {alerts.length > 0 && (
+            <div className="border-t border-border pt-4">
+              <h2 className="text-lg font-semibold text-foreground">Actionable Alerts</h2>
+              <p className="mb-4 text-sm text-muted-foreground">Scores or trends that need attention</p>
+              <AlertsCard data={alerts} />
+            </div>
+          )}
+
+          {/* ── Champions ─────────────────────────────── */}
+          <div className="border-t border-border pt-4">
+            <h2 className="text-lg font-semibold text-foreground">Champions</h2>
+            <p className="mb-4 text-sm text-muted-foreground">Top performers and most improved</p>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <TopPerformers showCompany data={topPerformers} />
+              <MostImprovedCard showCompany data={mostImproved} />
+            </div>
           </div>
 
           <QuestionResults data={questionResults} />
