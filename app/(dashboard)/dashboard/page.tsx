@@ -29,6 +29,11 @@ import {
   OrgBenchmarkCard,
   AlertsCard,
 } from "@/components/dashboard/analytics-sections"
+import {
+  PersonalStreakCard,
+  PersonalBenchmarkCard,
+  PersonalTrendChart,
+} from "@/components/dashboard/user-analytics"
 import { getOrganizations } from "@/lib/firestore"
 import {
   fetchAllResponses,
@@ -47,6 +52,9 @@ import {
   computeDeptOverTime,
   computeOrgBenchmarks,
   computeAlerts,
+  computePersonalStreak,
+  computePersonalTrend,
+  computePersonalBenchmark,
   type AdminStats,
   type MostImprovedEntry,
   type RecentScorecard,
@@ -58,6 +66,9 @@ import {
   type DeptOverTime,
   type OrgBenchmark,
   type ThresholdAlert,
+  type UserPersonalStreak,
+  type PersonalTrendPoint,
+  type PersonalVsBenchmark,
 } from "@/lib/dashboard-data"
 import type {
   Organization,
@@ -95,6 +106,9 @@ export default function DashboardPage() {
   const [deptOverTime, setDeptOverTime] = useState<DeptOverTime[]>([])
   const [orgBenchmarks, setOrgBenchmarks] = useState<OrgBenchmark[]>([])
   const [alerts, setAlerts] = useState<ThresholdAlert[]>([])
+  const [personalStreak, setPersonalStreak] = useState<UserPersonalStreak | null>(null)
+  const [personalTrend, setPersonalTrend] = useState<PersonalTrendPoint[]>([])
+  const [personalBenchmark, setPersonalBenchmark] = useState<PersonalVsBenchmark | null>(null)
 
   const loadData = useCallback(async () => {
     try {
@@ -144,6 +158,13 @@ export default function DashboardPage() {
       setDeptOverTime(dot)
       setOrgBenchmarks(benchmarks)
       setAlerts(computeAlerts(responses, dept, vel))
+
+      // User-specific metrics (uses full response set for anonymized comparisons)
+      if (user?.uid) {
+        setPersonalStreak(computePersonalStreak(responses, user.uid))
+        setPersonalTrend(computePersonalTrend(responses, user.uid))
+        setPersonalBenchmark(computePersonalBenchmark(responses, user.uid))
+      }
     } catch (err) {
       console.error("Failed to load dashboard data:", err)
     } finally {
@@ -355,6 +376,31 @@ export default function DashboardPage() {
 
       <div className="flex flex-col gap-6">
         <StatCards />
+
+        {/* Your Performance */}
+        {(personalStreak || personalBenchmark) && (
+          <div className="border-t border-border pt-4">
+            <h2 className="text-lg font-semibold text-foreground">Your Performance</h2>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Personal stats and how you compare (all comparisons are anonymized)
+            </p>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {personalStreak && <PersonalStreakCard data={personalStreak} />}
+              {personalBenchmark && <PersonalBenchmarkCard data={personalBenchmark} />}
+            </div>
+          </div>
+        )}
+
+        {/* Your Trend */}
+        {personalTrend.length > 0 && (
+          <div className="border-t border-border pt-4">
+            <h2 className="text-lg font-semibold text-foreground">Your Trend</h2>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Your scores over time compared to anonymized averages
+            </p>
+            <PersonalTrendChart data={personalTrend} />
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <WeeklyTrendChart data={weeklyTrend} />

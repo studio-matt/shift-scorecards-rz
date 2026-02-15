@@ -608,3 +608,122 @@ export function computeAlerts(responses: RawResponse[], deptPerf: DepartmentPerf
   }
   return alerts.sort((a, b) => (a.severity === "critical" ? -1 : 1) - (b.severity === "critical" ? -1 : 1))
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// USER-SPECIFIC METRICS (privacy-safe: only their data + anonymized avgs)
+// ══════════════════════════════════════════════════════════════════════
+
+export interface UserPersonalStreak {
+  currentStreak: number
+  maxStreak: number
+  totalResponses: number
+  totalWeeks: number
+}
+
+export function computePersonalStreak(responses: RawResponse[], userId: string): UserPersonalStreak {
+  const allWeeks = Array.from(new Set(responses.map((r) => r.weekOf))).sort()
+  const myWeeks = new Set(responses.filter((r) => r.userId === userId).map((r) => r.weekOf))
+  let maxStreak = 0, streak = 0
+  for (const w of allWeeks) {
+    if (myWeeks.has(w)) { streak++; maxStreak = Math.max(maxStreak, streak) } else { streak = 0 }
+  }
+  return { currentStreak: streak, maxStreak, totalResponses: myWeeks.size, totalWeeks: allWeeks.length }
+}
+
+export interface PersonalTrendPoint {
+  week: string
+  myScore: number
+  deptAvg: number
+  orgAvg: number
+}
+
+export function computePersonalTrend(responses: RawResponse[], userId: string): PersonalTrendPoint[] {
+  const myResponses = responses.filter((r) => r.userId === userId)
+  if (myResponses.length === 0) return []
+  const myDept = myResponses[0].department
+  const myOrg = myResponses[0].organizationId
+
+  const weekMap = new Map<string, { my: number[]; dept: number[]; org: number[] }>()
+  const allWeeks = new Set<string>()
+
+  for (const r of responses) {
+    allWeeks.add(r.weekOf)
+    if (!weekMap.has(r.weekOf)) weekMap.set(r.weekOf, { my: [], dept: [], org: [] })
+    const entry = weekMap.get(r.weekOf)!
+    const scaleVals = Object.values(r.answers).filter((v) => typeof v === "number" && v >= 1 && v <= 10) as number[]
+    if (scaleVals.length === 0) continue
+    const avg = scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length
+    if (r.userId === userId) entry.my.push(avg)
+    if (r.department === myDept) entry.dept.push(avg)
+    if (r.organizationId === myOrg) entry.org.push(avg)
+  }
+
+  return Array.from(allWeeks).sort().map((week) => {
+    const e = weekMap.get(week)!
+    const mean = (arr: number[]) => arr.length > 0 ? Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 10) / 10 : 0
+    return { week, myScore: mean(e.my), deptAvg: mean(e.dept), orgAvg: mean(e.org) }
+  }).filter((p) => p.myScore > 0)
+}
+
+export interface PersonalVsBenchmark {
+  myAvg: number
+  deptAvg: number
+  orgAvg: number
+  deptName: string
+  myVelocity: number
+  percentile: number // what % of users you score above
+}
+
+export function computePersonalBenchmark(responses: RawResponse[], userId: string): PersonalVsBenchmark | null {
+  const myResponses = responses.filter((r) => r.userId === userId)
+  if (myResponses.length === 0) return null
+  const myDept = myResponses[0].department
+  const myOrg = myResponses[0].organizationId
+
+  // My avg
+  const myScores: number[] = []
+  for (const r of myResponses) {
+    const vals = Object.values(r.answers).filter((v) => typeof v === "number" && v >= 1 && v <= 10) as number[]
+    if (vals.length > 0) myScores.push(vals.reduce((a, b) => a + b, 0) / vals.length)
+  }
+  const myAvg = myScores.length > 0 ? myScores.reduce((a, b) => a + b, 0) / myScores.length : 0
+
+  // Dept avg (anonymized - just the number)
+  const deptScores: number[] = []
+  const orgScores: number[] = []
+  const userAvgs = new Map<string, number[]>()
+  for (const r of responses) {
+    if (r.organizationId === myOrg) {
+      const vals = Object.values(r.answers).filter((v) => typeof v === "number" && v >= 1 && v <= 10) as number[]
+      if (vals.length === 0) continue
+      const avg = vals.reduce((a, b) => a + b, 0) / vals.length
+      orgScores.push(avg)
+      if (r.department === myDept) deptScores.push(avg)
+      if (!userAvgs.has(r.userId)) userAvgs.set(r.userId, [])
+      userAvgs.get(r.userId)!.push(avg)
+    }
+  }
+  const deptAvg = deptScores.length > 0 ? deptScores.reduce((a, b) => a + b, 0) / deptScores.length : 0
+  const orgAvg = orgScores.length > 0 ? orgScores.reduce((a, b) => a + b, 0) / orgScores.length : 0
+
+  // Percentile (% of users I score above)
+  const allUserAvgs = Array.from(userAvgs.entries()).map(([uid, scores]) => ({
+    uid,
+    avg: scores.reduce((a, b) => a + b, 0) / scores.length,
+  }))
+  const belowMe = allUserAvgs.filter((u) => u.avg < myAvg).length
+  const percentile = allUserAvgs.length > 1 ? Math.round((belowMe / (allUserAvgs.length - 1)) * 100) : 50
+
+  // My velocity
+  const vel = computeScoreVelocity(myResponses)
+  const myVel = vel.find((v) => v.userId === userId)
+
+  return {
+    myAvg: Math.round(myAvg * 10) / 10,
+    deptAvg: Math.round(deptAvg * 10) / 10,
+    orgAvg: Math.round(orgAvg * 10) / 10,
+    deptName: myDept,
+    myVelocity: myVel?.velocity ?? 0,
+    percentile,
+  }
+}
