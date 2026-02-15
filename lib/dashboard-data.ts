@@ -434,7 +434,7 @@ export async function computeNonResponders(responses: RawResponse[]): Promise<No
       const lastWeek = weeks ? Array.from(weeks).sort().pop() ?? "Never" : "Never"
       result.push({
         userId: u.id,
-        name: `${(data.firstName as string) ?? ""} ${(data.lastName as string) ?? ""}`.trim() || (data.email as string) ?? "",
+        name: `${(data.firstName as string) ?? ""} ${(data.lastName as string) ?? ""}`.trim() || ((data.email as string) ?? ""),
         department: (data.department as string) ?? "",
         orgName: orgNameMap.get((data.organizationId as string) ?? "") ?? "",
         missedWeeks,
