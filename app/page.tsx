@@ -1,5 +1,6 @@
 "use client"
 
+// Login page - dynamically loaded to prevent browser extension hydration conflicts
 import dynamic from "next/dynamic"
 
 const LoginForm = dynamic(() => import("@/components/login-form"), {
