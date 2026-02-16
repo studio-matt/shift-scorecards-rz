@@ -98,7 +98,7 @@ function LoginForm() {
     <div className="flex min-h-screen items-center justify-center bg-muted px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="items-center text-center">
-          <ShiftLogo size="lg" imageScale={0.6} className="mb-4" />
+          <ShiftLogo size="lg" imageScale={0.7} className="mb-4" />
           <CardTitle className="text-2xl font-bold text-foreground">
             {mode === "login" ? "Welcome Back" : "Create Account"}
           </CardTitle>
