@@ -26,8 +26,13 @@ function LoginForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [mode, setMode] = useState<"login" | "signup">("login")
+  const [mounted, setMounted] = useState(false)
   const { login, signup, loginWithProvider, isAuthenticated, ready } = useAuth()
   const router = useRouter()
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // If already authenticated, redirect to dashboard
   useEffect(() => {
@@ -109,7 +114,20 @@ function LoginForm() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4" suppressHydrationWarning>
+          {!mounted ? (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <Label>Email Address</Label>
+                <div className="h-10 rounded-md border border-input bg-background" />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label>Password</Label>
+                <div className="h-10 rounded-md border border-input bg-background" />
+              </div>
+              <Button className="w-full" disabled>Sign In</Button>
+            </div>
+          ) : (
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             {error && (
               <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
                 {error}
@@ -128,7 +146,7 @@ function LoginForm() {
                 />
               </div>
             )}
-            <div className="flex flex-col gap-2" suppressHydrationWarning>
+            <div className="flex flex-col gap-2">
               <Label htmlFor="email">Email Address</Label>
               <Input
                 id="email"
@@ -139,7 +157,7 @@ function LoginForm() {
                 required
               />
             </div>
-            <div className="flex flex-col gap-2" suppressHydrationWarning>
+            <div className="flex flex-col gap-2">
               <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
@@ -211,6 +229,7 @@ function LoginForm() {
               {loading ? "Please wait..." : mode === "login" ? "Sign In" : "Create Account"}
             </Button>
           </form>
+          )}
 
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
