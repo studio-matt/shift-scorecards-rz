@@ -109,7 +109,7 @@ function LoginForm() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4" suppressHydrationWarning>
             {error && (
               <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
                 {error}
@@ -128,7 +128,7 @@ function LoginForm() {
                 />
               </div>
             )}
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2" suppressHydrationWarning>
               <Label htmlFor="email">Email Address</Label>
               <Input
                 id="email"
@@ -139,7 +139,7 @@ function LoginForm() {
                 required
               />
             </div>
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2" suppressHydrationWarning>
               <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
