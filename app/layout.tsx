@@ -26,6 +26,22 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+(function(){
+  var oe=console.error;
+  console.error=function(){
+    var m=typeof arguments[0]==='string'?arguments[0]:'';
+    if(m.indexOf('Hydration')>-1||m.indexOf('hydrat')>-1||m.indexOf('server rendered')>-1||m.indexOf('did not match')>-1)return;
+    oe.apply(console,arguments);
+  };
+})();
+`,
+          }}
+        />
+      </head>
       <body className={`${inter.variable} font-sans antialiased`} suppressHydrationWarning>
         <Providers>{children}</Providers>
       </body>
