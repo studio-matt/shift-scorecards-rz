@@ -4,10 +4,12 @@ export function ShiftLogo({
   className = "",
   size = "default",
   variant = "color",
+  imageScale = 1,
 }: {
   className?: string
   size?: "sm" | "default" | "lg"
   variant?: "color" | "white"
+  imageScale?: number
 }) {
   const sizeMap = {
     sm: { h: 28, text: "text-lg" },
@@ -15,7 +17,8 @@ export function ShiftLogo({
     lg: { h: 44, text: "text-3xl" },
   }
 
-  const { h, text } = sizeMap[size]
+  const { h: baseH, text } = sizeMap[size]
+  const h = Math.round(baseH * imageScale)
   const src = variant === "white" ? "/shift-white.png" : "/shift-logo.webp"
 
   return (
