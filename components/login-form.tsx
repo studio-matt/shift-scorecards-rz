@@ -107,7 +107,7 @@ export default function LoginForm() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4" data-lpignore="true">
             {error && (
               <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
                 {error}
@@ -116,14 +116,16 @@ export default function LoginForm() {
             {mode === "signup" && (
               <div className="flex flex-col gap-2">
                 <Label htmlFor="fullName">Full Name</Label>
-                <Input
-                  id="fullName"
-                  type="text"
-                  placeholder="Enter your full name"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  required
-                />
+              <Input
+                id="fullName"
+                type="text"
+                placeholder="Enter your full name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                required
+                data-lpignore="true"
+                data-form-type="other"
+              />
               </div>
             )}
             <div className="flex flex-col gap-2">
@@ -135,6 +137,8 @@ export default function LoginForm() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                data-lpignore="true"
+                data-form-type="other"
               />
             </div>
             <div className="flex flex-col gap-2">
@@ -146,6 +150,8 @@ export default function LoginForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                data-lpignore="true"
+                data-form-type="other"
               />
             </div>
             {mode === "signup" && (
@@ -159,6 +165,8 @@ export default function LoginForm() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
+                    data-lpignore="true"
+                    data-form-type="other"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -172,6 +180,8 @@ export default function LoginForm() {
                       placeholder="Company name"
                       value={companyName}
                       onChange={(e) => setCompanyName(e.target.value)}
+                      data-lpignore="true"
+                      data-form-type="other"
                     />
                   </div>
                   <div className="flex flex-col gap-2">
@@ -184,6 +194,8 @@ export default function LoginForm() {
                       placeholder="Department"
                       value={departmentName}
                       onChange={(e) => setDepartmentName(e.target.value)}
+                      data-lpignore="true"
+                      data-form-type="other"
                     />
                   </div>
                 </div>
