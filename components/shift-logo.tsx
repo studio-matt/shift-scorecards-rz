@@ -29,7 +29,7 @@ export function ShiftLogo({
         width={Math.round(h * 0.82)}
         height={h}
         className="object-contain"
-        style={{ width: "auto", height: "auto" }}
+        style={{ width: Math.round(h * 0.82), height: h }}
         priority
       />
       <div className={`font-sans font-bold tracking-tight ${text}`}>
