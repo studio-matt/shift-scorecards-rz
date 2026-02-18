@@ -1,4 +1,4 @@
 {
-  "installCommand": "rm -f node_modules 2>/dev/null; pnpm install",
-  "buildCommand": "pnpm run build"
+  "installCommand": "rm -f node_modules 2>/dev/null; npx pnpm@9.15.4 install",
+  "buildCommand": "npx pnpm@9.15.4 run build"
 }
