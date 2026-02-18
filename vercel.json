@@ -1,0 +1,4 @@
+{
+  "installCommand": "rm -f node_modules 2>/dev/null; pnpm install",
+  "buildCommand": "pnpm run build"
+}
