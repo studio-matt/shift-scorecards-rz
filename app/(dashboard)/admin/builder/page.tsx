@@ -4,10 +4,14 @@ import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import {
   Card,
   CardContent,
+  CardHeader,
+  CardTitle,
 } from "@/components/ui/card"
 import {
   DropdownMenu,
@@ -24,10 +28,14 @@ import {
   Copy,
   Trash2,
   Loader2,
+  Save,
+  Info,
 } from "lucide-react"
 import {
   getDocuments,
+  getDocument,
   createDocument,
+  setDocument,
   deleteDocument,
   COLLECTIONS,
 } from "@/lib/firestore"
@@ -42,6 +50,13 @@ interface Template {
   status: "active" | "draft" | "archived"
   updatedAt?: unknown
   createdAt?: unknown
+}
+
+interface InsightRule {
+  id: string
+  min: number
+  max: number
+  message: string
 }
 
 const statusColors: Record<string, string> = {
@@ -67,10 +82,28 @@ export default function TemplatesPage() {
   const [search, setSearch] = useState("")
   const [items, setItems] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
+  const [savingGlobal, setSavingGlobal] = useState(false)
+  const [globalScoreRules, setGlobalScoreRules] = useState<InsightRule[]>([
+    { id: "gsr-1", min: 0, max: 5.9, message: "Every submission builds your baseline. Focus on small, consistent improvements each week." },
+    { id: "gsr-2", min: 6, max: 7.9, message: "Solid scores across the board. Look for one area to push from good to great next week." },
+    { id: "gsr-3", min: 8, max: 10, message: "Consistently high performance. You're setting the standard for your team." },
+  ])
+  const [globalPercentileRules, setGlobalPercentileRules] = useState<InsightRule[]>([
+    { id: "gpr-1", min: 75, max: 100, message: "You're in the top performers of your organization. Keep leading by example." },
+    { id: "gpr-2", min: 50, max: 74, message: "You're scoring above your department average. Keep pushing higher." },
+    { id: "gpr-3", min: 0, max: 49, message: "Focus on identifying one area to improve each week to climb the rankings." },
+  ])
 
   const fetchTemplates = useCallback(async () => {
     try {
       setLoading(true)
+      // Load global insight settings
+      const globalDoc = await getDocument(COLLECTIONS.SETTINGS, "globalInsights")
+      if (globalDoc) {
+        const g = globalDoc as Record<string, unknown>
+        if (g.scoreRules) setGlobalScoreRules(g.scoreRules as InsightRule[])
+        if (g.percentileRules) setGlobalPercentileRules(g.percentileRules as InsightRule[])
+      }
       const docs = await getDocuments(COLLECTIONS.TEMPLATES, orderBy("name"))
       setItems(
         docs.map((d) => ({
@@ -100,6 +133,20 @@ export default function TemplatesPage() {
       t.name.toLowerCase().includes(search.toLowerCase()) ||
       t.description.toLowerCase().includes(search.toLowerCase()),
   )
+
+  async function handleSaveGlobal() {
+    setSavingGlobal(true)
+    try {
+      await setDocument(COLLECTIONS.SETTINGS, "globalInsights", {
+        scoreRules: globalScoreRules,
+        percentileRules: globalPercentileRules,
+      })
+    } catch (err) {
+      console.error("Failed to save global insights:", err)
+    } finally {
+      setSavingGlobal(false)
+    }
+  }
 
   async function handleDelete(id: string) {
     try {
@@ -238,6 +285,196 @@ export default function TemplatesPage() {
             </CardContent>
           </Card>
         )}
+      </div>
+
+      {/* ── Global Success & Progress Messages ── */}
+      <div className="mt-12">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-foreground">
+              Global Success & Progress Messages
+            </h2>
+            <div className="mt-1 flex items-start gap-1.5">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                These messages apply to all templates by default. Individual templates can override them by unchecking "Use Universal Success & Progress Messages" in their settings.
+              </p>
+            </div>
+          </div>
+          <Button onClick={handleSaveGlobal} disabled={savingGlobal}>
+            <Save className="mr-2 h-4 w-4" />
+            {savingGlobal ? "Saving..." : "Save Global Messages"}
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* Score-Based */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base font-semibold">
+                Score-Based Progress Markers
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Messages shown based on average score (1-10 scale).
+              </p>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {globalScoreRules.map((rule) => (
+                <div key={rule.id} className="flex flex-col gap-2 rounded-lg border border-border p-3">
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
+                      <Label className="w-8 text-xs text-muted-foreground">Min</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={10}
+                        step={0.1}
+                        value={rule.min}
+                        onChange={(e) =>
+                          setGlobalScoreRules((prev) =>
+                            prev.map((r) => (r.id === rule.id ? { ...r, min: parseFloat(e.target.value) || 0 } : r))
+                          )
+                        }
+                        className="w-20 text-sm"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Label className="w-8 text-xs text-muted-foreground">Max</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={10}
+                        step={0.1}
+                        value={rule.max}
+                        onChange={(e) =>
+                          setGlobalScoreRules((prev) =>
+                            prev.map((r) => (r.id === rule.id ? { ...r, max: parseFloat(e.target.value) || 0 } : r))
+                          )
+                        }
+                        className="w-20 text-sm"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setGlobalScoreRules((prev) => prev.filter((r) => r.id !== rule.id))}
+                      className="ml-auto text-muted-foreground hover:text-destructive"
+                      aria-label="Remove rule"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <Textarea
+                    value={rule.message}
+                    onChange={(e) =>
+                      setGlobalScoreRules((prev) =>
+                        prev.map((r) => (r.id === rule.id ? { ...r, message: e.target.value } : r))
+                      )
+                    }
+                    placeholder="Message shown when score falls in this range..."
+                    rows={2}
+                    className="text-sm"
+                  />
+                </div>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setGlobalScoreRules((prev) => [
+                    ...prev,
+                    { id: `gsr-${Date.now()}`, min: 0, max: 10, message: "" },
+                  ])
+                }
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                Add Score Rule
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Percentile-Based */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base font-semibold">
+                Percentile-Based Progress Markers
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Messages shown based on percentile rank (0-100%).
+              </p>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {globalPercentileRules.map((rule) => (
+                <div key={rule.id} className="flex flex-col gap-2 rounded-lg border border-border p-3">
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
+                      <Label className="w-8 text-xs text-muted-foreground">Min</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={rule.min}
+                        onChange={(e) =>
+                          setGlobalPercentileRules((prev) =>
+                            prev.map((r) => (r.id === rule.id ? { ...r, min: parseInt(e.target.value) || 0 } : r))
+                          )
+                        }
+                        className="w-20 text-sm"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Label className="w-8 text-xs text-muted-foreground">Max</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={rule.max}
+                        onChange={(e) =>
+                          setGlobalPercentileRules((prev) =>
+                            prev.map((r) => (r.id === rule.id ? { ...r, max: parseInt(e.target.value) || 0 } : r))
+                          )
+                        }
+                        className="w-20 text-sm"
+                      />
+                    </div>
+                    <span className="text-xs text-muted-foreground">%</span>
+                    <button
+                      type="button"
+                      onClick={() => setGlobalPercentileRules((prev) => prev.filter((r) => r.id !== rule.id))}
+                      className="ml-auto text-muted-foreground hover:text-destructive"
+                      aria-label="Remove rule"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <Textarea
+                    value={rule.message}
+                    onChange={(e) =>
+                      setGlobalPercentileRules((prev) =>
+                        prev.map((r) => (r.id === rule.id ? { ...r, message: e.target.value } : r))
+                      )
+                    }
+                    placeholder="Message shown when percentile falls in this range..."
+                    rows={2}
+                    className="text-sm"
+                  />
+                </div>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setGlobalPercentileRules((prev) => [
+                    ...prev,
+                    { id: `gpr-${Date.now()}`, min: 0, max: 100, message: "" },
+                  ])
+                }
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                Add Percentile Rule
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   )

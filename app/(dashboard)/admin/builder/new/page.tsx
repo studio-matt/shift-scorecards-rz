@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Card,
   CardContent,
@@ -110,6 +111,7 @@ export default function NewScorecardBuilderPage() {
   const [newQuestionType, setNewQuestionType] = useState<"scale" | "number" | "text">("scale")
 
   // Insight rules
+  const [useGlobalInsights, setUseGlobalInsights] = useState(true)
   const [scoreInsightRules, setScoreInsightRules] = useState<ScoreInsightRule[]>([
     { id: "sr-1", min: 0, max: 5.9, message: "Every submission builds your baseline. Focus on small, consistent improvements each week." },
     { id: "sr-2", min: 6, max: 7.9, message: "Solid scores across the board. Look for one area to push from good to great next week." },
@@ -141,6 +143,7 @@ export default function NewScorecardBuilderPage() {
             type: q.type ?? "scale",
           })),
         )
+        if (typeof d.useGlobalInsights === "boolean") setUseGlobalInsights(d.useGlobalInsights)
         if (d.scoreInsightRules) setScoreInsightRules(d.scoreInsightRules as ScoreInsightRule[])
         if (d.percentileInsightRules) setPercentileInsightRules(d.percentileInsightRules as PercentileInsightRule[])
       }
@@ -194,8 +197,9 @@ export default function NewScorecardBuilderPage() {
         questions,
         questionCount: questions.length,
         status: saveStatus,
-        scoreInsightRules,
-        percentileInsightRules,
+        useGlobalInsights,
+        scoreInsightRules: useGlobalInsights ? [] : scoreInsightRules,
+        percentileInsightRules: useGlobalInsights ? [] : percentileInsightRules,
       }
       if (isEditing && templateId) {
         await updateDocument(COLLECTIONS.TEMPLATES, templateId, payload)
@@ -378,176 +382,209 @@ export default function NewScorecardBuilderPage() {
             </CardContent>
           </Card>
 
-          {/* ── Score-Based Progress Markers ── */}
+          {/* ── Success & Progress Messages ── */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-semibold">
-                Score-Based Progress Markers
+                Success & Progress Messages
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                Define messages shown to users based on their average score (1-10 scale). Each rule needs a min/max range and a message.
+                Messages shown to users after submitting their scorecard, based on score and ranking.
               </p>
             </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              {scoreInsightRules.map((rule) => (
-                <div key={rule.id} className="flex flex-col gap-2 rounded-lg border border-border p-3">
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1">
-                      <Label className="text-xs text-muted-foreground w-8">Min</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={10}
-                        step={0.1}
-                        value={rule.min}
-                        onChange={(e) =>
-                          setScoreInsightRules((prev) =>
-                            prev.map((r) => (r.id === rule.id ? { ...r, min: parseFloat(e.target.value) || 0 } : r))
-                          )
-                        }
-                        className="w-20 text-sm"
-                      />
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Label className="text-xs text-muted-foreground w-8">Max</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={10}
-                        step={0.1}
-                        value={rule.max}
-                        onChange={(e) =>
-                          setScoreInsightRules((prev) =>
-                            prev.map((r) => (r.id === rule.id ? { ...r, max: parseFloat(e.target.value) || 0 } : r))
-                          )
-                        }
-                        className="w-20 text-sm"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setScoreInsightRules((prev) => prev.filter((r) => r.id !== rule.id))
-                      }
-                      className="ml-auto text-muted-foreground hover:text-destructive"
-                      aria-label="Remove rule"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <Textarea
-                    value={rule.message}
-                    onChange={(e) =>
-                      setScoreInsightRules((prev) =>
-                        prev.map((r) => (r.id === rule.id ? { ...r, message: e.target.value } : r))
-                      )
-                    }
-                    placeholder="Message shown when score falls in this range..."
-                    rows={2}
-                    className="text-sm"
-                  />
-                </div>
-              ))}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setScoreInsightRules((prev) => [
-                    ...prev,
-                    { id: `sr-${Date.now()}`, min: 0, max: 10, message: "" },
-                  ])
-                }
-              >
-                <Plus className="mr-1 h-4 w-4" />
-                Add Score Rule
-              </Button>
+            <CardContent className="flex flex-col gap-4">
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  id="useGlobal"
+                  checked={useGlobalInsights}
+                  onCheckedChange={(v) => setUseGlobalInsights(!!v)}
+                />
+                <Label htmlFor="useGlobal" className="text-sm font-medium cursor-pointer">
+                  Use Universal Success & Progress Messages
+                </Label>
+              </div>
+              {useGlobalInsights && (
+                <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+                  This template uses the global messages defined on the Templates landing page. Uncheck to customize messages for this template only.
+                </p>
+              )}
             </CardContent>
           </Card>
 
-          {/* ── Percentile-Based Progress Markers ── */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">
-                Percentile-Based Progress Markers
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                Define messages shown to users based on their percentile rank (0-100%) within their organization.
-              </p>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              {percentileInsightRules.map((rule) => (
-                <div key={rule.id} className="flex flex-col gap-2 rounded-lg border border-border p-3">
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1">
-                      <Label className="text-xs text-muted-foreground w-8">Min</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={rule.min}
+          {!useGlobalInsights && (
+            <>
+              {/* ── Score-Based Progress Markers ── */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base font-semibold">
+                    Score-Based Progress Markers
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    Messages shown based on the user{"'"}s average score (1-10 scale). Overrides global rules for this template.
+                  </p>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3">
+                  {scoreInsightRules.map((rule) => (
+                    <div key={rule.id} className="flex flex-col gap-2 rounded-lg border border-border p-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
+                          <Label className="text-xs text-muted-foreground w-8">Min</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={10}
+                            step={0.1}
+                            value={rule.min}
+                            onChange={(e) =>
+                              setScoreInsightRules((prev) =>
+                                prev.map((r) => (r.id === rule.id ? { ...r, min: parseFloat(e.target.value) || 0 } : r))
+                              )
+                            }
+                            className="w-20 text-sm"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Label className="text-xs text-muted-foreground w-8">Max</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={10}
+                            step={0.1}
+                            value={rule.max}
+                            onChange={(e) =>
+                              setScoreInsightRules((prev) =>
+                                prev.map((r) => (r.id === rule.id ? { ...r, max: parseFloat(e.target.value) || 0 } : r))
+                              )
+                            }
+                            className="w-20 text-sm"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setScoreInsightRules((prev) => prev.filter((r) => r.id !== rule.id))
+                          }
+                          className="ml-auto text-muted-foreground hover:text-destructive"
+                          aria-label="Remove rule"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <Textarea
+                        value={rule.message}
                         onChange={(e) =>
-                          setPercentileInsightRules((prev) =>
-                            prev.map((r) => (r.id === rule.id ? { ...r, min: parseInt(e.target.value) || 0 } : r))
+                          setScoreInsightRules((prev) =>
+                            prev.map((r) => (r.id === rule.id ? { ...r, message: e.target.value } : r))
                           )
                         }
-                        className="w-20 text-sm"
+                        placeholder="Message shown when score falls in this range..."
+                        rows={2}
+                        className="text-sm"
                       />
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Label className="text-xs text-muted-foreground w-8">Max</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={rule.max}
-                        onChange={(e) =>
-                          setPercentileInsightRules((prev) =>
-                            prev.map((r) => (r.id === rule.id ? { ...r, max: parseInt(e.target.value) || 0 } : r))
-                          )
-                        }
-                        className="w-20 text-sm"
-                      />
-                    </div>
-                    <span className="text-xs text-muted-foreground">%</span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setPercentileInsightRules((prev) => prev.filter((r) => r.id !== rule.id))
-                      }
-                      className="ml-auto text-muted-foreground hover:text-destructive"
-                      aria-label="Remove rule"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <Textarea
-                    value={rule.message}
-                    onChange={(e) =>
-                      setPercentileInsightRules((prev) =>
-                        prev.map((r) => (r.id === rule.id ? { ...r, message: e.target.value } : r))
-                      )
+                  ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setScoreInsightRules((prev) => [
+                        ...prev,
+                        { id: `sr-${Date.now()}`, min: 0, max: 10, message: "" },
+                      ])
                     }
-                    placeholder="Message shown when percentile falls in this range..."
-                    rows={2}
-                    className="text-sm"
-                  />
-                </div>
-              ))}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setPercentileInsightRules((prev) => [
-                    ...prev,
-                    { id: `pr-${Date.now()}`, min: 0, max: 100, message: "" },
-                  ])
-                }
-              >
-                <Plus className="mr-1 h-4 w-4" />
-                Add Percentile Rule
-              </Button>
-            </CardContent>
-          </Card>
+                  >
+                    <Plus className="mr-1 h-4 w-4" />
+                    Add Score Rule
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* ── Percentile-Based Progress Markers ── */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base font-semibold">
+                    Percentile-Based Progress Markers
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    Messages shown based on the user{"'"}s percentile rank (0-100%). Overrides global rules for this template.
+                  </p>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3">
+                  {percentileInsightRules.map((rule) => (
+                    <div key={rule.id} className="flex flex-col gap-2 rounded-lg border border-border p-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
+                          <Label className="text-xs text-muted-foreground w-8">Min</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={rule.min}
+                            onChange={(e) =>
+                              setPercentileInsightRules((prev) =>
+                                prev.map((r) => (r.id === rule.id ? { ...r, min: parseInt(e.target.value) || 0 } : r))
+                              )
+                            }
+                            className="w-20 text-sm"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Label className="text-xs text-muted-foreground w-8">Max</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={rule.max}
+                            onChange={(e) =>
+                              setPercentileInsightRules((prev) =>
+                                prev.map((r) => (r.id === rule.id ? { ...r, max: parseInt(e.target.value) || 0 } : r))
+                              )
+                            }
+                            className="w-20 text-sm"
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground">%</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPercentileInsightRules((prev) => prev.filter((r) => r.id !== rule.id))
+                          }
+                          className="ml-auto text-muted-foreground hover:text-destructive"
+                          aria-label="Remove rule"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <Textarea
+                        value={rule.message}
+                        onChange={(e) =>
+                          setPercentileInsightRules((prev) =>
+                            prev.map((r) => (r.id === rule.id ? { ...r, message: e.target.value } : r))
+                          )
+                        }
+                        placeholder="Message shown when percentile falls in this range..."
+                        rows={2}
+                        className="text-sm"
+                      />
+                    </div>
+                  ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setPercentileInsightRules((prev) => [
+                        ...prev,
+                        { id: `pr-${Date.now()}`, min: 0, max: 100, message: "" },
+                      ])
+                    }
+                  >
+                    <Plus className="mr-1 h-4 w-4" />
+                    Add Percentile Rule
+                  </Button>
+                </CardContent>
+              </Card>
+            </>
+          )}
 
           {/* Save actions */}
           <div className="flex justify-end gap-3">

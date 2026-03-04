@@ -538,17 +538,36 @@ function ResultsSummary({
           })
         }
 
-        // 3. Generate insight from template rules (or fallback defaults)
-        const scoreRules = template?.scoreInsightRules ?? [
-          { id: "d1", min: 0, max: 5.9, message: "Every submission builds your baseline. Focus on small, consistent improvements each week." },
-          { id: "d2", min: 6, max: 7.9, message: "Solid scores across the board. Look for one area to push from good to great next week." },
-          { id: "d3", min: 8, max: 10, message: "Consistently high performance. You're setting the standard for your team." },
-        ]
-        const pctRules = template?.percentileInsightRules ?? [
-          { id: "p1", min: 75, max: 100, message: "You're in the top performers of your organization. Keep leading by example." },
-          { id: "p2", min: 50, max: 74, message: "You're scoring above your department average. Keep pushing higher." },
-          { id: "p3", min: 0, max: 49, message: "Focus on identifying one area to improve each week to climb the rankings." },
-        ]
+        // 3. Generate insight from template rules or global rules
+        const useGlobal = template?.useGlobalInsights !== false
+        let scoreRules = template?.scoreInsightRules ?? []
+        let pctRules = template?.percentileInsightRules ?? []
+
+        if (useGlobal || scoreRules.length === 0 || pctRules.length === 0) {
+          // Fetch global settings
+          const globalDoc = await getDocument(COLLECTIONS.SETTINGS, "globalInsights")
+          const g = (globalDoc as Record<string, unknown>) ?? {}
+          const globalScoreRules = (g.scoreRules as InsightRule[]) ?? []
+          const globalPctRules = (g.percentileRules as InsightRule[]) ?? []
+          if (useGlobal || scoreRules.length === 0) scoreRules = globalScoreRules
+          if (useGlobal || pctRules.length === 0) pctRules = globalPctRules
+        }
+
+        // Final fallback if nothing configured anywhere
+        if (scoreRules.length === 0) {
+          scoreRules = [
+            { id: "d1", min: 0, max: 5.9, message: "Every submission builds your baseline. Focus on small, consistent improvements each week." },
+            { id: "d2", min: 6, max: 7.9, message: "Solid scores across the board. Look for one area to push from good to great next week." },
+            { id: "d3", min: 8, max: 10, message: "Consistently high performance. You're setting the standard for your team." },
+          ]
+        }
+        if (pctRules.length === 0) {
+          pctRules = [
+            { id: "p1", min: 75, max: 100, message: "You're in the top performers of your organization. Keep leading by example." },
+            { id: "p2", min: 50, max: 74, message: "You're scoring above your department average. Keep pushing higher." },
+            { id: "p3", min: 0, max: 49, message: "Focus on identifying one area to improve each week to climb the rankings." },
+          ]
+        }
 
         const insightLines: string[] = []
 
