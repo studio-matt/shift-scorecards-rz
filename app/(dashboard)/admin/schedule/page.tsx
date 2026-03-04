@@ -29,6 +29,7 @@ import {
 import {
   Send,
   Calendar,
+  CalendarPlus,
   Clock,
   CheckCircle2,
   AlertCircle,
@@ -37,6 +38,7 @@ import {
   Trash2,
   Pause,
   Play,
+  RotateCcw,
 } from "lucide-react"
 import {
   getOrganizations,
@@ -74,8 +76,8 @@ export default function ScheduleReleasePage() {
 
   // Form state
   const [selectedTemplate, setSelectedTemplate] = useState("")
-  const [selectedCompany, setSelectedCompany] = useState("")
-  const [selectedDepartment, setSelectedDepartment] = useState("")
+  const [selectedCompany, setSelectedCompany] = useState("all")
+  const [selectedDepartment, setSelectedDepartment] = useState("all")
   const [scheduleType, setScheduleType] = useState("now")
   const [scheduledDateTime, setScheduledDateTime] = useState("")
   const [recurringFrequency, setRecurringFrequency] = useState("weekly")
@@ -84,6 +86,8 @@ export default function ScheduleReleasePage() {
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const [sentType, setSentType] = useState("")
+  const [extendModalOpen, setExtendModalOpen] = useState(false)
+  const [extendDate, setExtendDate] = useState("")
 
   const activeOrg = orgs.find((o) => o.id === selectedCompany)
 
@@ -136,12 +140,12 @@ export default function ScheduleReleasePage() {
   }, [fetchData])
 
   async function handleSend() {
-    if (!selectedTemplate || !selectedCompany) return
+    if (!selectedTemplate) return
 
     setSending(true)
     try {
       const template = publishedTemplates.find((t) => t.id === selectedTemplate)
-      const org = orgs.find((o) => o.id === selectedCompany)
+      const org = selectedCompany === "all" ? null : orgs.find((o) => o.id === selectedCompany)
       const now = new Date()
 
       const activeFrom = scheduleType === "now"
@@ -162,8 +166,8 @@ export default function ScheduleReleasePage() {
       await createDocument(COLLECTIONS.SCHEDULES, {
         templateId: selectedTemplate,
         templateName: template?.name ?? "",
-        organizationId: selectedCompany,
-        organizationName: org?.name ?? "",
+        organizationId: selectedCompany === "all" ? "all" : selectedCompany,
+        organizationName: selectedCompany === "all" ? "All Companies" : (org?.name ?? ""),
         department: selectedDepartment || "all",
         scheduleType,
         scheduledAt: activeFrom,
@@ -178,8 +182,8 @@ export default function ScheduleReleasePage() {
 
       // Reset form
       setSelectedTemplate("")
-      setSelectedCompany("")
-      setSelectedDepartment("")
+      setSelectedCompany("all")
+      setSelectedDepartment("all")
       setScheduleType("now")
       setScheduledDateTime("")
       setRecurringFrequency("weekly")
@@ -342,9 +346,10 @@ export default function ScheduleReleasePage() {
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select company..." />
+                      <SelectValue placeholder="All Companies" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="all">All Companies</SelectItem>
                       {orgs.map((org) => (
                         <SelectItem key={org.id} value={org.id}>
                           {org.name}
@@ -358,14 +363,14 @@ export default function ScheduleReleasePage() {
                   <Select
                     value={selectedDepartment}
                     onValueChange={setSelectedDepartment}
-                    disabled={!selectedCompany}
+                    disabled={selectedCompany === "all"}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={selectedCompany ? "All Departments" : "Select company first"} />
+                      <SelectValue placeholder="All Departments" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Departments</SelectItem>
-                      {activeOrg?.departments.map((dept) => (
+                      {selectedCompany !== "all" && activeOrg?.departments.map((dept) => (
                         <SelectItem key={dept} value={dept}>
                           {dept}
                         </SelectItem>
@@ -447,12 +452,7 @@ export default function ScheduleReleasePage() {
                 </Select>
               </div>
 
-              {!selectedCompany && (
-                <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <AlertCircle className="h-3 w-3" />
-                  Select a company to configure delivery
-                </p>
-              )}
+
             </CardContent>
           </Card>
 
@@ -477,11 +477,11 @@ export default function ScheduleReleasePage() {
                     All Users in Group
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {selectedCompany
-                      ? selectedDepartment && selectedDepartment !== "all"
+                    {selectedCompany === "all"
+                      ? "Send to all users across all companies"
+                      : selectedDepartment && selectedDepartment !== "all"
                         ? `Send to all users in ${activeOrg?.name ?? "company"} - ${selectedDepartment} department`
-                        : `Send to all users in ${activeOrg?.name ?? "selected company"}`
-                      : "Select a company above to define the group"}
+                        : `Send to all users in ${activeOrg?.name ?? "selected company"}`}
                   </span>
                 </Label>
               </div>
@@ -492,7 +492,7 @@ export default function ScheduleReleasePage() {
           <div className="flex justify-end">
             <Button
               size="lg"
-              disabled={!selectedTemplate || !selectedCompany || sending}
+              disabled={!selectedTemplate || sending}
               onClick={handleSend}
             >
               {sending ? (
@@ -508,38 +508,81 @@ export default function ScheduleReleasePage() {
         {/* Right column */}
         <div className="flex flex-col gap-6">
           {/* Currently Active */}
-          {activeRelease && (
-            <Card className="border-primary/30">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-semibold">Currently Active</CardTitle>
-                  <Badge className="bg-success/10 text-success">Live</Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm font-medium text-foreground">{activeRelease.templateName}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {activeRelease.organizationName}
-                  {activeRelease.department !== "all" ? ` - ${activeRelease.department}` : ""}
-                </p>
-                <div className="mt-3 flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-xs">
-                  <Timer className="h-3.5 w-3.5 text-primary" />
-                  <span className="text-muted-foreground">
-                    Expires {formatDate(activeRelease.activeUntil)}
-                  </span>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3 w-full bg-transparent text-amber-600 border-amber-300 hover:bg-amber-50"
-                  onClick={handlePauseActive}
-                >
-                  <Pause className="mr-2 h-3.5 w-3.5" />
-                  Pause Scorecard
-                </Button>
-              </CardContent>
-            </Card>
-          )}
+          {activeRelease && (() => {
+            const isExpired = new Date(activeRelease.activeUntil).getTime() < Date.now()
+            return (
+              <Card className={isExpired ? "border-destructive/30" : "border-primary/30"}>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base font-semibold">
+                      {isExpired ? "Expired Scorecard" : "Currently Active"}
+                    </CardTitle>
+                    <Badge className={isExpired ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success"}>
+                      {isExpired ? "Expired" : "Live"}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm font-medium text-foreground">{activeRelease.templateName}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {activeRelease.organizationName}
+                    {activeRelease.department !== "all" ? ` - ${activeRelease.department}` : ""}
+                  </p>
+                  <div className="mt-3 flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-xs">
+                    <Timer className="h-3.5 w-3.5 text-primary" />
+                    <span className="text-muted-foreground">
+                      {isExpired ? "Expired" : "Expires"} {formatDate(activeRelease.activeUntil)}
+                    </span>
+                  </div>
+                  {isExpired ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 w-full bg-transparent text-primary border-primary/30 hover:bg-primary/5"
+                      onClick={async () => {
+                        const now = new Date()
+                        const until = new Date(now)
+                        until.setDate(until.getDate() + 7)
+                        await updateDocument(COLLECTIONS.SCHEDULES, activeRelease.id, {
+                          status: "active",
+                          activeFrom: now.toISOString(),
+                          activeUntil: until.toISOString(),
+                        })
+                        await fetchData()
+                      }}
+                    >
+                      <RotateCcw className="mr-2 h-3.5 w-3.5" />
+                      Restart Scorecard (7 days)
+                    </Button>
+                  ) : (
+                    <div className="mt-3 flex flex-col gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full bg-transparent text-amber-600 border-amber-300 hover:bg-amber-50"
+                        onClick={handlePauseActive}
+                      >
+                        <Pause className="mr-2 h-3.5 w-3.5" />
+                        Pause Scorecard
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full bg-transparent text-primary border-primary/30 hover:bg-primary/5"
+                        onClick={() => {
+                          setExtendDate(activeRelease.activeUntil.slice(0, 16))
+                          setExtendModalOpen(true)
+                        }}
+                      >
+                        <CalendarPlus className="mr-2 h-3.5 w-3.5" />
+                        Extend Scorecard
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )
+          })()}
 
           {/* Scheduled Releases */}
           <Card>
@@ -726,6 +769,49 @@ export default function ScheduleReleasePage() {
           </Card>
         </div>
       </div>
+
+      {/* Extend scorecard modal */}
+      <Dialog open={extendModalOpen} onOpenChange={setExtendModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Extend Scorecard</DialogTitle>
+            <DialogDescription>
+              Choose a new end date and time for the active scorecard.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-4">
+            <div className="flex flex-col gap-2">
+              <Label>New End Date & Time</Label>
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="datetime-local"
+                  value={extendDate}
+                  onChange={(e) => setExtendDate(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setExtendModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!extendDate}
+              onClick={async () => {
+                if (!activeRelease || !extendDate) return
+                await updateDocument(COLLECTIONS.SCHEDULES, activeRelease.id, {
+                  activeUntil: new Date(extendDate).toISOString(),
+                })
+                setExtendModalOpen(false)
+                await fetchData()
+              }}
+            >
+              Extend
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Success confirmation modal */}
       <Dialog open={sent} onOpenChange={setSent}>
