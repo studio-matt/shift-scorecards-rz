@@ -116,14 +116,16 @@ export default function DashboardPage() {
     scorecardsSent: 50,
     fieldAverage: 6.2,
   })
+  const [varianceFeedback, setVarianceFeedback] = useState<Record<string, unknown> | undefined>(undefined)
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      const [orgDocs, responses, targetsDoc] = await Promise.all([
+      const [orgDocs, responses, targetsDoc, feedbackDoc] = await Promise.all([
         getOrganizations(),
         fetchAllResponses(selectedOrg, selectedDept),
         getDocument(COLLECTIONS.SETTINGS, "dashboardTargets"),
+        getDocument(COLLECTIONS.SETTINGS, "analyticsFeedback"),
       ])
       if (targetsDoc) {
         const t = targetsDoc as Record<string, unknown>
@@ -134,6 +136,10 @@ export default function DashboardPage() {
           scorecardsSent: (t.scorecardsSent as number) ?? prev.scorecardsSent,
           fieldAverage: (t.fieldAverage as number) ?? prev.fieldAverage,
         }))
+      }
+      if (feedbackDoc) {
+        const f = feedbackDoc as Record<string, unknown>
+        if (f.varianceFeedback) setVarianceFeedback(f.varianceFeedback as Record<string, unknown>)
       }
       setOrgs(orgDocs as unknown as Organization[])
 
@@ -338,7 +344,7 @@ export default function DashboardPage() {
             <p className="mb-4 text-sm text-muted-foreground">Score velocity, variance, and question correlations</p>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <ScoreVelocityCard data={velocities} />
-              <DepartmentVarianceCard data={deptVariance} />
+              <DepartmentVarianceCard data={deptVariance} feedbackSettings={varianceFeedback as Record<string, unknown> | undefined} />
             </div>
             <div className="mt-4">
               <QuestionCorrelationsCard data={correlations} />

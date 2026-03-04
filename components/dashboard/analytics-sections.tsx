@@ -223,8 +223,48 @@ export function ScoreVelocityCard({ data }: { data: ScoreVelocity[] }) {
 }
 
 // ── Department variance ───────────────────────────────────────────────
-export function DepartmentVarianceCard({ data }: { data: DepartmentVariance[] }) {
+interface VarianceFeedbackSettings {
+  highVarianceThreshold?: number
+  lowVarianceThreshold?: number
+  highVarianceMessage?: string
+  lowVarianceMessage?: string
+  balancedMessage?: string
+}
+
+function generateVarianceInsight(d: DepartmentVariance, settings?: VarianceFeedbackSettings): string {
+  const highThreshold = settings?.highVarianceThreshold ?? 1.5
+  const lowThreshold = settings?.lowVarianceThreshold ?? 0.5
+
+  if (d.stdDev >= highThreshold) {
+    const tpl = settings?.highVarianceMessage ?? "{dept} has the widest performance spread. {high} high performer(s), {low} need support."
+    return tpl
+      .replace("{dept}", d.department)
+      .replace("{high}", String(d.highPerformers))
+      .replace("{low}", String(d.needsSupport))
+      .replace("{stdDev}", String(d.stdDev))
+      .replace("{total}", String(d.totalUsers))
+  }
+  if (d.stdDev <= lowThreshold) {
+    const tpl = settings?.balancedMessage ?? "{dept} is tightly aligned -- scores are consistent across the team."
+    return tpl
+      .replace("{dept}", d.department)
+      .replace("{high}", String(d.highPerformers))
+      .replace("{low}", String(d.needsSupport))
+      .replace("{stdDev}", String(d.stdDev))
+      .replace("{total}", String(d.totalUsers))
+  }
+  const tpl = settings?.lowVarianceMessage ?? "{dept}: moderate spread with {high} strong and {low} needing attention."
+  return tpl
+    .replace("{dept}", d.department)
+    .replace("{high}", String(d.highPerformers))
+    .replace("{low}", String(d.needsSupport))
+    .replace("{stdDev}", String(d.stdDev))
+    .replace("{total}", String(d.totalUsers))
+}
+
+export function DepartmentVarianceCard({ data, feedbackSettings }: { data: DepartmentVariance[]; feedbackSettings?: VarianceFeedbackSettings }) {
   const chartData = data.map((d) => ({ name: d.department, avg: d.avgScore, stdDev: d.stdDev }))
+  const highThreshold = feedbackSettings?.highVarianceThreshold ?? 1.5
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -234,15 +274,31 @@ export function DepartmentVarianceCard({ data }: { data: DepartmentVariance[] })
         {chartData.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted-foreground">No data yet</p>
         ) : (
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={chartData} layout="vertical" margin={{ left: 0, right: 12, top: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
-              <XAxis type="number" domain={[0, 3]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-              <Bar dataKey="stdDev" name="Std Dev" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} barSize={16} />
-            </BarChart>
-          </ResponsiveContainer>
+          <>
+            <ResponsiveContainer width="100%" height={Math.max(160, data.length * 40)}>
+              <BarChart data={chartData} layout="vertical" margin={{ left: 0, right: 12, top: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
+                <XAxis type="number" domain={[0, 3]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                <Bar dataKey="stdDev" name="Std Dev" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} barSize={16} />
+              </BarChart>
+            </ResponsiveContainer>
+            <div className="mt-3 flex flex-col gap-1.5">
+              {data.map((d) => (
+                <div
+                  key={d.department}
+                  className={`rounded-md px-3 py-1.5 text-xs leading-relaxed ${
+                    d.stdDev >= highThreshold
+                      ? "border border-orange-200 bg-orange-50/60 text-orange-800 dark:border-orange-900/30 dark:bg-orange-950/10 dark:text-orange-300"
+                      : "bg-muted/50 text-muted-foreground"
+                  }`}
+                >
+                  {generateVarianceInsight(d, feedbackSettings)}
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </CardContent>
     </Card>
@@ -250,31 +306,59 @@ export function DepartmentVarianceCard({ data }: { data: DepartmentVariance[] })
 }
 
 // ── Question correlations ─────────────────────────────────────────────
+function generateCorrelationInsight(c: QuestionCorrelation): string | null {
+  const q1Short = c.question1.length > 40 ? c.question1.slice(0, 40).trim() + "..." : c.question1
+  const q2Short = c.question2.length > 40 ? c.question2.slice(0, 40).trim() + "..." : c.question2
+  if (c.correlation >= 0.7) {
+    return `Strong link: Teams that score high on "${q1Short.toLowerCase()}" also score high on "${q2Short.toLowerCase()}." Investing in one lifts both.`
+  }
+  if (c.correlation >= 0.5) {
+    return `Moderate link between "${q1Short.toLowerCase()}" and "${q2Short.toLowerCase()}." Consider coaching strategies that address both together.`
+  }
+  if (c.correlation <= -0.5) {
+    return `Inverse relationship: as "${q1Short.toLowerCase()}" improves, "${q2Short.toLowerCase()}" tends to drop. Investigate potential trade-offs.`
+  }
+  return null
+}
+
 export function QuestionCorrelationsCard({ data }: { data: QuestionCorrelation[] }) {
   const top = data.slice(0, 6)
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-semibold">Question Correlations</CardTitle>
+        <p className="text-xs text-muted-foreground">Strongest relationships between scorecard questions</p>
       </CardHeader>
       <CardContent>
         {top.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted-foreground">Not enough data for correlations</p>
         ) : (
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            {top.map((c, i) => (
-              <div key={i} className="flex items-start gap-3 rounded-md border border-border px-3 py-2">
-                <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                  c.correlation > 0.5 ? "bg-success/10 text-success" : c.correlation < -0.3 ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"
-                }`}>
-                  {c.correlation > 0 ? "+" : ""}{c.correlation}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs leading-snug text-foreground">{c.question1.slice(0, 60)}{c.question1.length > 60 ? "..." : ""}</p>
-                  <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">&amp; {c.question2.slice(0, 60)}{c.question2.length > 60 ? "..." : ""}</p>
-                </div>
-              </div>
-            ))}
+          <div className="flex flex-col gap-3">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              {top.map((c, i) => {
+                const insight = generateCorrelationInsight(c)
+                return (
+                  <div key={i} className="flex flex-col gap-1.5 rounded-md border border-border px-3 py-2">
+                    <div className="flex items-start gap-3">
+                      <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                        c.correlation > 0.5 ? "bg-success/10 text-success" : c.correlation < -0.3 ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"
+                      }`}>
+                        {c.correlation > 0 ? "+" : ""}{c.correlation}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs leading-snug text-foreground">{c.question1.slice(0, 60)}{c.question1.length > 60 ? "..." : ""}</p>
+                        <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">{"& "}{c.question2.slice(0, 60)}{c.question2.length > 60 ? "..." : ""}</p>
+                      </div>
+                    </div>
+                    {insight && (
+                      <p className="rounded bg-primary/5 px-2 py-1 text-[10px] leading-relaxed text-primary">
+                        {insight}
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
       </CardContent>

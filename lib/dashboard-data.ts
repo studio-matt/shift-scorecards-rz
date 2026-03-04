@@ -530,22 +530,47 @@ export interface DepartmentVariance {
   avgScore: number
   stdDev: number
   responseCount: number
+  highPerformers: number  // score >= 8
+  needsSupport: number    // score < 6
+  totalUsers: number
 }
 
 export function computeDepartmentVariance(responses: RawResponse[]): DepartmentVariance[] {
-  const deptScores = new Map<string, number[]>()
+  // Group scores per user per department
+  const deptUserScores = new Map<string, Map<string, number[]>>()
   for (const r of responses) {
     const dept = r.department || "Unknown"
-    if (!deptScores.has(dept)) deptScores.set(dept, [])
+    if (!deptUserScores.has(dept)) deptUserScores.set(dept, new Map())
+    const userMap = deptUserScores.get(dept)!
+    if (!userMap.has(r.userId)) userMap.set(r.userId, [])
     const scaleVals = Object.values(r.answers).filter((v) => typeof v === "number" && v >= 1 && v <= 10) as number[]
     if (scaleVals.length === 0) continue
-    deptScores.get(dept)!.push(scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length)
+    userMap.get(r.userId)!.push(scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length)
   }
-  return Array.from(deptScores.entries()).map(([department, scores]) => {
-    const mean = scores.reduce((a, b) => a + b, 0) / scores.length
-    const variance = scores.reduce((sum, s) => sum + (s - mean) ** 2, 0) / scores.length
-    return { department, avgScore: Math.round(mean * 10) / 10, stdDev: Math.round(Math.sqrt(variance) * 100) / 100, responseCount: scores.length }
-  }).sort((a, b) => b.stdDev - a.stdDev)
+  return Array.from(deptUserScores.entries()).map(([department, userMap]) => {
+    const allScores: number[] = []
+    let highPerformers = 0
+    let needsSupport = 0
+    for (const scores of userMap.values()) {
+      if (scores.length === 0) continue
+      const userAvg = scores.reduce((a, b) => a + b, 0) / scores.length
+      allScores.push(userAvg)
+      if (userAvg >= 8) highPerformers++
+      if (userAvg < 6) needsSupport++
+    }
+    if (allScores.length === 0) return null
+    const mean = allScores.reduce((a, b) => a + b, 0) / allScores.length
+    const variance = allScores.reduce((sum, s) => sum + (s - mean) ** 2, 0) / allScores.length
+    return {
+      department,
+      avgScore: Math.round(mean * 10) / 10,
+      stdDev: Math.round(Math.sqrt(variance) * 100) / 100,
+      responseCount: allScores.length,
+      highPerformers,
+      needsSupport,
+      totalUsers: userMap.size,
+    }
+  }).filter(Boolean).sort((a, b) => b!.stdDev - a!.stdDev) as DepartmentVariance[]
 }
 
 // ── Trend: Question correlation ───────────────────────────────────────

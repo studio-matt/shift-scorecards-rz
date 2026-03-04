@@ -105,13 +105,29 @@ export default function TemplatesPage() {
     fieldAverage: 6.2,
   })
 
+  // Variance & correlation feedback settings
+  const [savingFeedback, setSavingFeedback] = useState(false)
+  const [varianceFeedback, setVarianceFeedback] = useState({
+    highVarianceThreshold: 1.5,
+    lowVarianceThreshold: 0.5,
+    highVarianceMessage: "{dept} has the widest performance spread. {high} high performer(s), {low} need support.",
+    lowVarianceMessage: "{dept}: moderate spread with {high} strong and {low} needing attention.",
+    balancedMessage: "{dept} is tightly aligned -- scores are consistent across the team.",
+  })
+  const [correlationFeedback, setCorrelationFeedback] = useState({
+    strongPositive: 'Strong link: Teams that score high on one also score high on the other. Investing in one lifts both.',
+    moderatePositive: 'Moderate link between these areas. Consider coaching strategies that address both together.',
+    strongNegative: 'Inverse relationship: as one improves, the other tends to drop. Investigate potential trade-offs.',
+  })
+
   const fetchTemplates = useCallback(async () => {
     try {
       setLoading(true)
       // Load global insight settings
-      const [globalDoc, targetsDoc] = await Promise.all([
+      const [globalDoc, targetsDoc, feedbackDoc] = await Promise.all([
         getDocument(COLLECTIONS.SETTINGS, "globalInsights"),
         getDocument(COLLECTIONS.SETTINGS, "dashboardTargets"),
+        getDocument(COLLECTIONS.SETTINGS, "analyticsFeedback"),
       ])
       if (globalDoc) {
         const g = globalDoc as Record<string, unknown>
@@ -127,6 +143,11 @@ export default function TemplatesPage() {
           scorecardsSent: (t.scorecardsSent as number) ?? prev.scorecardsSent,
           fieldAverage: (t.fieldAverage as number) ?? prev.fieldAverage,
         }))
+      }
+      if (feedbackDoc) {
+        const f = feedbackDoc as Record<string, unknown>
+        if (f.varianceFeedback) setVarianceFeedback(f.varianceFeedback as typeof varianceFeedback)
+        if (f.correlationFeedback) setCorrelationFeedback(f.correlationFeedback as typeof correlationFeedback)
       }
       const docs = await getDocuments(COLLECTIONS.TEMPLATES, orderBy("name"))
       setItems(
@@ -169,6 +190,20 @@ export default function TemplatesPage() {
       console.error("Failed to save global insights:", err)
     } finally {
       setSavingGlobal(false)
+    }
+  }
+
+  async function handleSaveFeedback() {
+    setSavingFeedback(true)
+    try {
+      await setDocument(COLLECTIONS.SETTINGS, "analyticsFeedback", {
+        varianceFeedback,
+        correlationFeedback,
+      })
+    } catch (err) {
+      console.error("Failed to save feedback settings:", err)
+    } finally {
+      setSavingFeedback(false)
     }
   }
 
@@ -511,6 +546,127 @@ export default function TemplatesPage() {
           </Card>
         </div>
       </div>
+      {/* ── Analytics Feedback Templates ── */}
+      <div className="mt-12">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-foreground">
+              Analytics Feedback Templates
+            </h2>
+            <div className="mt-1 flex items-start gap-1.5">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                Configure the contextual feedback messages shown in the Trend & Sentiment section. Use placeholders: {"{dept}"}, {"{high}"}, {"{low}"}, {"{stdDev}"}, {"{total}"}.
+              </p>
+            </div>
+          </div>
+          <Button onClick={handleSaveFeedback} disabled={savingFeedback}>
+            <Save className="mr-2 h-4 w-4" />
+            {savingFeedback ? "Saving..." : "Save Feedback"}
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* Department Variance Feedback */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base font-semibold">Department Variance Feedback</CardTitle>
+              <p className="text-xs text-muted-foreground">Messages shown below the variance chart for each department</p>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <Label className="text-xs">High Variance Threshold</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={5}
+                    step={0.1}
+                    value={varianceFeedback.highVarianceThreshold}
+                    onChange={(e) => setVarianceFeedback((p) => ({ ...p, highVarianceThreshold: parseFloat(e.target.value) || 0 }))}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label className="text-xs">Low Variance Threshold</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={5}
+                    step={0.1}
+                    value={varianceFeedback.lowVarianceThreshold}
+                    onChange={(e) => setVarianceFeedback((p) => ({ ...p, lowVarianceThreshold: parseFloat(e.target.value) || 0 }))}
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">High Variance Message</Label>
+                <Textarea
+                  value={varianceFeedback.highVarianceMessage}
+                  onChange={(e) => setVarianceFeedback((p) => ({ ...p, highVarianceMessage: e.target.value }))}
+                  rows={2}
+                  className="text-sm"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Moderate Variance Message</Label>
+                <Textarea
+                  value={varianceFeedback.lowVarianceMessage}
+                  onChange={(e) => setVarianceFeedback((p) => ({ ...p, lowVarianceMessage: e.target.value }))}
+                  rows={2}
+                  className="text-sm"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Low Variance (Balanced) Message</Label>
+                <Textarea
+                  value={varianceFeedback.balancedMessage}
+                  onChange={(e) => setVarianceFeedback((p) => ({ ...p, balancedMessage: e.target.value }))}
+                  rows={2}
+                  className="text-sm"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Correlation Insight Feedback */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base font-semibold">Correlation Insight Feedback</CardTitle>
+              <p className="text-xs text-muted-foreground">Coaching insights auto-generated from question correlation strength</p>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Strong Positive Correlation (0.7+)</Label>
+                <Textarea
+                  value={correlationFeedback.strongPositive}
+                  onChange={(e) => setCorrelationFeedback((p) => ({ ...p, strongPositive: e.target.value }))}
+                  rows={2}
+                  className="text-sm"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Moderate Positive Correlation (0.5-0.7)</Label>
+                <Textarea
+                  value={correlationFeedback.moderatePositive}
+                  onChange={(e) => setCorrelationFeedback((p) => ({ ...p, moderatePositive: e.target.value }))}
+                  rows={2}
+                  className="text-sm"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Strong Negative Correlation (-0.5 or lower)</Label>
+                <Textarea
+                  value={correlationFeedback.strongNegative}
+                  onChange={(e) => setCorrelationFeedback((p) => ({ ...p, strongNegative: e.target.value }))}
+                  rows={2}
+                  className="text-sm"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
       {/* ── Dashboard Targets ── */}
       <div className="mt-12">
         <div className="mb-4 flex items-center justify-between">
