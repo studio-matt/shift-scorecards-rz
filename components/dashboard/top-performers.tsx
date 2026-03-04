@@ -23,7 +23,7 @@ export function TopPerformers({ showCompany = false, data }: TopPerformersProps)
           Champions Dashboard
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          {showCompany ? "Top Performers Across All Organizations" : "Top Performers This Week"}
+          {showCompany ? "Top Performers Across All Companies" : "Top Performers This Week"}
         </p>
       </CardHeader>
       <CardContent>

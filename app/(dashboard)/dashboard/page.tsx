@@ -192,7 +192,7 @@ export default function DashboardPage() {
   const filterLabel = useMemo(() => {
     const parts: string[] = []
     if (selectedOrg === "all") {
-      parts.push("All Organizations")
+      parts.push("All Companies")
     } else {
       parts.push(activeOrg?.name ?? "")
     }
@@ -231,7 +231,7 @@ export default function DashboardPage() {
                 Admin Dashboard
               </h1>
               <p className="mt-1 text-muted-foreground">
-                Global performance metrics and analytics across all organizations
+                Global performance metrics and analytics across all companies
               </p>
             </div>
           </div>
@@ -246,10 +246,10 @@ export default function DashboardPage() {
               }}
             >
               <SelectTrigger className="w-48">
-                <SelectValue placeholder="Organization" />
+                <SelectValue placeholder="All Companies" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Organizations</SelectItem>
+                <SelectItem value="all">All Companies</SelectItem>
                 {orgs.map((org) => (
                   <SelectItem key={org.id} value={org.id}>
                     {org.name}
@@ -263,7 +263,7 @@ export default function DashboardPage() {
               onValueChange={setSelectedDept}
             >
               <SelectTrigger className="w-48">
-                <SelectValue placeholder="Department" />
+                <SelectValue placeholder="All Departments" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Departments</SelectItem>
