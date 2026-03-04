@@ -425,8 +425,52 @@ export async function computeNonResponders(responses: RawResponse[]): Promise<No
     if (!respondedWeeks.has(r.userId)) respondedWeeks.set(r.userId, new Set())
     respondedWeeks.get(r.userId)!.add(r.weekOf)
   }
+
+  // Deduplicate users by normalized name (first+last+org) to prevent
+  // duplicate accounts from appearing as separate entries.
+  const seen = new Map<string, string>() // normalizedKey -> userId (keep the one with more responses)
+  const userResponseCount = new Map<string, number>()
+  for (const u of allUsers) {
+    const data = u as Record<string, unknown>
+    const firstName = ((data.firstName as string) ?? "").trim().toLowerCase()
+    const lastName = ((data.lastName as string) ?? "").trim().toLowerCase()
+    const orgId = (data.organizationId as string) ?? ""
+    const dedupKey = `${firstName}|${lastName}|${orgId}`
+    const thisCount = respondedWeeks.get(u.id)?.size ?? 0
+    userResponseCount.set(u.id, thisCount)
+
+    if (firstName || lastName) {
+      const existingId = seen.get(dedupKey)
+      if (existingId) {
+        // Keep the account with more responses; merge response weeks
+        const existingCount = userResponseCount.get(existingId) ?? 0
+        const keepId = thisCount >= existingCount ? u.id : existingId
+        const mergeId = keepId === u.id ? existingId : u.id
+        // Merge weeks into the kept account
+        const keepWeeks = respondedWeeks.get(keepId) ?? new Set()
+        const mergeWeeks = respondedWeeks.get(mergeId) ?? new Set()
+        for (const w of mergeWeeks) keepWeeks.add(w)
+        respondedWeeks.set(keepId, keepWeeks)
+        seen.set(dedupKey, keepId)
+        continue
+      }
+      seen.set(dedupKey, u.id)
+    }
+  }
+
+  // Build set of deduped user IDs to include
+  const dedupedIds = new Set(seen.values())
+  // Also include users without first/last names (can't dedup those)
+  for (const u of allUsers) {
+    const data = u as Record<string, unknown>
+    const firstName = ((data.firstName as string) ?? "").trim().toLowerCase()
+    const lastName = ((data.lastName as string) ?? "").trim().toLowerCase()
+    if (!firstName && !lastName) dedupedIds.add(u.id)
+  }
+
   const result: NonResponder[] = []
   for (const u of allUsers) {
+    if (!dedupedIds.has(u.id)) continue
     const data = u as Record<string, unknown>
     const weeks = respondedWeeks.get(u.id)
     const missedWeeks = totalWeeks - (weeks?.size ?? 0)

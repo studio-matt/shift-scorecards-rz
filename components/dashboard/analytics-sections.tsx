@@ -35,8 +35,22 @@ import type {
 } from "@/lib/dashboard-data"
 
 // ── Streaks ───────────────────────────────────────────────────────────
+function FlameIcon({ streak }: { streak: number }) {
+  // Flame grows: small (1-2), medium (3-5), large (6+)
+  const size = streak >= 6 ? "h-6 w-6" : streak >= 3 ? "h-5 w-5" : "h-4 w-4"
+  const color =
+    streak >= 6
+      ? "text-orange-500"
+      : streak >= 3
+        ? "text-orange-400"
+        : "text-orange-300"
+  return <Flame className={`${size} ${color} shrink-0`} />
+}
+
 export function StreaksCard({ data }: { data: UserStreak[] }) {
   const top = data.slice(0, 8)
+  // Max streak across all users for bar scaling
+  const maxW = Math.max(...top.map((s) => s.maxStreak), 1)
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -50,24 +64,39 @@ export function StreaksCard({ data }: { data: UserStreak[] }) {
           <p className="py-4 text-center text-sm text-muted-foreground">No streak data yet</p>
         ) : (
           <div className="flex flex-col gap-2">
-            {top.map((s) => (
-              <div key={s.userId} className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium text-foreground">{s.name}</p>
-                  <p className="text-xs text-muted-foreground">{s.department}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-foreground">{s.currentStreak}w</p>
-                    <p className="text-[10px] text-muted-foreground">current</p>
+            {top.map((s) => {
+              const pct = Math.round((s.currentStreak / maxW) * 100)
+              return (
+                <div key={s.userId} className="rounded-md border border-border px-3 py-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FlameIcon streak={s.currentStreak} />
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{s.name}</p>
+                        <p className="text-xs text-muted-foreground">{s.department}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-foreground">{s.currentStreak}w</p>
+                        <p className="text-[10px] text-muted-foreground">current</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-medium text-muted-foreground">{s.maxStreak}w</p>
+                        <p className="text-[10px] text-muted-foreground">best</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-muted-foreground">{s.maxStreak}w</p>
-                    <p className="text-[10px] text-muted-foreground">best</p>
+                  {/* Streak bar */}
+                  <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-orange-300 to-orange-500 transition-all"
+                      style={{ width: `${pct}%` }}
+                    />
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </CardContent>
@@ -77,7 +106,9 @@ export function StreaksCard({ data }: { data: UserStreak[] }) {
 
 // ── Non-responders ────────────────────────────────────────────────────
 export function NonRespondersCard({ data }: { data: NonResponder[] }) {
-  const top = data.slice(0, 8)
+  const neverStarted = data.filter((n) => n.lastResponseWeek === "Never").slice(0, 6)
+  const droppedOff = data.filter((n) => n.lastResponseWeek !== "Never").slice(0, 6)
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -87,22 +118,60 @@ export function NonRespondersCard({ data }: { data: NonResponder[] }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {top.length === 0 ? (
+        {data.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted-foreground">Everyone responded!</p>
         ) : (
-          <div className="flex flex-col gap-2">
-            {top.map((n) => (
-              <div key={n.userId} className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium text-foreground">{n.name}</p>
-                  <p className="text-xs text-muted-foreground">{n.orgName} / {n.department}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold text-destructive">{n.missedWeeks} missed</p>
-                  <p className="text-[10px] text-muted-foreground">Last: {n.lastResponseWeek === "Never" ? "Never" : `Week ${n.lastResponseWeek}`}</p>
-                </div>
+          <div className="flex flex-col gap-5">
+            {/* Dropped Off */}
+            <div>
+              <div className="mb-2 flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />
+                <p className="text-xs font-semibold uppercase tracking-wider text-orange-600">Dropped Off</p>
+                <Badge variant="secondary" className="ml-auto text-[10px]">{droppedOff.length}</Badge>
               </div>
-            ))}
+              {droppedOff.length === 0 ? (
+                <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">No drop-offs detected</p>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {droppedOff.map((n) => (
+                    <div key={n.userId} className="flex items-center justify-between rounded-md border border-orange-200 bg-orange-50/50 px-3 py-2 dark:border-orange-900/30 dark:bg-orange-950/10">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{n.name}</p>
+                        <p className="text-xs text-muted-foreground">{n.orgName} / {n.department}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-orange-600">{n.missedWeeks} missed</p>
+                        <p className="text-[10px] text-muted-foreground">Last: Week {n.lastResponseWeek}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Never Started */}
+            <div>
+              <div className="mb-2 flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Never Started</p>
+                <Badge variant="secondary" className="ml-auto text-[10px]">{neverStarted.length}</Badge>
+              </div>
+              {neverStarted.length === 0 ? (
+                <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">All users have submitted at least once</p>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {neverStarted.map((n) => (
+                    <div key={n.userId} className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{n.name}</p>
+                        <p className="text-xs text-muted-foreground">{n.orgName} / {n.department}</p>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] text-muted-foreground">Onboarding</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </CardContent>
