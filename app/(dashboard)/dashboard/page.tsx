@@ -34,7 +34,7 @@ import {
   PersonalBenchmarkCard,
   PersonalTrendChart,
 } from "@/components/dashboard/user-analytics"
-import { getOrganizations } from "@/lib/firestore"
+import { getOrganizations, getDocument, COLLECTIONS } from "@/lib/firestore"
 import {
   fetchAllResponses,
   computeAdminStats,
@@ -109,14 +109,32 @@ export default function DashboardPage() {
   const [personalStreak, setPersonalStreak] = useState<UserPersonalStreak | null>(null)
   const [personalTrend, setPersonalTrend] = useState<PersonalTrendPoint[]>([])
   const [personalBenchmark, setPersonalBenchmark] = useState<PersonalVsBenchmark | null>(null)
+  const [targets, setTargets] = useState({
+    avgScore: 7.0,
+    completionRate: 85,
+    activeUsers: 100,
+    scorecardsSent: 50,
+    fieldAverage: 6.2,
+  })
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      const [orgDocs, responses] = await Promise.all([
+      const [orgDocs, responses, targetsDoc] = await Promise.all([
         getOrganizations(),
         fetchAllResponses(selectedOrg, selectedDept),
+        getDocument(COLLECTIONS.SETTINGS, "dashboardTargets"),
       ])
+      if (targetsDoc) {
+        const t = targetsDoc as Record<string, unknown>
+        setTargets((prev) => ({
+          avgScore: (t.avgScore as number) ?? prev.avgScore,
+          completionRate: (t.completionRate as number) ?? prev.completionRate,
+          activeUsers: (t.activeUsers as number) ?? prev.activeUsers,
+          scorecardsSent: (t.scorecardsSent as number) ?? prev.scorecardsSent,
+          fieldAverage: (t.fieldAverage as number) ?? prev.fieldAverage,
+        }))
+      }
       setOrgs(orgDocs as unknown as Organization[])
 
       // Compute all aggregations in parallel
@@ -297,11 +315,11 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex flex-col gap-6">
-          {adminStats && <AdminStatCards data={adminStats} />}
+          {adminStats && <AdminStatCards data={adminStats} targets={targets} />}
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <WeeklyTrendChart data={weeklyTrend} />
-            <DepartmentPerformanceChart data={deptPerformance} />
+            <WeeklyTrendChart data={weeklyTrend} targetScore={targets.avgScore} fieldAverage={targets.fieldAverage} />
+            <DepartmentPerformanceChart data={deptPerformance} fieldAverage={targets.fieldAverage} />
           </div>
 
           {/* ── Engagement Metrics ────────────────────── */}

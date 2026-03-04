@@ -19,14 +19,13 @@ import {
 } from "recharts"
 import type { WeeklyTrend } from "@/lib/types"
 
-const TARGET_SCORE = 7.0
-const FIELD_AVERAGE = 6.2
-
 interface WeeklyTrendChartProps {
   data: WeeklyTrend[]
+  targetScore?: number
+  fieldAverage?: number
 }
 
-export function WeeklyTrendChart({ data }: WeeklyTrendChartProps) {
+export function WeeklyTrendChart({ data, targetScore = 7.0, fieldAverage = 6.2 }: WeeklyTrendChartProps) {
   if (data.length === 0) {
     return (
       <Card>
@@ -54,15 +53,15 @@ export function WeeklyTrendChart({ data }: WeeklyTrendChartProps) {
 
   // Zoomed Y-axis: don't start at 0, show movement
   const scores = data.map((d) => d.score)
-  const minScore = Math.min(...scores, FIELD_AVERAGE, TARGET_SCORE)
-  const maxScore = Math.max(...scores, FIELD_AVERAGE, TARGET_SCORE)
+  const minScore = Math.min(...scores, fieldAverage, targetScore)
+  const maxScore = Math.max(...scores, fieldAverage, targetScore)
   const yMin = Math.max(0, Math.floor(minScore - 1))
   const yMax = Math.min(10, Math.ceil(maxScore + 1))
 
   // Add field average to each data point for the line
   const enriched = data.map((d) => ({
     ...d,
-    fieldAverage: FIELD_AVERAGE,
+    fieldAverage,
   }))
 
   return (
@@ -110,12 +109,12 @@ export function WeeklyTrendChart({ data }: WeeklyTrendChartProps) {
               />
               {/* Target line */}
               <ReferenceLine
-                y={TARGET_SCORE}
+                y={targetScore}
                 stroke="hsl(var(--success))"
                 strokeDasharray="6 4"
                 strokeWidth={1.5}
                 label={{
-                  value: `Target ${TARGET_SCORE}`,
+                  value: `Target ${targetScore}`,
                   position: "right",
                   fill: "hsl(var(--success))",
                   fontSize: 10,

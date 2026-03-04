@@ -62,52 +62,77 @@ export function StatCards() {
   )
 }
 
-interface AdminStatCardsProps {
-  data: AdminStats
+interface DashboardTargets {
+  avgScore: number
+  completionRate: number
+  activeUsers: number
+  scorecardsSent: number
+  fieldAverage: number
 }
 
-const TARGET_SCORE = 7.0
+interface AdminStatCardsProps {
+  data: AdminStats
+  targets?: DashboardTargets
+}
 
-export function AdminStatCards({ data: s }: AdminStatCardsProps) {
-  const gap = TARGET_SCORE - s.avgScore
-  const scoreChangeText =
-    gap > 0
-      ? `${gap.toFixed(1)} below target (${TARGET_SCORE})`
-      : gap === 0
-        ? `On target (${TARGET_SCORE})`
-        : `${Math.abs(gap).toFixed(1)} above target (${TARGET_SCORE})`
+export function AdminStatCards({ data: s, targets }: AdminStatCardsProps) {
+  const tAvgScore = targets?.avgScore ?? 7.0
+  const tCompletionRate = targets?.completionRate ?? 85
+  const tActiveUsers = targets?.activeUsers ?? 100
+  const tScorecardsSent = targets?.scorecardsSent ?? 50
+
+  const scoreGap = tAvgScore - s.avgScore
+  const completionGap = tCompletionRate - s.completionRate
+  const usersGap = tActiveUsers - s.activeUsers
+  const sentGap = tScorecardsSent - s.scorecardsSent
+
+  function vsTarget(actual: number, target: number, unit = "") {
+    const diff = actual - target
+    if (Math.abs(diff) < 0.05) return { text: `On target (${target}${unit})`, positive: true }
+    if (diff > 0) return { text: `${diff.toFixed(unit === "%" ? 0 : 1)}${unit} above target (${target}${unit})`, positive: true }
+    return { text: `${Math.abs(diff).toFixed(unit === "%" ? 0 : 1)}${unit} below target (${target}${unit})`, positive: false }
+  }
+
+  const scoreVs = vsTarget(s.avgScore, tAvgScore)
+  const completionVs = vsTarget(s.completionRate, tCompletionRate, "%")
+  const usersVs = vsTarget(s.activeUsers, tActiveUsers)
+  const sentVs = vsTarget(s.scorecardsSent, tScorecardsSent)
 
   const adminCards = [
     {
       label: "Avg Score (Global)",
       value: s.avgScore.toFixed(1),
-      change: scoreChangeText,
+      change: scoreVs.text,
       icon: BarChart3,
-      positive: gap <= 0,
+      positive: scoreVs.positive,
     },
     {
       label: "Completion Rate",
       value: `${s.completionRate}%`,
-      change: `+${s.completionRateChange}% from last period`,
+      change: completionVs.text,
       icon: CheckCircle2,
+      positive: completionVs.positive,
     },
     {
       label: "Active Users",
       value: s.activeUsers.toLocaleString(),
-      change: `+${s.activeUsersChange} new this period`,
+      change: usersVs.text,
       icon: Users,
+      positive: usersVs.positive,
     },
     {
       label: "Scorecards Sent",
       value: s.scorecardsSent.toLocaleString(),
-      change: `+${s.scorecardsSentChange} this period`,
+      change: sentVs.text,
       icon: Send,
+      positive: sentVs.positive,
     },
     {
       label: "Organizations",
       value: s.totalOrgs.toString(),
       change: `${s.totalUsers} total users`,
       icon: Building2,
+      positive: true,
     },
   ]
 
@@ -126,7 +151,7 @@ export function AdminStatCards({ data: s }: AdminStatCardsProps) {
               <p className="text-2xl font-bold text-foreground">
                 {stat.value}
               </p>
-              <p className={`mt-0.5 text-xs ${"positive" in stat && stat.positive === false ? "text-amber-600" : "text-success"}`}>
+              <p className={`mt-0.5 text-xs ${stat.positive === false ? "text-amber-600" : "text-success"}`}>
                 {stat.change}
               </p>
             </div>

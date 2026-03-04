@@ -18,13 +18,12 @@ import {
 } from "recharts"
 import type { DepartmentPerformance } from "@/lib/types"
 
-const FIELD_AVERAGE = 6.2
-
 interface DepartmentPerformanceChartProps {
   data: DepartmentPerformance[]
+  fieldAverage?: number
 }
 
-export function DepartmentPerformanceChart({ data }: DepartmentPerformanceChartProps) {
+export function DepartmentPerformanceChart({ data, fieldAverage = 6.2 }: DepartmentPerformanceChartProps) {
   if (data.length === 0) {
     return (
       <Card>
@@ -46,7 +45,7 @@ export function DepartmentPerformanceChart({ data }: DepartmentPerformanceChartP
 
   // Zoomed Y-axis to show meaningful differences
   const scores = data.map((d) => d.avgScore)
-  const minScore = Math.min(...scores, FIELD_AVERAGE)
+  const minScore = Math.min(...scores, fieldAverage)
   const yMin = Math.max(0, Math.floor(minScore - 1))
 
   return (
@@ -81,12 +80,12 @@ export function DepartmentPerformanceChart({ data }: DepartmentPerformanceChartP
               />
               {/* Field average benchmark line */}
               <ReferenceLine
-                y={FIELD_AVERAGE}
+                y={fieldAverage}
                 stroke="hsl(var(--muted-foreground))"
                 strokeDasharray="6 4"
                 strokeWidth={1.5}
                 label={{
-                  value: `Field Avg ${FIELD_AVERAGE}`,
+                  value: `Field Avg ${fieldAverage}`,
                   position: "right",
                   fill: "hsl(var(--muted-foreground))",
                   fontSize: 10,
@@ -103,7 +102,7 @@ export function DepartmentPerformanceChart({ data }: DepartmentPerformanceChartP
         </div>
         <div className="mt-4 flex flex-wrap gap-4">
           {data.slice(0, 3).map((dept) => {
-            const vsField = dept.avgScore - FIELD_AVERAGE
+            const vsField = dept.avgScore - fieldAverage
             return (
               <div
                 key={dept.department}

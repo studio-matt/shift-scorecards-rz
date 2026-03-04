@@ -30,6 +30,7 @@ import {
   Loader2,
   Save,
   Info,
+  Target,
 } from "lucide-react"
 import {
   getDocuments,
@@ -94,15 +95,38 @@ export default function TemplatesPage() {
     { id: "gpr-3", min: 0, max: 49, message: "Focus on identifying one area to improve each week to climb the rankings." },
   ])
 
+  // Dashboard targets
+  const [savingTargets, setSavingTargets] = useState(false)
+  const [targets, setTargets] = useState({
+    avgScore: 7.0,
+    completionRate: 85,
+    activeUsers: 100,
+    scorecardsSent: 50,
+    fieldAverage: 6.2,
+  })
+
   const fetchTemplates = useCallback(async () => {
     try {
       setLoading(true)
       // Load global insight settings
-      const globalDoc = await getDocument(COLLECTIONS.SETTINGS, "globalInsights")
+      const [globalDoc, targetsDoc] = await Promise.all([
+        getDocument(COLLECTIONS.SETTINGS, "globalInsights"),
+        getDocument(COLLECTIONS.SETTINGS, "dashboardTargets"),
+      ])
       if (globalDoc) {
         const g = globalDoc as Record<string, unknown>
         if (g.scoreRules) setGlobalScoreRules(g.scoreRules as InsightRule[])
         if (g.percentileRules) setGlobalPercentileRules(g.percentileRules as InsightRule[])
+      }
+      if (targetsDoc) {
+        const t = targetsDoc as Record<string, unknown>
+        setTargets((prev) => ({
+          avgScore: (t.avgScore as number) ?? prev.avgScore,
+          completionRate: (t.completionRate as number) ?? prev.completionRate,
+          activeUsers: (t.activeUsers as number) ?? prev.activeUsers,
+          scorecardsSent: (t.scorecardsSent as number) ?? prev.scorecardsSent,
+          fieldAverage: (t.fieldAverage as number) ?? prev.fieldAverage,
+        }))
       }
       const docs = await getDocuments(COLLECTIONS.TEMPLATES, orderBy("name"))
       setItems(
@@ -145,6 +169,17 @@ export default function TemplatesPage() {
       console.error("Failed to save global insights:", err)
     } finally {
       setSavingGlobal(false)
+    }
+  }
+
+  async function handleSaveTargets() {
+    setSavingTargets(true)
+    try {
+      await setDocument(COLLECTIONS.SETTINGS, "dashboardTargets", targets)
+    } catch (err) {
+      console.error("Failed to save targets:", err)
+    } finally {
+      setSavingTargets(false)
     }
   }
 
@@ -475,6 +510,98 @@ export default function TemplatesPage() {
             </CardContent>
           </Card>
         </div>
+      </div>
+      {/* ── Dashboard Targets ── */}
+      <div className="mt-12">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-foreground">
+              Dashboard Targets
+            </h2>
+            <div className="mt-1 flex items-start gap-1.5">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                Set performance targets for the admin dashboard KPI cards and chart reference lines. Actual vs. target is calculated automatically.
+              </p>
+            </div>
+          </div>
+          <Button onClick={handleSaveTargets} disabled={savingTargets}>
+            <Save className="mr-2 h-4 w-4" />
+            {savingTargets ? "Saving..." : "Save Targets"}
+          </Button>
+        </div>
+
+        <Card>
+          <CardContent className="grid grid-cols-1 gap-6 p-6 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Avg Score Target */}
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-sm font-medium">Avg Score Target</Label>
+              <p className="text-xs text-muted-foreground">Target for the average score KPI card and trend chart reference line (1-10 scale)</p>
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                step={0.1}
+                value={targets.avgScore}
+                onChange={(e) => setTargets((p) => ({ ...p, avgScore: parseFloat(e.target.value) || 0 }))}
+              />
+            </div>
+
+            {/* Completion Rate Target */}
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-sm font-medium">Completion Rate Target</Label>
+              <p className="text-xs text-muted-foreground">Target percentage for scorecard completion rate (0-100%)</p>
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={targets.completionRate}
+                  onChange={(e) => setTargets((p) => ({ ...p, completionRate: parseInt(e.target.value) || 0 }))}
+                />
+                <span className="text-sm text-muted-foreground">%</span>
+              </div>
+            </div>
+
+            {/* Active Users Target */}
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-sm font-medium">Active Users Target</Label>
+              <p className="text-xs text-muted-foreground">Target number of active users per period</p>
+              <Input
+                type="number"
+                min={0}
+                value={targets.activeUsers}
+                onChange={(e) => setTargets((p) => ({ ...p, activeUsers: parseInt(e.target.value) || 0 }))}
+              />
+            </div>
+
+            {/* Scorecards Sent Target */}
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-sm font-medium">Scorecards Sent Target</Label>
+              <p className="text-xs text-muted-foreground">Target number of scorecards sent per period</p>
+              <Input
+                type="number"
+                min={0}
+                value={targets.scorecardsSent}
+                onChange={(e) => setTargets((p) => ({ ...p, scorecardsSent: parseInt(e.target.value) || 0 }))}
+              />
+            </div>
+
+            {/* Field Average */}
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-sm font-medium">Field Average Benchmark</Label>
+              <p className="text-xs text-muted-foreground">Anonymized industry benchmark line shown on all charts (1-10 scale)</p>
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                step={0.1}
+                value={targets.fieldAverage}
+                onChange={(e) => setTargets((p) => ({ ...p, fieldAverage: parseFloat(e.target.value) || 0 }))}
+              />
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
