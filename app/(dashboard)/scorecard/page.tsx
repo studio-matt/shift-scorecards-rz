@@ -21,6 +21,12 @@ import {
   Loader2,
   Clock,
   AlertTriangle,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Sparkles,
+  ArrowRight,
+  BarChart3,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -28,8 +34,14 @@ import {
   filterActiveRelease,
   getDocument,
   createDocument,
+  getDocuments,
   COLLECTIONS,
 } from "@/lib/firestore"
+import {
+  fetchAllResponses,
+  computePersonalBenchmark,
+  computePersonalTrend,
+} from "@/lib/dashboard-data"
 import { useAuth } from "@/lib/auth-context"
 import type { ScorecardRelease, ScorecardQuestion } from "@/lib/types"
 
@@ -238,28 +250,14 @@ export default function ScorecardPage() {
     )
   }
 
-  // Submitted
+  // Submitted — show results summary
   if (submitted) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-          <CheckCircle2 className="h-8 w-8 text-primary" />
-        </div>
-        <h2 className="mt-6 text-2xl font-bold text-foreground">
-          Scorecard Submitted
-        </h2>
-        <p className="mt-2 text-muted-foreground">
-          Thank you for completing your {template?.name ?? "scorecard"}.
-        </p>
-        <Button className="mt-6" onClick={() => router.push("/dashboard")}>
-          Go to my Dashboard
-        </Button>
-      </div>
-    )
+    return <ResultsSummary answers={answers} template={template} userId={user?.id ?? ""} router={router} />
   }
 
   return (
     <div>
+      {/* Scorecard form below */}
       {/* Remaining time banner */}
       <div
         className={cn(
@@ -475,6 +473,205 @@ export default function ScorecardPage() {
             </CardContent>
           </Card>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Results Summary (shown after submission) ────────────────────────────
+function ResultsSummary({
+  answers,
+  template,
+  userId,
+  router,
+}: {
+  answers: Record<string, string | number>
+  template: TemplateData | null
+  userId: string
+  router: ReturnType<typeof useRouter>
+}) {
+  const [loading, setLoading] = useState(true)
+  const [myScore, setMyScore] = useState(0)
+  const [prevScore, setPrevScore] = useState<number | null>(null)
+  const [benchmark, setBenchmark] = useState<{ deptAvg: number; orgAvg: number; percentile: number; deptName: string } | null>(null)
+  const [insight, setInsight] = useState("")
+
+  useEffect(() => {
+    async function compute() {
+      try {
+        // 1. Current submission score
+        const scaleVals = Object.values(answers).filter(
+          (v) => typeof v === "number" && v >= 1 && v <= 10,
+        ) as number[]
+        const thisScore =
+          scaleVals.length > 0
+            ? Math.round((scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length) * 10) / 10
+            : 0
+        setMyScore(thisScore)
+
+        // 2. Fetch historical data for trend + benchmark
+        const allResponses = await fetchAllResponses()
+        const trend = computePersonalTrend(allResponses, userId)
+        const bench = computePersonalBenchmark(allResponses, userId)
+
+        if (trend.length >= 2) {
+          setPrevScore(trend[trend.length - 2]?.myScore ?? null)
+        } else if (trend.length === 1) {
+          setPrevScore(trend[0].myScore)
+        }
+
+        if (bench) {
+          setBenchmark({
+            deptAvg: bench.deptAvg,
+            orgAvg: bench.orgAvg,
+            percentile: bench.percentile,
+            deptName: bench.deptName,
+          })
+        }
+
+        // 3. Generate insight based on data
+        const delta = prevScore !== null ? thisScore - prevScore : 0
+        const insightLines: string[] = []
+
+        if (trend.length === 0) {
+          insightLines.push("Great job completing your first scorecard! Keep it up to build your personal trend data.")
+        } else if (delta > 0.5) {
+          insightLines.push(`Strong improvement! Your score jumped ${Math.abs(delta).toFixed(1)} points since your last submission. Keep building on what's working.`)
+        } else if (delta < -0.5) {
+          insightLines.push(`Your score dipped ${Math.abs(delta).toFixed(1)} points from last time. Consider what changed this week and where you can refocus.`)
+        } else if (thisScore >= 8) {
+          insightLines.push("Consistently high performance. You're setting the standard for your team.")
+        } else if (thisScore >= 6) {
+          insightLines.push("Solid scores across the board. Look for one area to push from good to great next week.")
+        } else {
+          insightLines.push("Every submission builds your baseline. Focus on small, consistent improvements each week.")
+        }
+
+        if (bench && bench.percentile >= 75) {
+          insightLines.push(`You're in the top ${100 - bench.percentile}% of respondents in your organization.`)
+        } else if (bench && thisScore > bench.deptAvg) {
+          insightLines.push(`You're scoring above your ${bench.deptName} department average (${bench.deptAvg}/10).`)
+        }
+
+        setInsight(insightLines.join(" "))
+      } catch (err) {
+        console.error("Failed to compute results:", err)
+        setInsight("Your scorecard has been recorded. Visit your dashboard for detailed analytics.")
+      } finally {
+        setLoading(false)
+      }
+    }
+    compute()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const delta = prevScore !== null ? myScore - prevScore : null
+  const TrendIcon = delta !== null && delta > 0 ? TrendingUp : delta !== null && delta < 0 ? TrendingDown : Minus
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-4 text-sm text-muted-foreground">Calculating your results...</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto max-w-2xl py-12">
+      {/* Header */}
+      <div className="mb-8 text-center">
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+          <CheckCircle2 className="h-8 w-8 text-primary" />
+        </div>
+        <h2 className="text-2xl font-bold text-foreground">Scorecard Submitted</h2>
+        <p className="mt-1 text-muted-foreground">
+          Here{"'"}s how you did on {template?.name ?? "your scorecard"}
+        </p>
+      </div>
+
+      {/* Score cards row */}
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {/* Your Score */}
+        <Card>
+          <CardContent className="flex flex-col items-center p-6">
+            <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">Your Score</p>
+            <p className="text-4xl font-bold text-primary">{myScore}</p>
+            <p className="text-xs text-muted-foreground">/10</p>
+          </CardContent>
+        </Card>
+
+        {/* Trend */}
+        <Card>
+          <CardContent className="flex flex-col items-center p-6">
+            <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">vs. Last Week</p>
+            {delta !== null ? (
+              <>
+                <div className="flex items-center gap-1">
+                  <TrendIcon className={cn(
+                    "h-6 w-6",
+                    delta > 0 ? "text-green-600" : delta < 0 ? "text-red-500" : "text-muted-foreground"
+                  )} />
+                  <p className={cn(
+                    "text-2xl font-bold",
+                    delta > 0 ? "text-green-600" : delta < 0 ? "text-red-500" : "text-muted-foreground"
+                  )}>
+                    {delta > 0 ? "+" : ""}{delta.toFixed(1)}
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground">from {prevScore?.toFixed(1)}</p>
+              </>
+            ) : (
+              <>
+                <p className="text-2xl font-bold text-muted-foreground">--</p>
+                <p className="text-xs text-muted-foreground">First submission</p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Benchmark */}
+        <Card>
+          <CardContent className="flex flex-col items-center p-6">
+            <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">Your Rank</p>
+            {benchmark ? (
+              <>
+                <p className="text-2xl font-bold text-foreground">
+                  Top {Math.max(1, 100 - benchmark.percentile)}%
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  vs. {benchmark.deptName} avg {benchmark.deptAvg}/10
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-2xl font-bold text-muted-foreground">--</p>
+                <p className="text-xs text-muted-foreground">Not enough data yet</p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* AI Insight */}
+      <Card className="mb-8 border-primary/20 bg-primary/5">
+        <CardContent className="flex gap-3 p-5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+            <Sparkles className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <p className="mb-1 text-sm font-semibold text-foreground">Insight</p>
+            <p className="text-sm leading-relaxed text-muted-foreground">{insight}</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* CTA */}
+      <div className="flex justify-center gap-3">
+        <Button onClick={() => router.push("/dashboard")}>
+          <BarChart3 className="mr-2 h-4 w-4" />
+          View Full Dashboard
+        </Button>
       </div>
     </div>
   )
