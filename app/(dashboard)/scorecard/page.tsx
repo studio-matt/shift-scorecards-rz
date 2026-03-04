@@ -45,11 +45,20 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import type { ScorecardRelease, ScorecardQuestion } from "@/lib/types"
 
+interface InsightRule {
+  id: string
+  min: number
+  max: number
+  message: string
+}
+
 interface TemplateData {
   id: string
   name: string
   description: string
   questions: ScorecardQuestion[]
+  scoreInsightRules?: InsightRule[]
+  percentileInsightRules?: InsightRule[]
 }
 
 export default function ScorecardPage() {
@@ -529,28 +538,47 @@ function ResultsSummary({
           })
         }
 
-        // 3. Generate insight based on data
-        const delta = prevScore !== null ? thisScore - prevScore : 0
+        // 3. Generate insight from template rules (or fallback defaults)
+        const scoreRules = template?.scoreInsightRules ?? [
+          { id: "d1", min: 0, max: 5.9, message: "Every submission builds your baseline. Focus on small, consistent improvements each week." },
+          { id: "d2", min: 6, max: 7.9, message: "Solid scores across the board. Look for one area to push from good to great next week." },
+          { id: "d3", min: 8, max: 10, message: "Consistently high performance. You're setting the standard for your team." },
+        ]
+        const pctRules = template?.percentileInsightRules ?? [
+          { id: "p1", min: 75, max: 100, message: "You're in the top performers of your organization. Keep leading by example." },
+          { id: "p2", min: 50, max: 74, message: "You're scoring above your department average. Keep pushing higher." },
+          { id: "p3", min: 0, max: 49, message: "Focus on identifying one area to improve each week to climb the rankings." },
+        ]
+
         const insightLines: string[] = []
 
         if (trend.length === 0) {
           insightLines.push("Great job completing your first scorecard! Keep it up to build your personal trend data.")
-        } else if (delta > 0.5) {
-          insightLines.push(`Strong improvement! Your score jumped ${Math.abs(delta).toFixed(1)} points since your last submission. Keep building on what's working.`)
-        } else if (delta < -0.5) {
-          insightLines.push(`Your score dipped ${Math.abs(delta).toFixed(1)} points from last time. Consider what changed this week and where you can refocus.`)
-        } else if (thisScore >= 8) {
-          insightLines.push("Consistently high performance. You're setting the standard for your team.")
-        } else if (thisScore >= 6) {
-          insightLines.push("Solid scores across the board. Look for one area to push from good to great next week.")
         } else {
-          insightLines.push("Every submission builds your baseline. Focus on small, consistent improvements each week.")
+          const delta = prevScore !== null ? thisScore - (prevScore ?? 0) : 0
+          if (delta > 0.5) {
+            insightLines.push(`Strong improvement! Your score jumped ${Math.abs(delta).toFixed(1)} points since your last submission.`)
+          } else if (delta < -0.5) {
+            insightLines.push(`Your score dipped ${Math.abs(delta).toFixed(1)} points from last time.`)
+          }
+
+          // Score-based rule
+          const matchedScoreRule = scoreRules.find(
+            (r) => thisScore >= r.min && thisScore <= r.max,
+          )
+          if (matchedScoreRule) {
+            insightLines.push(matchedScoreRule.message)
+          }
         }
 
-        if (bench && bench.percentile >= 75) {
-          insightLines.push(`You're in the top ${100 - bench.percentile}% of respondents in your organization.`)
-        } else if (bench && thisScore > bench.deptAvg) {
-          insightLines.push(`You're scoring above your ${bench.deptName} department average (${bench.deptAvg}/10).`)
+        // Percentile-based rule
+        if (bench) {
+          const matchedPctRule = pctRules.find(
+            (r) => bench.percentile >= r.min && bench.percentile <= r.max,
+          )
+          if (matchedPctRule) {
+            insightLines.push(matchedPctRule.message)
+          }
         }
 
         setInsight(insightLines.join(" "))
