@@ -657,6 +657,85 @@ export async function computeOrgBenchmarks(responses: RawResponse[]): Promise<Or
   }).sort((a, b) => b.avgScore - a.avgScore)
 }
 
+// ── Field Report: aggregated anonymized cross-org summary ──────────────
+export interface FieldReportData {
+  generatedAt: string
+  totalOrganizations: number
+  totalEmployees: number
+  totalResponses: number
+  overallAvgScore: number
+  avgResponseRate: number
+  topCategories: { question: string; avgScore: number }[]
+  bottomCategories: { question: string; avgScore: number }[]
+  orgCount: number
+  periodLabel: string
+}
+
+export async function computeFieldReport(responses: RawResponse[]): Promise<FieldReportData> {
+  const orgs = await getOrganizations()
+  const users = await getDocuments(COLLECTIONS.USERS)
+  const uniqueOrgs = new Set(responses.map((r) => r.organizationId))
+  const uniqueUsers = new Set(responses.map((r) => r.userId))
+
+  // Overall avg
+  let totalScore = 0
+  let totalCount = 0
+  const questionScores = new Map<string, { total: number; count: number }>()
+
+  for (const r of responses) {
+    const entries = Object.entries(r.answers)
+    for (const [q, v] of entries) {
+      if (typeof v === "number" && v >= 1 && v <= 10) {
+        totalScore += v
+        totalCount++
+        if (!questionScores.has(q)) questionScores.set(q, { total: 0, count: 0 })
+        const qe = questionScores.get(q)!
+        qe.total += v
+        qe.count++
+      }
+    }
+  }
+
+  const overallAvg = totalCount > 0 ? Math.round((totalScore / totalCount) * 10) / 10 : 0
+
+  // Question ranking
+  const ranked = Array.from(questionScores.entries())
+    .map(([q, { total, count }]) => ({ question: q, avgScore: Math.round((total / count) * 10) / 10 }))
+    .sort((a, b) => b.avgScore - a.avgScore)
+
+  // Response rate
+  const orgUserCounts = new Map<string, number>()
+  for (const u of users) {
+    const orgId = (u as Record<string, unknown>).organizationId as string
+    if (orgId) orgUserCounts.set(orgId, (orgUserCounts.get(orgId) ?? 0) + 1)
+  }
+  let totalOrgUsers = 0
+  for (const orgId of uniqueOrgs) {
+    totalOrgUsers += orgUserCounts.get(orgId) ?? 0
+  }
+  const avgResponseRate = totalOrgUsers > 0 ? Math.round((uniqueUsers.size / totalOrgUsers) * 100) : 0
+
+  // Period label
+  const weeks = Array.from(new Set(responses.map((r) => r.weekOf))).sort()
+  const periodLabel = weeks.length > 0 ? `${weeks[0]} to ${weeks[weeks.length - 1]}` : "No data"
+
+  const now = new Date()
+  const month = now.toLocaleString("default", { month: "long", year: "numeric" })
+
+  return {
+    generatedAt: month,
+    totalOrganizations: uniqueOrgs.size,
+    totalEmployees: users.length,
+    totalResponses: responses.length,
+    overallAvgScore: overallAvg,
+    avgResponseRate,
+    topCategories: ranked.slice(0, 5),
+    bottomCategories: ranked.slice(-5).reverse(),
+    orgCount: orgs.length,
+    periodLabel,
+  }
+}
+
 // ── Actionable: Threshold alerts ──────────────────────────────────────
 export interface ThresholdAlert {
   type: "low_score" | "declining"

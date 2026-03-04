@@ -27,6 +27,7 @@ import {
   QuestionCorrelationsCard,
   DeptOverTimeChart,
   OrgBenchmarkCard,
+  FieldReportCard,
   AlertsCard,
 } from "@/components/dashboard/analytics-sections"
 import {
@@ -51,6 +52,7 @@ import {
   computeQuestionCorrelations,
   computeDeptOverTime,
   computeOrgBenchmarks,
+  computeFieldReport,
   computeAlerts,
   computePersonalStreak,
   computePersonalTrend,
@@ -65,6 +67,7 @@ import {
   type QuestionCorrelation,
   type DeptOverTime,
   type OrgBenchmark,
+  type FieldReportData,
   type ThresholdAlert,
   type UserPersonalStreak,
   type PersonalTrendPoint,
@@ -105,6 +108,7 @@ export default function DashboardPage() {
   const [correlations, setCorrelations] = useState<QuestionCorrelation[]>([])
   const [deptOverTime, setDeptOverTime] = useState<DeptOverTime[]>([])
   const [orgBenchmarks, setOrgBenchmarks] = useState<OrgBenchmark[]>([])
+  const [fieldReport, setFieldReport] = useState<FieldReportData | null>(null)
   const [alerts, setAlerts] = useState<ThresholdAlert[]>([])
   const [personalStreak, setPersonalStreak] = useState<UserPersonalStreak | null>(null)
   const [personalTrend, setPersonalTrend] = useState<PersonalTrendPoint[]>([])
@@ -164,7 +168,7 @@ export default function DashboardPage() {
       setRecentScorecards(recent)
 
       // New analytics
-      const [streakData, nonResp, vel, variance, corr, dot, benchmarks] =
+      const [streakData, nonResp, vel, variance, corr, dot, benchmarks, report] =
         await Promise.all([
           Promise.resolve(computeStreaks(responses)),
           computeNonResponders(responses),
@@ -173,6 +177,7 @@ export default function DashboardPage() {
           computeQuestionCorrelations(responses),
           Promise.resolve(computeDeptOverTime(responses)),
           computeOrgBenchmarks(responses),
+          computeFieldReport(responses),
         ])
       setStreaks(streakData)
       setNonResponders(nonResp)
@@ -181,6 +186,7 @@ export default function DashboardPage() {
       setCorrelations(corr)
       setDeptOverTime(dot)
       setOrgBenchmarks(benchmarks)
+      setFieldReport(report)
       setAlerts(computeAlerts(responses, dept, vel))
 
       // User-specific metrics (uses full response set for anonymized comparisons)
@@ -355,10 +361,13 @@ export default function DashboardPage() {
           <div className="border-t border-border pt-4">
             <h2 className="text-lg font-semibold text-foreground">Organizational Intelligence</h2>
             <p className="mb-4 text-sm text-muted-foreground">Cross-department and cross-org comparisons</p>
-            <DeptOverTimeChart data={deptOverTime} />
-            <div className="mt-4">
-              <OrgBenchmarkCard data={orgBenchmarks} />
-            </div>
+<DeptOverTimeChart data={deptOverTime} />
+<div className="mt-4">
+<OrgBenchmarkCard data={orgBenchmarks} />
+</div>
+<div className="mt-4">
+<FieldReportCard data={fieldReport} />
+</div>
           </div>
 
           {/* ── Actionable Alerts ──────────────────────── */}

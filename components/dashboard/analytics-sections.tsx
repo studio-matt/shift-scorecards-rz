@@ -1,7 +1,9 @@
 "use client"
 
+import { useState, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Bar,
   BarChart,
@@ -22,6 +24,8 @@ import {
   AlertCircle,
   UserX,
   Building2,
+  Download,
+  FileText,
 } from "lucide-react"
 import type {
   UserStreak,
@@ -32,6 +36,7 @@ import type {
   DeptOverTime,
   OrgBenchmark,
   ThresholdAlert,
+  FieldReportData,
 } from "@/lib/dashboard-data"
 
 // ── Streaks ───────────────────────────────────────────────────────────
@@ -376,26 +381,143 @@ const DEPT_COLORS = [
   "#8884d8",
   "#82ca9d",
   "#ffc658",
+  "#e45858",
+  "#36a2eb",
+  "#ff9f40",
 ]
 
+function getSmartDeptSelection(data: DeptOverTime[]) {
+  if (data.length === 0) return { top3: [] as string[], bottom3: [] as string[], all: [] as string[] }
+  const departments = Object.keys(data[0] || {}).filter((k) => k !== "week")
+  // Compute each dept's overall avg from the last data point (most recent)
+  const lastRow = data[data.length - 1]
+  const scored = departments
+    .map((d) => ({ dept: d, score: typeof lastRow[d] === "number" ? (lastRow[d] as number) : 0 }))
+    .sort((a, b) => b.score - a.score)
+  const top3 = scored.slice(0, 3).map((s) => s.dept)
+  const bottom3 = scored.slice(-3).map((s) => s.dept)
+  return { top3, bottom3, all: departments }
+}
+
 export function DeptOverTimeChart({ data }: { data: DeptOverTime[] }) {
+  const [showAll, setShowAll] = useState(false)
+  const [toggledDepts, setToggledDepts] = useState<Set<string> | null>(null)
+
   if (data.length === 0) return null
   const departments = Object.keys(data[0] || {}).filter((k) => k !== "week")
+  const { top3, bottom3 } = getSmartDeptSelection(data)
+  const defaultVisible = new Set([...top3, ...bottom3])
+  const activeDepts = showAll
+    ? departments
+    : toggledDepts
+      ? Array.from(toggledDepts)
+      : Array.from(defaultVisible)
+
+  // Zoomed Y-axis for clustered data
+  const allScores: number[] = []
+  for (const row of data) {
+    for (const d of activeDepts) {
+      const v = row[d]
+      if (typeof v === "number" && v > 0) allScores.push(v)
+    }
+  }
+  const minScore = allScores.length > 0 ? Math.min(...allScores) : 0
+  const maxScore = allScores.length > 0 ? Math.max(...allScores) : 10
+  const yMin = Math.max(0, Math.floor(minScore - 0.5))
+  const yMax = Math.min(10, Math.ceil(maxScore + 0.5))
+
+  function toggleDept(dept: string) {
+    setShowAll(false)
+    setToggledDepts((prev) => {
+      const current = prev ?? new Set(defaultVisible)
+      const next = new Set(current)
+      if (next.has(dept)) {
+        next.delete(dept)
+      } else {
+        next.add(dept)
+      }
+      return next
+    })
+  }
+
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-semibold">Department Comparison Over Time</CardTitle>
+        <div className="flex items-start justify-between">
+          <div>
+            <CardTitle className="text-sm font-semibold">Department Comparison Over Time</CardTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Showing {activeDepts.length} of {departments.length} departments
+              {!showAll && !toggledDepts && " (top 3 + bottom 3)"}
+            </p>
+          </div>
+          {departments.length > 6 && (
+            <button
+              onClick={() => {
+                setShowAll(!showAll)
+                setToggledDepts(null)
+              }}
+              className="rounded-md px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+            >
+              {showAll ? "Smart View" : "Show All"}
+            </button>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
+        {/* Department toggles */}
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {departments.map((dept, i) => {
+            const isActive = activeDepts.includes(dept)
+            const isTop = top3.includes(dept)
+            const isBottom = bottom3.includes(dept)
+            return (
+              <button
+                key={dept}
+                onClick={() => toggleDept(dept)}
+                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
+                  isActive
+                    ? "border border-transparent bg-primary/10 text-foreground"
+                    : "border border-border bg-muted/30 text-muted-foreground opacity-60"
+                }`}
+              >
+                <span
+                  className="h-2 w-2 rounded-full shrink-0"
+                  style={{
+                    backgroundColor: isActive ? DEPT_COLORS[i % DEPT_COLORS.length] : "hsl(var(--muted-foreground))",
+                    opacity: isActive ? 1 : 0.3,
+                  }}
+                />
+                {dept}
+                {isActive && isTop && !isBottom && (
+                  <TrendingUp className="h-2.5 w-2.5 text-success" />
+                )}
+                {isActive && isBottom && !isTop && (
+                  <TrendingDown className="h-2.5 w-2.5 text-destructive" />
+                )}
+              </button>
+            )
+          })}
+        </div>
+
         <ResponsiveContainer width="100%" height={260}>
           <LineChart data={data} margin={{ left: 0, right: 12, top: 4, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <XAxis dataKey="week" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-            <YAxis domain={[0, 10]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+            <YAxis domain={[yMin, yMax]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
             <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             {departments.map((dept, i) => (
-              <Line key={dept} type="monotone" dataKey={dept} stroke={DEPT_COLORS[i % DEPT_COLORS.length]} strokeWidth={2} dot={{ r: 3 }} />
+              <Line
+                key={dept}
+                type="monotone"
+                dataKey={dept}
+                stroke={DEPT_COLORS[i % DEPT_COLORS.length]}
+                strokeWidth={activeDepts.includes(dept) ? 2.5 : 0}
+                dot={activeDepts.includes(dept) ? { r: 3 } : false}
+                hide={!activeDepts.includes(dept)}
+                name={dept}
+              />
             ))}
           </LineChart>
         </ResponsiveContainer>
@@ -437,6 +559,108 @@ export function OrgBenchmarkCard({ data }: { data: OrgBenchmark[] }) {
             ))}
           </div>
         )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Field Report ─────────────────────────────────────────────────────
+export function FieldReportCard({ data }: { data: FieldReportData | null }) {
+  const reportRef = useRef<HTMLDivElement>(null)
+
+  if (!data) return null
+
+  function handleExport() {
+    if (!data) return
+    const lines: string[] = [
+      `SHIFT FIELD REPORT`,
+      `Generated: ${data.generatedAt}`,
+      `Period: ${data.periodLabel}`,
+      ``,
+      `OVERVIEW`,
+      `Across ${data.totalOrganizations} organizations and ${data.totalEmployees.toLocaleString()} employees, the overall average score was ${data.overallAvgScore}/10 with a ${data.avgResponseRate}% response rate. Total responses: ${data.totalResponses.toLocaleString()}.`,
+      ``,
+      `TOP SCORING CATEGORIES`,
+      ...data.topCategories.map((c, i) => `  ${i + 1}. ${c.question} -- ${c.avgScore}/10`),
+      ``,
+      `AREAS FOR IMPROVEMENT`,
+      ...data.bottomCategories.map((c, i) => `  ${i + 1}. ${c.question} -- ${c.avgScore}/10`),
+      ``,
+      `---`,
+      `This report contains anonymized, aggregated data across all SHIFT organizations.`,
+    ]
+    const blob = new Blob([lines.join("\n")], { type: "text/plain" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `SHIFT-Field-Report-${data.generatedAt.replace(/\s/g, "-")}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <Card ref={reportRef}>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-primary" />
+            <div>
+              <CardTitle className="text-sm font-semibold">Field Report</CardTitle>
+              <p className="text-xs text-muted-foreground">Anonymized cross-organization intelligence -- the SHIFT thought leadership asset</p>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" onClick={handleExport}>
+            <Download className="mr-1.5 h-3.5 w-3.5" />
+            Export
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+          <p className="text-sm leading-relaxed text-foreground">
+            Across <span className="font-bold">{data.totalOrganizations} organizations</span> and{" "}
+            <span className="font-bold">{data.totalEmployees.toLocaleString()} employees</span>,
+            the overall average score was{" "}
+            <span className="font-bold text-primary">{data.overallAvgScore}/10</span> with a{" "}
+            <span className="font-bold">{data.avgResponseRate}%</span> response rate.
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {data.totalResponses.toLocaleString()} total responses &middot; {data.periodLabel}
+          </p>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-success">
+              <TrendingUp className="h-3 w-3" /> Top Categories
+            </p>
+            <div className="flex flex-col gap-1.5">
+              {data.topCategories.map((c, i) => (
+                <div key={i} className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-1.5">
+                  <span className="truncate text-xs text-foreground">{c.question}</span>
+                  <span className="ml-2 shrink-0 text-xs font-bold text-success">{c.avgScore}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-orange-600">
+              <TrendingDown className="h-3 w-3" /> Areas for Improvement
+            </p>
+            <div className="flex flex-col gap-1.5">
+              {data.bottomCategories.map((c, i) => (
+                <div key={i} className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-1.5">
+                  <span className="truncate text-xs text-foreground">{c.question}</span>
+                  <span className="ml-2 shrink-0 text-xs font-bold text-orange-600">{c.avgScore}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <p className="mt-4 text-center text-[10px] text-muted-foreground">
+          Generated {data.generatedAt} &middot; All data anonymized and aggregated
+        </p>
       </CardContent>
     </Card>
   )
