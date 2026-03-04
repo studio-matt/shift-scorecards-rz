@@ -13,9 +13,14 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  ReferenceLine,
   ResponsiveContainer,
+  Legend,
 } from "recharts"
 import type { WeeklyTrend } from "@/lib/types"
+
+const TARGET_SCORE = 7.0
+const FIELD_AVERAGE = 6.2
 
 interface WeeklyTrendChartProps {
   data: WeeklyTrend[]
@@ -41,17 +46,44 @@ export function WeeklyTrendChart({ data }: WeeklyTrendChartProps) {
     )
   }
 
+  // Compute month-over-month delta
+  const latest = data[data.length - 1]?.score ?? 0
+  const earliest = data[0]?.score ?? 0
+  const delta = latest - earliest
+  const deltaStr = delta >= 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1)
+
+  // Zoomed Y-axis: don't start at 0, show movement
+  const scores = data.map((d) => d.score)
+  const minScore = Math.min(...scores, FIELD_AVERAGE, TARGET_SCORE)
+  const maxScore = Math.max(...scores, FIELD_AVERAGE, TARGET_SCORE)
+  const yMin = Math.max(0, Math.floor(minScore - 1))
+  const yMax = Math.min(10, Math.ceil(maxScore + 1))
+
+  // Add field average to each data point for the line
+  const enriched = data.map((d) => ({
+    ...d,
+    fieldAverage: FIELD_AVERAGE,
+  }))
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base font-semibold">
-          Score Trend - Last {data.length} Weeks
-        </CardTitle>
+      <CardHeader className="flex flex-row items-start justify-between">
+        <div>
+          <CardTitle className="text-base font-semibold">
+            Score Trend - Last {data.length} Weeks
+          </CardTitle>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Period change:{" "}
+            <span className={delta >= 0 ? "font-semibold text-green-600" : "font-semibold text-red-500"}>
+              {deltaStr}
+            </span>
+          </p>
+        </div>
       </CardHeader>
       <CardContent>
-        <div className="h-64">
+        <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data}>
+            <LineChart data={enriched}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis
                 dataKey="week"
@@ -59,7 +91,7 @@ export function WeeklyTrendChart({ data }: WeeklyTrendChartProps) {
                 className="fill-muted-foreground"
               />
               <YAxis
-                domain={[0, 10]}
+                domain={[yMin, yMax]}
                 tick={{ fontSize: 12 }}
                 className="fill-muted-foreground"
               />
@@ -71,14 +103,43 @@ export function WeeklyTrendChart({ data }: WeeklyTrendChartProps) {
                   color: "hsl(var(--foreground))",
                 }}
               />
+              <Legend
+                verticalAlign="bottom"
+                height={28}
+                wrapperStyle={{ fontSize: 11 }}
+              />
+              {/* Target line */}
+              <ReferenceLine
+                y={TARGET_SCORE}
+                stroke="hsl(var(--success))"
+                strokeDasharray="6 4"
+                strokeWidth={1.5}
+                label={{
+                  value: `Target ${TARGET_SCORE}`,
+                  position: "right",
+                  fill: "hsl(var(--success))",
+                  fontSize: 10,
+                }}
+              />
+              {/* Field average line */}
+              <Line
+                type="monotone"
+                dataKey="fieldAverage"
+                stroke="hsl(var(--muted-foreground))"
+                strokeDasharray="4 4"
+                strokeWidth={1.5}
+                dot={false}
+                name="Field Average"
+              />
+              {/* Actual score line */}
               <Line
                 type="monotone"
                 dataKey="score"
                 stroke="hsl(var(--primary))"
-                strokeWidth={2}
+                strokeWidth={2.5}
                 dot={{ fill: "hsl(var(--primary))", r: 4 }}
                 activeDot={{ r: 6 }}
-                name="Score"
+                name="Your Score"
               />
             </LineChart>
           </ResponsiveContainer>

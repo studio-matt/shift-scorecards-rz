@@ -66,13 +66,24 @@ interface AdminStatCardsProps {
   data: AdminStats
 }
 
+const TARGET_SCORE = 7.0
+
 export function AdminStatCards({ data: s }: AdminStatCardsProps) {
+  const gap = TARGET_SCORE - s.avgScore
+  const scoreChangeText =
+    gap > 0
+      ? `${gap.toFixed(1)} below target (${TARGET_SCORE})`
+      : gap === 0
+        ? `On target (${TARGET_SCORE})`
+        : `${Math.abs(gap).toFixed(1)} above target (${TARGET_SCORE})`
+
   const adminCards = [
     {
       label: "Avg Score (Global)",
       value: s.avgScore.toFixed(1),
-      change: `+${s.avgScoreChange} from last period`,
+      change: scoreChangeText,
       icon: BarChart3,
+      positive: gap <= 0,
     },
     {
       label: "Completion Rate",
@@ -115,7 +126,7 @@ export function AdminStatCards({ data: s }: AdminStatCardsProps) {
               <p className="text-2xl font-bold text-foreground">
                 {stat.value}
               </p>
-              <p className="mt-0.5 text-xs text-success">
+              <p className={`mt-0.5 text-xs ${"positive" in stat && stat.positive === false ? "text-amber-600" : "text-success"}`}>
                 {stat.change}
               </p>
             </div>
