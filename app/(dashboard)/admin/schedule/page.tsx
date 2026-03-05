@@ -29,6 +29,7 @@ import {
 import {
   Send,
   Calendar,
+  CalendarPlus,
   Clock,
   CheckCircle2,
   AlertCircle,
@@ -37,6 +38,8 @@ import {
   Trash2,
   Pause,
   Play,
+  RotateCcw,
+  Bell,
 } from "lucide-react"
 import {
   getOrganizations,
@@ -58,6 +61,7 @@ interface TemplateOption {
   name: string
   status: string
   questionCount: number
+  version?: string
 }
 
 export default function ScheduleReleasePage() {
@@ -74,16 +78,23 @@ export default function ScheduleReleasePage() {
 
   // Form state
   const [selectedTemplate, setSelectedTemplate] = useState("")
-  const [selectedCompany, setSelectedCompany] = useState("")
-  const [selectedDepartment, setSelectedDepartment] = useState("")
+  const [selectedCompany, setSelectedCompany] = useState("all")
+  const [selectedDepartment, setSelectedDepartment] = useState("all")
   const [scheduleType, setScheduleType] = useState("now")
   const [scheduledDateTime, setScheduledDateTime] = useState("")
-  const [recurringFrequency, setRecurringFrequency] = useState("weekly")
+  const [recurringFrequency, setRecurringFrequency] = useState("monthly")
   const [activeDays, setActiveDays] = useState("7")
+  const [reminders, setReminders] = useState<{ enabled: boolean; hoursBefore: number; label: string }[]>([
+    { enabled: true, hoursBefore: 48, label: "48 hours before close" },
+    { enabled: true, hoursBefore: 24, label: "24 hours before close" },
+    { enabled: false, hoursBefore: 72, label: "3 days before close" },
+  ])
   const [allUsersInGroup, setAllUsersInGroup] = useState(true)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const [sentType, setSentType] = useState("")
+  const [extendModalOpen, setExtendModalOpen] = useState(false)
+  const [extendDate, setExtendDate] = useState("")
 
   const activeOrg = orgs.find((o) => o.id === selectedCompany)
 
@@ -116,6 +127,7 @@ export default function ScheduleReleasePage() {
           name: (d.name as string) ?? "",
           status: (d.status as string) ?? "active",
           questionCount: (d.questionCount as number) ?? (d.questions as unknown[])?.length ?? 0,
+          version: (d.version as string) ?? undefined,
         })),
       )
       const paused = (allReleases as unknown as Record<string, unknown>[])
@@ -136,12 +148,12 @@ export default function ScheduleReleasePage() {
   }, [fetchData])
 
   async function handleSend() {
-    if (!selectedTemplate || !selectedCompany) return
+    if (!selectedTemplate) return
 
     setSending(true)
     try {
       const template = publishedTemplates.find((t) => t.id === selectedTemplate)
-      const org = orgs.find((o) => o.id === selectedCompany)
+      const org = selectedCompany === "all" ? null : orgs.find((o) => o.id === selectedCompany)
       const now = new Date()
 
       const activeFrom = scheduleType === "now"
@@ -159,11 +171,23 @@ export default function ScheduleReleasePage() {
         })
       }
 
+      // Compute reminder timestamps based on activeUntil
+      const enabledReminders = reminders.filter((r) => r.enabled)
+      const reminderSchedule = enabledReminders.map((r) => {
+        const reminderDate = new Date(activeUntilDate.getTime() - r.hoursBefore * 60 * 60 * 1000)
+        return {
+          hoursBefore: r.hoursBefore,
+          label: r.label,
+          scheduledFor: reminderDate.toISOString(),
+          sent: false,
+        }
+      })
+
       await createDocument(COLLECTIONS.SCHEDULES, {
         templateId: selectedTemplate,
         templateName: template?.name ?? "",
-        organizationId: selectedCompany,
-        organizationName: org?.name ?? "",
+        organizationId: selectedCompany === "all" ? "all" : selectedCompany,
+        organizationName: selectedCompany === "all" ? "All Companies" : (org?.name ?? ""),
         department: selectedDepartment || "all",
         scheduleType,
         scheduledAt: activeFrom,
@@ -172,18 +196,24 @@ export default function ScheduleReleasePage() {
         recurringFrequency: scheduleType === "recurring" ? recurringFrequency : null,
         recipientCount: 0, // Will be computed when actually sent
         responseCount: 0,
+        reminders: reminderSchedule,
         status: scheduleType === "now" ? "active" : "scheduled",
         createdBy: user?.id ?? "",
       })
 
       // Reset form
       setSelectedTemplate("")
-      setSelectedCompany("")
-      setSelectedDepartment("")
+      setSelectedCompany("all")
+      setSelectedDepartment("all")
       setScheduleType("now")
       setScheduledDateTime("")
-      setRecurringFrequency("weekly")
+      setRecurringFrequency("monthly")
       setActiveDays("7")
+      setReminders([
+        { enabled: true, hoursBefore: 48, label: "48 hours before close" },
+        { enabled: true, hoursBefore: 24, label: "24 hours before close" },
+        { enabled: false, hoursBefore: 72, label: "3 days before close" },
+      ])
 
       setSentType(scheduleType)
       setSent(true)
@@ -309,7 +339,7 @@ export default function ScheduleReleasePage() {
                   )}
                   {publishedTemplates.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
-                      {t.name} ({t.questionCount} questions)
+                      {t.name}{t.version ? ` ${t.version}` : ""} ({t.questionCount} questions)
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -342,9 +372,10 @@ export default function ScheduleReleasePage() {
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select company..." />
+                      <SelectValue placeholder="All Companies" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="all">All Companies</SelectItem>
                       {orgs.map((org) => (
                         <SelectItem key={org.id} value={org.id}>
                           {org.name}
@@ -358,14 +389,14 @@ export default function ScheduleReleasePage() {
                   <Select
                     value={selectedDepartment}
                     onValueChange={setSelectedDepartment}
-                    disabled={!selectedCompany}
+                    disabled={selectedCompany === "all"}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={selectedCompany ? "All Departments" : "Select company first"} />
+                      <SelectValue placeholder="All Departments" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Departments</SelectItem>
-                      {activeOrg?.departments.map((dept) => (
+                      {selectedCompany !== "all" && activeOrg?.departments.map((dept) => (
                         <SelectItem key={dept} value={dept}>
                           {dept}
                         </SelectItem>
@@ -411,9 +442,9 @@ export default function ScheduleReleasePage() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="weekly">Weekly</SelectItem>
+                            <SelectItem value="monthly">Monthly (recommended)</SelectItem>
                             <SelectItem value="biweekly">Bi-weekly</SelectItem>
-                            <SelectItem value="monthly">Monthly</SelectItem>
+                            <SelectItem value="weekly">Weekly</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -426,10 +457,10 @@ export default function ScheduleReleasePage() {
               <div className="rounded-lg border border-border bg-muted/50 p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Timer className="h-4 w-4 text-primary" />
-                  <Label className="text-sm font-semibold">Active Window</Label>
+                  <Label className="text-sm font-semibold">Response Window</Label>
                 </div>
                 <p className="mb-3 text-xs text-muted-foreground">
-                  How long should this scorecard be available for users to complete?
+                  How long users have to complete the scorecard once released. Recommended: monthly cadence with a 1-week response window.
                   Only one scorecard can be active at a time. Publishing a new release will expire the previous one.
                 </p>
                 <Select value={activeDays} onValueChange={setActiveDays}>
@@ -437,22 +468,99 @@ export default function ScheduleReleasePage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">1 day</SelectItem>
-                    <SelectItem value="3">3 days</SelectItem>
+                    <SelectItem value="7">7 days / 1 week (recommended)</SelectItem>
                     <SelectItem value="5">5 days</SelectItem>
-                    <SelectItem value="7">7 days (1 week)</SelectItem>
-                    <SelectItem value="14">14 days (2 weeks)</SelectItem>
+                    <SelectItem value="3">3 days</SelectItem>
+                    <SelectItem value="10">10 days</SelectItem>
+                    <SelectItem value="14">14 days / 2 weeks</SelectItem>
                     <SelectItem value="30">30 days</SelectItem>
                   </SelectContent>
                 </Select>
+                {recurringFrequency === "weekly" && scheduleType === "recurring" && (
+                  <p className="mt-2 flex items-center gap-1 text-xs text-amber-600">
+                    <AlertCircle className="h-3 w-3" />
+                    Weekly cadence may be too frequent for in-depth scorecards. Consider monthly.
+                  </p>
+                )}
               </div>
 
-              {!selectedCompany && (
-                <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <AlertCircle className="h-3 w-3" />
-                  Select a company to configure delivery
+              {/* Automated Reminders */}
+              <div className="rounded-lg border border-border bg-muted/50 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Bell className="h-4 w-4 text-primary" />
+                    <Label className="text-sm font-semibold">Automated Reminders</Label>
+                  </div>
+                  <Badge variant="outline" className="text-[10px]">
+                    {reminders.filter((r) => r.enabled).length} active
+                  </Badge>
+                </div>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  Notify users who haven{"'"}t completed their scorecard before the window closes.
                 </p>
-              )}
+                <div className="flex flex-col gap-2">
+                  {reminders.map((reminder, idx) => (
+                    <div
+                      key={idx}
+                      className={`flex items-center gap-3 rounded-md border px-3 py-2 transition-colors ${
+                        reminder.enabled ? "border-primary/20 bg-primary/5" : "border-border bg-card"
+                      }`}
+                    >
+                      <Checkbox
+                        id={`reminder-${idx}`}
+                        checked={reminder.enabled}
+                        onCheckedChange={(checked) => {
+                          setReminders((prev) =>
+                            prev.map((r, i) => i === idx ? { ...r, enabled: !!checked } : r)
+                          )
+                        }}
+                      />
+                      <Label htmlFor={`reminder-${idx}`} className="flex-1 cursor-pointer text-sm">
+                        {reminder.label}
+                      </Label>
+                      <div className="flex items-center gap-1.5">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={168}
+                          value={reminder.hoursBefore}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 0
+                            setReminders((prev) =>
+                              prev.map((r, i) =>
+                                i === idx
+                                  ? { ...r, hoursBefore: val, label: val >= 24 ? `${Math.round(val / 24)} day(s) before close` : `${val} hour(s) before close` }
+                                  : r,
+                              )
+                            )
+                          }}
+                          className="w-16 text-center text-xs h-7"
+                        />
+                        <span className="text-[11px] text-muted-foreground">hrs</span>
+                      </div>
+                      <button
+                        onClick={() => setReminders((prev) => prev.filter((_, i) => i !== idx))}
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() =>
+                      setReminders((prev) => [
+                        ...prev,
+                        { enabled: true, hoursBefore: 12, label: "12 hour(s) before close" },
+                      ])
+                    }
+                    className="mt-1 flex items-center gap-1.5 rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted transition-colors"
+                  >
+                    <CalendarPlus className="h-3 w-3" />
+                    Add reminder
+                  </button>
+                </div>
+              </div>
+
             </CardContent>
           </Card>
 
@@ -477,11 +585,11 @@ export default function ScheduleReleasePage() {
                     All Users in Group
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {selectedCompany
-                      ? selectedDepartment && selectedDepartment !== "all"
+                    {selectedCompany === "all"
+                      ? "Send to all users across all companies"
+                      : selectedDepartment && selectedDepartment !== "all"
                         ? `Send to all users in ${activeOrg?.name ?? "company"} - ${selectedDepartment} department`
-                        : `Send to all users in ${activeOrg?.name ?? "selected company"}`
-                      : "Select a company above to define the group"}
+                        : `Send to all users in ${activeOrg?.name ?? "selected company"}`}
                   </span>
                 </Label>
               </div>
@@ -492,7 +600,7 @@ export default function ScheduleReleasePage() {
           <div className="flex justify-end">
             <Button
               size="lg"
-              disabled={!selectedTemplate || !selectedCompany || sending}
+              disabled={!selectedTemplate || sending}
               onClick={handleSend}
             >
               {sending ? (
@@ -508,38 +616,98 @@ export default function ScheduleReleasePage() {
         {/* Right column */}
         <div className="flex flex-col gap-6">
           {/* Currently Active */}
-          {activeRelease && (
-            <Card className="border-primary/30">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-semibold">Currently Active</CardTitle>
-                  <Badge className="bg-success/10 text-success">Live</Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm font-medium text-foreground">{activeRelease.templateName}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {activeRelease.organizationName}
-                  {activeRelease.department !== "all" ? ` - ${activeRelease.department}` : ""}
-                </p>
-                <div className="mt-3 flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-xs">
-                  <Timer className="h-3.5 w-3.5 text-primary" />
-                  <span className="text-muted-foreground">
-                    Expires {formatDate(activeRelease.activeUntil)}
-                  </span>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3 w-full bg-transparent text-amber-600 border-amber-300 hover:bg-amber-50"
-                  onClick={handlePauseActive}
-                >
-                  <Pause className="mr-2 h-3.5 w-3.5" />
-                  Pause Scorecard
-                </Button>
-              </CardContent>
-            </Card>
-          )}
+          {activeRelease && (() => {
+            const isExpired = new Date(activeRelease.activeUntil).getTime() < Date.now()
+            return (
+              <Card className={isExpired ? "border-destructive/30" : "border-primary/30"}>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base font-semibold">
+                      {isExpired ? "Expired Scorecard" : "Currently Active"}
+                    </CardTitle>
+                    <Badge className={isExpired ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success"}>
+                      {isExpired ? "Expired" : "Live"}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm font-medium text-foreground">{activeRelease.templateName}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {activeRelease.organizationName}
+                    {activeRelease.department !== "all" ? ` - ${activeRelease.department}` : ""}
+                  </p>
+                  <div className="mt-3 flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-xs">
+                    <Timer className="h-3.5 w-3.5 text-primary" />
+                    <span className="text-muted-foreground">
+                      {isExpired ? "Expired" : "Expires"} {formatDate(activeRelease.activeUntil)}
+                    </span>
+                  </div>
+                  {/* Show configured reminders */}
+                  {!isExpired && (activeRelease as unknown as Record<string, unknown>).reminders && (
+                    <div className="mt-2 flex flex-col gap-1">
+                      {((activeRelease as unknown as Record<string, unknown>).reminders as { label: string; scheduledFor: string; sent: boolean }[]).map((rem, i) => {
+                        const isPast = new Date(rem.scheduledFor).getTime() < Date.now()
+                        return (
+                          <div key={i} className={`flex items-center gap-2 text-[11px] ${isPast ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                            <Bell className={`h-3 w-3 ${isPast ? "text-muted-foreground" : "text-primary"}`} />
+                            <span>{rem.label}</span>
+                            <span className="text-muted-foreground">
+                              {isPast ? "(sent)" : formatDate(rem.scheduledFor)}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                  {isExpired ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 w-full bg-transparent text-primary border-primary/30 hover:bg-primary/5"
+                      onClick={async () => {
+                        const now = new Date()
+                        const until = new Date(now)
+                        until.setDate(until.getDate() + 7)
+                        await updateDocument(COLLECTIONS.SCHEDULES, activeRelease.id, {
+                          status: "active",
+                          activeFrom: now.toISOString(),
+                          activeUntil: until.toISOString(),
+                        })
+                        await fetchData()
+                      }}
+                    >
+                      <RotateCcw className="mr-2 h-3.5 w-3.5" />
+                      Restart Scorecard (7 days)
+                    </Button>
+                  ) : (
+                    <div className="mt-3 flex flex-col gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full bg-transparent text-amber-600 border-amber-300 hover:bg-amber-50"
+                        onClick={handlePauseActive}
+                      >
+                        <Pause className="mr-2 h-3.5 w-3.5" />
+                        Pause Scorecard
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full bg-transparent text-primary border-primary/30 hover:bg-primary/5"
+                        onClick={() => {
+                          setExtendDate(activeRelease.activeUntil.slice(0, 16))
+                          setExtendModalOpen(true)
+                        }}
+                      >
+                        <CalendarPlus className="mr-2 h-3.5 w-3.5" />
+                        Extend Scorecard
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )
+          })()}
 
           {/* Scheduled Releases */}
           <Card>
@@ -577,6 +745,11 @@ export default function ScheduleReleasePage() {
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Active for {Math.round((new Date(release.activeUntil).getTime() - new Date(release.activeFrom).getTime()) / (1000 * 60 * 60 * 24))} days
+                        {(release as unknown as Record<string, unknown>).reminders && (
+                          <span className="ml-1">
+                            &middot; {((release as unknown as Record<string, unknown>).reminders as unknown[]).length} reminder(s)
+                          </span>
+                        )}
                       </p>
                       <Button
                         variant="ghost"
@@ -726,6 +899,49 @@ export default function ScheduleReleasePage() {
           </Card>
         </div>
       </div>
+
+      {/* Extend scorecard modal */}
+      <Dialog open={extendModalOpen} onOpenChange={setExtendModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Extend Scorecard</DialogTitle>
+            <DialogDescription>
+              Choose a new end date and time for the active scorecard.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-4">
+            <div className="flex flex-col gap-2">
+              <Label>New End Date & Time</Label>
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="datetime-local"
+                  value={extendDate}
+                  onChange={(e) => setExtendDate(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setExtendModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!extendDate}
+              onClick={async () => {
+                if (!activeRelease || !extendDate) return
+                await updateDocument(COLLECTIONS.SCHEDULES, activeRelease.id, {
+                  activeUntil: new Date(extendDate).toISOString(),
+                })
+                setExtendModalOpen(false)
+                await fetchData()
+              }}
+            >
+              Extend
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Success confirmation modal */}
       <Dialog open={sent} onOpenChange={setSent}>

@@ -1,4 +1,4 @@
-import { getDocuments, getOrganizations, COLLECTIONS } from "./firestore"
+import { getDocument, getDocuments, getOrganizations, COLLECTIONS } from "./firestore"
 import type {
   WeeklyTrend,
   DepartmentPerformance,
@@ -173,12 +173,21 @@ export async function computeTopPerformers(
   const orgs = await getOrganizations()
   const orgNameMap = new Map(orgs.map((o) => [o.id, (o as Record<string, unknown>).name as string]))
 
+  // Build set of excluded user IDs (admins / non-participants)
+  const allUsers = await getDocuments(COLLECTIONS.USERS)
+  const excludedUserIds = new Set(
+    allUsers
+      .filter((u) => (u as Record<string, unknown>).excludeFromReporting === true)
+      .map((u) => u.id),
+  )
+
   const userMap = new Map<
     string,
-    { name: string; orgId: string; dept: string; total: number; count: number; weeks: Set<string> }
+    { name: string; orgId: string; dept: string; total: number; count: number; weeks: Set<string>; textAnswers: string[] }
   >()
 
   for (const r of responses) {
+    if (excludedUserIds.has(r.userId)) continue
     if (!userMap.has(r.userId)) {
       userMap.set(r.userId, {
         name: r.userName || r.userId,
@@ -187,12 +196,18 @@ export async function computeTopPerformers(
         total: 0,
         count: 0,
         weeks: new Set(),
+        textAnswers: [],
       })
     }
     const entry = userMap.get(r.userId)!
     const scaleVals = Object.values(r.answers).filter(
       (v) => typeof v === "number" && v >= 1 && v <= 10,
     ) as number[]
+    // Collect text answers as potential win narratives
+    const textVals = Object.values(r.answers).filter(
+      (v) => typeof v === "string" && v.length > 15,
+    ) as string[]
+    entry.textAnswers.push(...textVals)
     if (scaleVals.length === 0) continue
     const avg = scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length
     entry.total += avg
@@ -200,8 +215,15 @@ export async function computeTopPerformers(
     entry.weeks.add(r.weekOf)
   }
 
+  // Also load admin-set win narratives from settings
+  let adminNarratives: Record<string, string> = {}
+  try {
+    const doc = await getDocument(COLLECTIONS.SETTINGS, "winNarratives")
+    if (doc) adminNarratives = (doc as Record<string, unknown>).narratives as Record<string, string> ?? {}
+  } catch { /* ignore */ }
+
   return Array.from(userMap.entries())
-    .map(([userId, { name, orgId, dept, total, count, weeks }]) => ({
+    .map(([userId, { name, orgId, dept, total, count, weeks, textAnswers }]) => ({
       id: userId,
       name,
       company: orgNameMap.get(orgId) ?? orgId,
@@ -209,6 +231,8 @@ export async function computeTopPerformers(
       department: dept,
       avgScore: Math.round((total / count) * 10) / 10,
       streak: weeks.size,
+      // Prefer admin-set narrative, then most recent text answer
+      winNarrative: adminNarratives[userId] || textAnswers[textAnswers.length - 1] || undefined,
     }))
     .sort((a, b) => b.avgScore - a.avgScore)
     .slice(0, limit)
@@ -415,7 +439,12 @@ export interface NonResponder {
 }
 
 export async function computeNonResponders(responses: RawResponse[]): Promise<NonResponder[]> {
-  const allUsers = await getDocuments(COLLECTIONS.USERS)
+  const allUsersRaw = await getDocuments(COLLECTIONS.USERS)
+  // Filter out users flagged as excluded from reporting (admins, non-participants)
+  const allUsers = allUsersRaw.filter((u) => {
+    const data = u as Record<string, unknown>
+    return !(data.excludeFromReporting === true)
+  })
   const orgs = await getOrganizations()
   const orgNameMap = new Map(orgs.map((o) => [o.id, (o as Record<string, unknown>).name as string]))
   const allWeeks = Array.from(new Set(responses.map((r) => r.weekOf))).sort()
@@ -425,8 +454,52 @@ export async function computeNonResponders(responses: RawResponse[]): Promise<No
     if (!respondedWeeks.has(r.userId)) respondedWeeks.set(r.userId, new Set())
     respondedWeeks.get(r.userId)!.add(r.weekOf)
   }
+
+  // Deduplicate users by normalized name (first+last+org) to prevent
+  // duplicate accounts from appearing as separate entries.
+  const seen = new Map<string, string>() // normalizedKey -> userId (keep the one with more responses)
+  const userResponseCount = new Map<string, number>()
+  for (const u of allUsers) {
+    const data = u as Record<string, unknown>
+    const firstName = ((data.firstName as string) ?? "").trim().toLowerCase()
+    const lastName = ((data.lastName as string) ?? "").trim().toLowerCase()
+    const orgId = (data.organizationId as string) ?? ""
+    const dedupKey = `${firstName}|${lastName}|${orgId}`
+    const thisCount = respondedWeeks.get(u.id)?.size ?? 0
+    userResponseCount.set(u.id, thisCount)
+
+    if (firstName || lastName) {
+      const existingId = seen.get(dedupKey)
+      if (existingId) {
+        // Keep the account with more responses; merge response weeks
+        const existingCount = userResponseCount.get(existingId) ?? 0
+        const keepId = thisCount >= existingCount ? u.id : existingId
+        const mergeId = keepId === u.id ? existingId : u.id
+        // Merge weeks into the kept account
+        const keepWeeks = respondedWeeks.get(keepId) ?? new Set()
+        const mergeWeeks = respondedWeeks.get(mergeId) ?? new Set()
+        for (const w of mergeWeeks) keepWeeks.add(w)
+        respondedWeeks.set(keepId, keepWeeks)
+        seen.set(dedupKey, keepId)
+        continue
+      }
+      seen.set(dedupKey, u.id)
+    }
+  }
+
+  // Build set of deduped user IDs to include
+  const dedupedIds = new Set(seen.values())
+  // Also include users without first/last names (can't dedup those)
+  for (const u of allUsers) {
+    const data = u as Record<string, unknown>
+    const firstName = ((data.firstName as string) ?? "").trim().toLowerCase()
+    const lastName = ((data.lastName as string) ?? "").trim().toLowerCase()
+    if (!firstName && !lastName) dedupedIds.add(u.id)
+  }
+
   const result: NonResponder[] = []
   for (const u of allUsers) {
+    if (!dedupedIds.has(u.id)) continue
     const data = u as Record<string, unknown>
     const weeks = respondedWeeks.get(u.id)
     const missedWeeks = totalWeeks - (weeks?.size ?? 0)
@@ -486,22 +559,47 @@ export interface DepartmentVariance {
   avgScore: number
   stdDev: number
   responseCount: number
+  highPerformers: number  // score >= 8
+  needsSupport: number    // score < 6
+  totalUsers: number
 }
 
 export function computeDepartmentVariance(responses: RawResponse[]): DepartmentVariance[] {
-  const deptScores = new Map<string, number[]>()
+  // Group scores per user per department
+  const deptUserScores = new Map<string, Map<string, number[]>>()
   for (const r of responses) {
     const dept = r.department || "Unknown"
-    if (!deptScores.has(dept)) deptScores.set(dept, [])
+    if (!deptUserScores.has(dept)) deptUserScores.set(dept, new Map())
+    const userMap = deptUserScores.get(dept)!
+    if (!userMap.has(r.userId)) userMap.set(r.userId, [])
     const scaleVals = Object.values(r.answers).filter((v) => typeof v === "number" && v >= 1 && v <= 10) as number[]
     if (scaleVals.length === 0) continue
-    deptScores.get(dept)!.push(scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length)
+    userMap.get(r.userId)!.push(scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length)
   }
-  return Array.from(deptScores.entries()).map(([department, scores]) => {
-    const mean = scores.reduce((a, b) => a + b, 0) / scores.length
-    const variance = scores.reduce((sum, s) => sum + (s - mean) ** 2, 0) / scores.length
-    return { department, avgScore: Math.round(mean * 10) / 10, stdDev: Math.round(Math.sqrt(variance) * 100) / 100, responseCount: scores.length }
-  }).sort((a, b) => b.stdDev - a.stdDev)
+  return Array.from(deptUserScores.entries()).map(([department, userMap]) => {
+    const allScores: number[] = []
+    let highPerformers = 0
+    let needsSupport = 0
+    for (const scores of userMap.values()) {
+      if (scores.length === 0) continue
+      const userAvg = scores.reduce((a, b) => a + b, 0) / scores.length
+      allScores.push(userAvg)
+      if (userAvg >= 8) highPerformers++
+      if (userAvg < 6) needsSupport++
+    }
+    if (allScores.length === 0) return null
+    const mean = allScores.reduce((a, b) => a + b, 0) / allScores.length
+    const variance = allScores.reduce((sum, s) => sum + (s - mean) ** 2, 0) / allScores.length
+    return {
+      department,
+      avgScore: Math.round(mean * 10) / 10,
+      stdDev: Math.round(Math.sqrt(variance) * 100) / 100,
+      responseCount: allScores.length,
+      highPerformers,
+      needsSupport,
+      totalUsers: userMap.size,
+    }
+  }).filter(Boolean).sort((a, b) => b!.stdDev - a!.stdDev) as DepartmentVariance[]
 }
 
 // ── Trend: Question correlation ───────────────────────────────────────
@@ -586,6 +684,89 @@ export async function computeOrgBenchmarks(responses: RawResponse[]): Promise<Or
     const userCount = orgUsers.get(orgId) ?? 0
     return { orgName: orgNameMap.get(orgId) ?? orgId, avgScore: Math.round((total / count) * 10) / 10, responseRate: userCount > 0 ? Math.min(100, Math.round((users.size / userCount) * 100)) : 0, totalResponses: count, userCount }
   }).sort((a, b) => b.avgScore - a.avgScore)
+}
+
+// ── Field Report: aggregated anonymized cross-org summary ──────────────
+export interface FieldReportData {
+  generatedAt: string
+  totalOrganizations: number
+  totalEmployees: number
+  totalResponses: number
+  overallAvgScore: number
+  avgResponseRate: number
+  topCategories: { question: string; avgScore: number }[]
+  bottomCategories: { question: string; avgScore: number }[]
+  orgCount: number
+  periodLabel: string
+}
+
+export async function computeFieldReport(responses: RawResponse[]): Promise<FieldReportData> {
+  const orgs = await getOrganizations()
+  const allUsers = await getDocuments(COLLECTIONS.USERS)
+  // Exclude non-participant accounts
+  const excludedIds = new Set(allUsers.filter((u) => (u as Record<string, unknown>).excludeFromReporting === true).map((u) => u.id))
+  const users = allUsers.filter((u) => !excludedIds.has(u.id))
+  const participantResponses = responses.filter((r) => !excludedIds.has(r.userId))
+  const uniqueOrgs = new Set(participantResponses.map((r) => r.organizationId))
+  const uniqueUsers = new Set(participantResponses.map((r) => r.userId))
+
+  // Overall avg
+  let totalScore = 0
+  let totalCount = 0
+  const questionScores = new Map<string, { total: number; count: number }>()
+
+  for (const r of responses) {
+    const entries = Object.entries(r.answers)
+    for (const [q, v] of entries) {
+      if (typeof v === "number" && v >= 1 && v <= 10) {
+        totalScore += v
+        totalCount++
+        if (!questionScores.has(q)) questionScores.set(q, { total: 0, count: 0 })
+        const qe = questionScores.get(q)!
+        qe.total += v
+        qe.count++
+      }
+    }
+  }
+
+  const overallAvg = totalCount > 0 ? Math.round((totalScore / totalCount) * 10) / 10 : 0
+
+  // Question ranking
+  const ranked = Array.from(questionScores.entries())
+    .map(([q, { total, count }]) => ({ question: q, avgScore: Math.round((total / count) * 10) / 10 }))
+    .sort((a, b) => b.avgScore - a.avgScore)
+
+  // Response rate
+  const orgUserCounts = new Map<string, number>()
+  for (const u of users) {
+    const orgId = (u as Record<string, unknown>).organizationId as string
+    if (orgId) orgUserCounts.set(orgId, (orgUserCounts.get(orgId) ?? 0) + 1)
+  }
+  let totalOrgUsers = 0
+  for (const orgId of uniqueOrgs) {
+    totalOrgUsers += orgUserCounts.get(orgId) ?? 0
+  }
+  const avgResponseRate = totalOrgUsers > 0 ? Math.round((uniqueUsers.size / totalOrgUsers) * 100) : 0
+
+  // Period label
+  const weeks = Array.from(new Set(responses.map((r) => r.weekOf))).sort()
+  const periodLabel = weeks.length > 0 ? `${weeks[0]} to ${weeks[weeks.length - 1]}` : "No data"
+
+  const now = new Date()
+  const month = now.toLocaleString("default", { month: "long", year: "numeric" })
+
+  return {
+    generatedAt: month,
+    totalOrganizations: uniqueOrgs.size,
+    totalEmployees: users.length,
+    totalResponses: responses.length,
+    overallAvgScore: overallAvg,
+    avgResponseRate,
+    topCategories: ranked.slice(0, 5),
+    bottomCategories: ranked.slice(-5).reverse(),
+    orgCount: orgs.length,
+    periodLabel,
+  }
 }
 
 // ── Actionable: Threshold alerts ──────────────────────────────────────

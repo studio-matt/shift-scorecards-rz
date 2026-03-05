@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { StatCards, AdminStatCards } from "@/components/dashboard/stat-cards"
-import { TopPerformers } from "@/components/dashboard/top-performers"
+import { TopPerformers, MVPSpotlight, HighFiveSection } from "@/components/dashboard/top-performers"
 import { DepartmentPerformanceChart } from "@/components/dashboard/department-performance"
 import { WeeklyTrendChart } from "@/components/dashboard/weekly-trend"
 import { QuestionResults } from "@/components/dashboard/question-results"
@@ -27,14 +27,19 @@ import {
   QuestionCorrelationsCard,
   DeptOverTimeChart,
   OrgBenchmarkCard,
+  FieldReportCard,
   AlertsCard,
 } from "@/components/dashboard/analytics-sections"
 import {
   PersonalStreakCard,
   PersonalBenchmarkCard,
   PersonalTrendChart,
+  HoursSavedCard,
+  HighFivesReceivedCard,
+  AIActionPlanCard,
+  PromptPacksCard,
 } from "@/components/dashboard/user-analytics"
-import { getOrganizations } from "@/lib/firestore"
+import { getOrganizations, getDocument, COLLECTIONS } from "@/lib/firestore"
 import {
   fetchAllResponses,
   computeAdminStats,
@@ -51,6 +56,7 @@ import {
   computeQuestionCorrelations,
   computeDeptOverTime,
   computeOrgBenchmarks,
+  computeFieldReport,
   computeAlerts,
   computePersonalStreak,
   computePersonalTrend,
@@ -65,6 +71,7 @@ import {
   type QuestionCorrelation,
   type DeptOverTime,
   type OrgBenchmark,
+  type FieldReportData,
   type ThresholdAlert,
   type UserPersonalStreak,
   type PersonalTrendPoint,
@@ -105,18 +112,43 @@ export default function DashboardPage() {
   const [correlations, setCorrelations] = useState<QuestionCorrelation[]>([])
   const [deptOverTime, setDeptOverTime] = useState<DeptOverTime[]>([])
   const [orgBenchmarks, setOrgBenchmarks] = useState<OrgBenchmark[]>([])
+  const [fieldReport, setFieldReport] = useState<FieldReportData | null>(null)
   const [alerts, setAlerts] = useState<ThresholdAlert[]>([])
   const [personalStreak, setPersonalStreak] = useState<UserPersonalStreak | null>(null)
   const [personalTrend, setPersonalTrend] = useState<PersonalTrendPoint[]>([])
   const [personalBenchmark, setPersonalBenchmark] = useState<PersonalVsBenchmark | null>(null)
+  const [targets, setTargets] = useState({
+    avgScore: 7.0,
+    completionRate: 85,
+    activeUsers: 100,
+    scorecardsSent: 50,
+    fieldAverage: 6.2,
+  })
+  const [varianceFeedback, setVarianceFeedback] = useState<Record<string, unknown> | undefined>(undefined)
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      const [orgDocs, responses] = await Promise.all([
+      const [orgDocs, responses, targetsDoc, feedbackDoc] = await Promise.all([
         getOrganizations(),
         fetchAllResponses(selectedOrg, selectedDept),
+        getDocument(COLLECTIONS.SETTINGS, "dashboardTargets"),
+        getDocument(COLLECTIONS.SETTINGS, "analyticsFeedback"),
       ])
+      if (targetsDoc) {
+        const t = targetsDoc as Record<string, unknown>
+        setTargets((prev) => ({
+          avgScore: (t.avgScore as number) ?? prev.avgScore,
+          completionRate: (t.completionRate as number) ?? prev.completionRate,
+          activeUsers: (t.activeUsers as number) ?? prev.activeUsers,
+          scorecardsSent: (t.scorecardsSent as number) ?? prev.scorecardsSent,
+          fieldAverage: (t.fieldAverage as number) ?? prev.fieldAverage,
+        }))
+      }
+      if (feedbackDoc) {
+        const f = feedbackDoc as Record<string, unknown>
+        if (f.varianceFeedback) setVarianceFeedback(f.varianceFeedback as Record<string, unknown>)
+      }
       setOrgs(orgDocs as unknown as Organization[])
 
       // Compute all aggregations in parallel
@@ -140,7 +172,7 @@ export default function DashboardPage() {
       setRecentScorecards(recent)
 
       // New analytics
-      const [streakData, nonResp, vel, variance, corr, dot, benchmarks] =
+      const [streakData, nonResp, vel, variance, corr, dot, benchmarks, report] =
         await Promise.all([
           Promise.resolve(computeStreaks(responses)),
           computeNonResponders(responses),
@@ -149,6 +181,7 @@ export default function DashboardPage() {
           computeQuestionCorrelations(responses),
           Promise.resolve(computeDeptOverTime(responses)),
           computeOrgBenchmarks(responses),
+          computeFieldReport(responses),
         ])
       setStreaks(streakData)
       setNonResponders(nonResp)
@@ -157,6 +190,7 @@ export default function DashboardPage() {
       setCorrelations(corr)
       setDeptOverTime(dot)
       setOrgBenchmarks(benchmarks)
+      setFieldReport(report)
       setAlerts(computeAlerts(responses, dept, vel))
 
       // User-specific metrics (uses full response set for anonymized comparisons)
@@ -192,7 +226,7 @@ export default function DashboardPage() {
   const filterLabel = useMemo(() => {
     const parts: string[] = []
     if (selectedOrg === "all") {
-      parts.push("All Organizations")
+      parts.push("All Companies")
     } else {
       parts.push(activeOrg?.name ?? "")
     }
@@ -231,7 +265,7 @@ export default function DashboardPage() {
                 Admin Dashboard
               </h1>
               <p className="mt-1 text-muted-foreground">
-                Global performance metrics and analytics across all organizations
+                Global performance metrics and analytics across all companies
               </p>
             </div>
           </div>
@@ -246,10 +280,10 @@ export default function DashboardPage() {
               }}
             >
               <SelectTrigger className="w-48">
-                <SelectValue placeholder="Organization" />
+                <SelectValue placeholder="All Companies" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Organizations</SelectItem>
+                <SelectItem value="all">All Companies</SelectItem>
                 {orgs.map((org) => (
                   <SelectItem key={org.id} value={org.id}>
                     {org.name}
@@ -263,7 +297,7 @@ export default function DashboardPage() {
               onValueChange={setSelectedDept}
             >
               <SelectTrigger className="w-48">
-                <SelectValue placeholder="Department" />
+                <SelectValue placeholder="All Departments" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Departments</SelectItem>
@@ -297,11 +331,11 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex flex-col gap-6">
-          {adminStats && <AdminStatCards data={adminStats} />}
+          {adminStats && <AdminStatCards data={adminStats} targets={targets} />}
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <WeeklyTrendChart data={weeklyTrend} />
-            <DepartmentPerformanceChart data={deptPerformance} />
+            <WeeklyTrendChart data={weeklyTrend} targetScore={targets.avgScore} fieldAverage={targets.fieldAverage} />
+            <DepartmentPerformanceChart data={deptPerformance} fieldAverage={targets.fieldAverage} />
           </div>
 
           {/* ── Engagement Metrics ────────────────────── */}
@@ -320,7 +354,7 @@ export default function DashboardPage() {
             <p className="mb-4 text-sm text-muted-foreground">Score velocity, variance, and question correlations</p>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <ScoreVelocityCard data={velocities} />
-              <DepartmentVarianceCard data={deptVariance} />
+              <DepartmentVarianceCard data={deptVariance} feedbackSettings={varianceFeedback as Record<string, unknown> | undefined} />
             </div>
             <div className="mt-4">
               <QuestionCorrelationsCard data={correlations} />
@@ -331,10 +365,13 @@ export default function DashboardPage() {
           <div className="border-t border-border pt-4">
             <h2 className="text-lg font-semibold text-foreground">Organizational Intelligence</h2>
             <p className="mb-4 text-sm text-muted-foreground">Cross-department and cross-org comparisons</p>
-            <DeptOverTimeChart data={deptOverTime} />
-            <div className="mt-4">
-              <OrgBenchmarkCard data={orgBenchmarks} />
-            </div>
+<DeptOverTimeChart data={deptOverTime} />
+<div className="mt-4">
+<OrgBenchmarkCard data={orgBenchmarks} />
+</div>
+<div className="mt-4">
+<FieldReportCard data={fieldReport} />
+</div>
           </div>
 
           {/* ── Actionable Alerts ──────────────────────── */}
@@ -349,10 +386,21 @@ export default function DashboardPage() {
           {/* ── Champions ─────────────────────────────── */}
           <div className="border-t border-border pt-4">
             <h2 className="text-lg font-semibold text-foreground">Champions</h2>
-            <p className="mb-4 text-sm text-muted-foreground">Top performers and most improved</p>
+            <p className="mb-4 text-sm text-muted-foreground">Top performers, most improved, and peer recognition</p>
+
+            {/* MVP Spotlight */}
+            {topPerformers.length > 0 && (
+              <div className="mb-6">
+                <MVPSpotlight performer={topPerformers[0]} />
+              </div>
+            )}
+
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <TopPerformers showCompany data={topPerformers} />
-              <MostImprovedCard showCompany data={mostImproved} />
+              <div className="flex flex-col gap-6">
+                <MostImprovedCard showCompany data={mostImproved} />
+                <HighFiveSection performers={topPerformers} currentUserName={user?.firstName ? `${user.firstName} ${user.lastName ?? ""}`.trim() : "Admin"} />
+              </div>
             </div>
           </div>
 
@@ -365,39 +413,97 @@ export default function DashboardPage() {
   }
 
   // --- User Dashboard ---
+
+  // Derive weak categories for AI Action Plan & Prompt Packs
+  const weakCategories = questionResults
+    .filter((q) => typeof q.score === "number" && q.score < 7)
+    .sort((a, b) => a.score - b.score)
+    .slice(0, 5)
+    .map((q) => ({
+      category: q.question,
+      score: Math.round(q.score * 10) / 10,
+      suggestion: q.score < 5
+        ? "This is a critical gap. Focus daily practice here for the biggest AI productivity gains."
+        : q.score < 6
+        ? "Solid room for improvement. Dedicate 15 minutes this week to AI-assisted workflows in this area."
+        : "Close to proficient. A few targeted prompts could push you past the threshold.",
+    }))
+
+  // High fives received count
+  const myName = user?.firstName ? `${user.firstName} ${user.lastName ?? ""}`.trim() : ""
+  // TopPerformer doesn't have highFives field yet, default to mock count based on streak
+  const myPerformer = topPerformers.find(
+    (p) => p.name.toLowerCase() === myName.toLowerCase(),
+  )
+  const highFiveCount = myPerformer ? Math.min(myPerformer.streak, 8) : 0
+
   return (
     <div>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-foreground">My Dashboard</h1>
         <p className="mt-1 text-muted-foreground">
-          Track your scorecard progress and personal performance metrics
+          Track your AI adoption journey, scorecard progress, and personal performance
         </p>
       </div>
 
       <div className="flex flex-col gap-6">
-        <StatCards />
+        {/* ── Stat Cards (contextual) ───────────────────── */}
+        <StatCards
+          avgScore={personalBenchmark?.myAvg ?? 0}
+          fieldAverage={targets.fieldAverage}
+          lastMonthAvg={personalBenchmark ? personalBenchmark.myAvg - (personalBenchmark.myVelocity * 4) : 0}
+          myGoal={8.0}
+          streak={personalStreak?.currentStreak ?? 0}
+          maxStreak={personalStreak?.maxStreak ?? 0}
+          completedSections={personalStreak?.totalResponses ?? 0}
+          totalSections={Math.max(personalStreak?.totalWeeks ?? 1, 1)}
+          percentile={personalBenchmark?.percentile ?? 0}
+        />
 
-        {/* Your Performance */}
+        {/* ── Hours Saved + High Fives row ──────────────── */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <HoursSavedCard totalResponses={personalStreak?.totalResponses ?? 0} />
+          <HighFivesReceivedCard count={highFiveCount} />
+        </div>
+
+        {/* ── Your Performance ──────────────────────────── */}
         <div className="border-t border-border pt-4">
           <h2 className="text-lg font-semibold text-foreground">Your Performance</h2>
           <p className="mb-4 text-sm text-muted-foreground">
-            Personal stats and how you compare (all comparisons are anonymized)
+            Personal metrics and how you compare (all comparisons are anonymized)
           </p>
           {personalStreak || personalBenchmark ? (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               {personalStreak && <PersonalStreakCard data={personalStreak} />}
-              {personalBenchmark && <PersonalBenchmarkCard data={personalBenchmark} />}
+              {personalBenchmark && (
+                <PersonalBenchmarkCard
+                  data={personalBenchmark}
+                  fieldAverage={targets.fieldAverage}
+                  monthlyGoal={8.0}
+                />
+              )}
             </div>
           ) : (
-            <div className="rounded-lg border border-dashed border-border bg-muted/30 px-6 py-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                Complete your first scorecard to see your personal performance metrics here.
-              </p>
-            </div>
+            <PersonalStreakCard data={{ currentStreak: 0, maxStreak: 0, totalResponses: 0, totalWeeks: 0 }} />
           )}
         </div>
 
-        {/* Your Trend */}
+        {/* ── AI Action Plan & Prompt Packs ──────────────── */}
+        <div className="border-t border-border pt-4">
+          <h2 className="text-lg font-semibold text-foreground">AI Growth Plan</h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Personalized actions and curated prompts based on your scorecard results
+          </p>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <AIActionPlanCard
+              weakCategories={weakCategories}
+              score={personalBenchmark?.myAvg ?? 0}
+            />
+            <PromptPacksCard weakCategories={weakCategories} />
+          </div>
+        </div>
+
+        {/* ── Your Trend ────────────────────────────────── */}
         <div className="border-t border-border pt-4">
           <h2 className="text-lg font-semibold text-foreground">Your Trend</h2>
           <p className="mb-4 text-sm text-muted-foreground">
@@ -417,6 +523,28 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <WeeklyTrendChart data={weeklyTrend} />
           <GoalsCard />
+        </div>
+
+        {/* ── Champions & Recognition ────────────────── */}
+        <div className="border-t border-border pt-4">
+          <h2 className="text-lg font-semibold text-foreground">Champions & Recognition</h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Top performers and peer recognition (names shown by opt-in only)
+          </p>
+
+          {topPerformers.length > 0 && (
+            <div className="mb-6">
+              <MVPSpotlight performer={topPerformers[0]} />
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <TopPerformers data={topPerformers} />
+            <div className="flex flex-col gap-6">
+              <MostImprovedCard data={mostImproved} />
+              <HighFiveSection performers={topPerformers} currentUserName={myName || "User"} />
+            </div>
+          </div>
         </div>
 
         <QuestionResults data={questionResults} />

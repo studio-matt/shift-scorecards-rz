@@ -12,6 +12,7 @@ export interface User {
   phone: string
   avatar?: string
   organizationId: string
+  excludeFromReporting?: boolean
   createdAt: string
   lastLogin: string
 }
@@ -25,6 +26,16 @@ export interface Organization {
   contactEmail?: string
   industry?: string
   memberCount?: number
+  // Branding
+  accentColor?: string
+  logoUrl?: string
+  // Reporting preferences
+  reportingPreferences?: {
+    anonymizeByDefault?: boolean
+    includeInBenchmarking?: boolean
+    scorecardCadence?: "weekly" | "biweekly" | "monthly"
+    autoReminders?: boolean
+  }
 }
 
 export interface ScorecardQuestion {
@@ -41,6 +52,7 @@ export interface ScorecardTemplate {
   name: string
   description: string
   questions: ScorecardQuestion[]
+  version?: string
   createdBy: string
   createdAt: string
   customLogic?: string
@@ -69,6 +81,12 @@ export interface ScorecardRelease {
   recurringFrequency?: "weekly" | "biweekly" | "monthly"
   recipientCount: number
   responseCount: number
+  reminders?: {
+    hoursBefore: number
+    label: string
+    scheduledFor: string
+    sent: boolean
+  }[]
   status: "scheduled" | "active" | "paused" | "completed" | "expired"
   createdAt: string
   createdBy: string
@@ -89,6 +107,7 @@ export interface TopPerformer {
   department: string
   avgScore: number
   streak: number
+  winNarrative?: string
 }
 
 export interface WeeklyTrend {

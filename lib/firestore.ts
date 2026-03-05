@@ -26,6 +26,7 @@ export const COLLECTIONS = {
   RESPONSES: "responses",
   INVITES: "invites",
   SCHEDULES: "schedules",
+  SETTINGS: "settings",
 } as const
 
 // ─── Generic Helpers ──────────────────────────────────────────────────

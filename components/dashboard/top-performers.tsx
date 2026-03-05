@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useCallback, useEffect } from "react"
 import {
   Card,
   CardContent,
@@ -8,23 +9,267 @@ import {
 } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+  Eye,
+  EyeOff,
+  Hand,
+  Trophy,
+  Star,
+  Sparkles,
+  Send,
+  X,
+} from "lucide-react"
 import type { TopPerformer } from "@/lib/types"
+import { COLLECTIONS, setDocument, getDocuments } from "@/lib/firestore"
+import { Timestamp } from "firebase/firestore"
 
+// ── Privacy helpers ──────────────────────────────────────────────────
+function anonymizeName(name: string): string {
+  const parts = name.split(" ")
+  if (parts.length < 2) return `${name.charAt(0)}***`
+  return `${parts[0].charAt(0)}. ${parts[parts.length - 1].charAt(0)}.`
+}
+
+// ── High Five type ──────────────────────────────────────────────────
+export interface HighFive {
+  id: string
+  fromName: string
+  toUserId: string
+  toName: string
+  message: string
+  createdAt: string
+}
+
+// ── MVP Spotlight ────────────────────────────────────────────────────
+export function MVPSpotlight({ performer }: { performer: TopPerformer | null }) {
+  if (!performer) return null
+  return (
+    <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+      <CardContent className="p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+            <Trophy className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-primary">This Month{"'"}s MVP</p>
+          </div>
+        </div>
+        <div className="flex items-start gap-4">
+          <Avatar className="h-14 w-14 shrink-0 border-2 border-primary/20">
+            <AvatarFallback className="bg-primary/10 text-lg font-bold text-primary">
+              {performer.name.split(" ").map((n) => n[0]).join("")}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 flex-1">
+            <p className="text-lg font-bold text-foreground">{performer.name}</p>
+            <p className="text-sm text-muted-foreground">
+              {performer.company} &middot; {performer.department}
+            </p>
+            <div className="mt-2 flex items-center gap-3">
+              <Badge className="bg-primary/10 text-primary border-0">
+                <Star className="mr-1 h-3 w-3" />
+                {performer.avgScore} avg
+              </Badge>
+              <Badge variant="secondary">
+                {performer.streak} wk streak
+              </Badge>
+            </div>
+            {performer.winNarrative && (
+              <div className="mt-3 rounded-lg border border-primary/10 bg-card px-3 py-2">
+                <div className="mb-1 flex items-center gap-1">
+                  <Sparkles className="h-3 w-3 text-primary" />
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-primary">Win of the Month</p>
+                </div>
+                <p className="text-sm leading-relaxed text-foreground italic">
+                  {`"${performer.winNarrative}"`}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── High Five Section ────────────────────────────────────────────────
+export function HighFiveSection({
+  performers,
+  currentUserName,
+}: {
+  performers: TopPerformer[]
+  currentUserName: string
+}) {
+  const [highFives, setHighFives] = useState<HighFive[]>([])
+  const [sending, setSending] = useState<string | null>(null) // userId being high-fived
+  const [message, setMessage] = useState("")
+  const [loadedFives, setLoadedFives] = useState(false)
+
+  const loadHighFives = useCallback(async () => {
+    if (loadedFives) return
+    try {
+      const docs = await getDocuments(COLLECTIONS.SETTINGS)
+      const fiveDoc = docs.find((d) => d.id === "highFives") as Record<string, unknown> | undefined
+      if (fiveDoc && Array.isArray(fiveDoc.items)) {
+        setHighFives(fiveDoc.items as HighFive[])
+      }
+    } catch {
+      // fail silently
+    }
+    setLoadedFives(true)
+  }, [loadedFives])
+
+  // Load on mount
+  useEffect(() => { loadHighFives() }, [loadHighFives])
+
+  async function sendHighFive(toPerformer: TopPerformer) {
+    if (!message.trim()) return
+    const newFive: HighFive = {
+      id: `hf-${Date.now()}`,
+      fromName: currentUserName || "Anonymous",
+      toUserId: toPerformer.id,
+      toName: toPerformer.name,
+      message: message.trim(),
+      createdAt: new Date().toISOString(),
+    }
+    const updated = [newFive, ...highFives].slice(0, 50) // Keep last 50
+    setHighFives(updated)
+    setSending(null)
+    setMessage("")
+    try {
+      await setDocument(COLLECTIONS.SETTINGS, "highFives", { items: updated, updatedAt: Timestamp.now() })
+    } catch {
+      // fail silently
+    }
+  }
+
+  const recentFives = highFives.slice(0, 6)
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+          <Hand className="h-4 w-4 text-primary" />
+          High Fives
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">Give recognition to your colleagues</p>
+      </CardHeader>
+      <CardContent>
+        {/* Quick send buttons */}
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {performers.slice(0, 8).map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setSending(sending === p.id ? null : p.id)}
+              className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
+                sending === p.id
+                  ? "bg-primary text-primary-foreground"
+                  : "border border-border bg-card text-foreground hover:bg-muted"
+              }`}
+            >
+              <Hand className="h-3 w-3" />
+              {p.name.split(" ")[0]}
+            </button>
+          ))}
+        </div>
+
+        {/* Send form */}
+        {sending && (
+          <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-medium text-foreground">
+                High five to {performers.find((p) => p.id === sending)?.name}
+              </p>
+              <button onClick={() => { setSending(null); setMessage("") }}>
+                <X className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <Input
+                placeholder="What did they do great?"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                className="text-sm"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const p = performers.find((p) => p.id === sending)
+                    if (p) sendHighFive(p)
+                  }
+                }}
+              />
+              <Button
+                size="sm"
+                onClick={() => {
+                  const p = performers.find((p) => p.id === sending)
+                  if (p) sendHighFive(p)
+                }}
+                disabled={!message.trim()}
+              >
+                <Send className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Recent high fives */}
+        {recentFives.length === 0 ? (
+          <p className="py-3 text-center text-xs text-muted-foreground">No high fives yet. Be the first!</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {recentFives.map((hf) => (
+              <div key={hf.id} className="flex items-start gap-2 rounded-md bg-muted/30 px-3 py-2">
+                <Hand className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                <div className="min-w-0">
+                  <p className="text-xs text-foreground">
+                    <span className="font-semibold">{hf.fromName}</span>
+                    {" gave "}<span className="font-semibold">{hf.toName}</span>{" a high five"}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground italic">{`"${hf.message}"`}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Main Leaderboard ─────────────────────────────────────────────────
 interface TopPerformersProps {
   showCompany?: boolean
   data: TopPerformer[]
 }
 
 export function TopPerformers({ showCompany = false, data }: TopPerformersProps) {
+  const [showNames, setShowNames] = useState(false)
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base font-semibold">
-          Champions Dashboard
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">
-          {showCompany ? "Top Performers Across All Organizations" : "Top Performers This Week"}
-        </p>
+        <div className="flex items-start justify-between">
+          <div>
+            <CardTitle className="text-base font-semibold">
+              Leaderboard
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {showCompany ? "Top Performers Across All Companies" : "Top Performers This Week"}
+            </p>
+          </div>
+          <button
+            onClick={() => setShowNames(!showNames)}
+            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted transition-colors"
+            title={showNames ? "Hide names for privacy" : "Show full names"}
+          >
+            {showNames ? (
+              <><EyeOff className="h-3.5 w-3.5" /> Hide Names</>
+            ) : (
+              <><Eye className="h-3.5 w-3.5" /> Show Names</>
+            )}
+          </button>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="flex flex-col gap-3">
@@ -33,47 +278,67 @@ export function TopPerformers({ showCompany = false, data }: TopPerformersProps)
               No performers match the current filters
             </p>
           )}
-          {data.map((performer, index) => (
-            <div
-              key={performer.id}
-              className="flex items-center gap-3 rounded-lg border border-border p-3"
-            >
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                {index + 1}
-              </span>
-              <Avatar className="h-9 w-9 shrink-0">
-                <AvatarFallback className="bg-muted text-xs font-medium text-foreground">
-                  {performer.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </AvatarFallback>
-              </Avatar>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-foreground">
-                  {performer.name}
-                </p>
-                {showCompany ? (
-                  <p className="truncate text-xs text-muted-foreground">
-                    {performer.company} &middot; {performer.department}
+          {data.map((performer, index) => {
+            const displayName = showNames ? performer.name : anonymizeName(performer.name)
+            const initials = performer.name.split(" ").map((n) => n[0]).join("")
+            const isTop3 = index < 3
+            return (
+              <div
+                key={performer.id}
+                className={`flex items-center gap-3 rounded-lg border p-3 transition-colors ${
+                  isTop3
+                    ? "border-primary/20 bg-primary/5"
+                    : "border-border"
+                }`}
+              >
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                  index === 0
+                    ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                    : index === 1
+                      ? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                      : index === 2
+                        ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                        : "bg-primary/10 text-primary"
+                }`}>
+                  {index + 1}
+                </span>
+                <Avatar className="h-9 w-9 shrink-0">
+                  <AvatarFallback className={`text-xs font-medium ${isTop3 ? "bg-primary/10 text-primary" : "bg-muted text-foreground"}`}>
+                    {showNames ? initials : "?"}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-foreground">
+                    {displayName}
                   </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    {performer.department}
+                  {showCompany ? (
+                    <p className="truncate text-xs text-muted-foreground">
+                      {performer.company} &middot; {performer.department}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      {performer.department}
+                    </p>
+                  )}
+                  {/* Win narrative inline for top 3 */}
+                  {isTop3 && performer.winNarrative && (
+                    <p className="mt-1 text-[11px] italic leading-snug text-muted-foreground">
+                      {`"${performer.winNarrative}"`}
+                    </p>
+                  )}
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-bold text-foreground">
+                    {performer.avgScore}
                   </p>
-                )}
+                  <p className="text-xs text-muted-foreground">Avg Score</p>
+                </div>
+                <Badge variant="secondary" className="shrink-0 text-xs">
+                  {performer.streak} wk streak
+                </Badge>
               </div>
-              <div className="shrink-0 text-right">
-                <p className="text-sm font-bold text-foreground">
-                  {performer.avgScore}
-                </p>
-                <p className="text-xs text-muted-foreground">Avg Score</p>
-              </div>
-              <Badge variant="secondary" className="shrink-0 text-xs">
-                {performer.streak} wk streak
-              </Badge>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </CardContent>
     </Card>

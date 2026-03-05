@@ -25,6 +25,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog"
 import {
@@ -48,7 +49,20 @@ import {
   Loader2,
   Search,
   Save,
+  Upload,
+  FileDown,
+  UserPlus,
+  Palette,
+  Image,
+  Settings2,
+  Eye,
+  EyeOff,
+  BarChart3,
+  Bell,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
 import type { Organization } from "@/lib/types"
 import {
   getOrganizations,
@@ -60,6 +74,26 @@ import {
   setDocument,
   COLLECTIONS,
 } from "@/lib/firestore"
+
+/** Proper-case a name: "kristen abbott" → "Kristen Abbott" */
+function properCase(name: string): string {
+  return name
+    .split(" ")
+    .map((w) => (w.length > 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : ""))
+    .join(" ")
+    .trim()
+}
+
+const ACCENT_PRESETS = [
+  { label: "Blue", value: "#3b82f6" },
+  { label: "Indigo", value: "#6366f1" },
+  { label: "Teal", value: "#14b8a6" },
+  { label: "Green", value: "#22c55e" },
+  { label: "Amber", value: "#f59e0b" },
+  { label: "Red", value: "#ef4444" },
+  { label: "Rose", value: "#f43f5e" },
+  { label: "Slate", value: "#64748b" },
+]
 
 const KNOWN_DEPARTMENTS = [
   "Engineering", "Design", "Product", "Marketing", "Sales",
@@ -118,6 +152,9 @@ export default function OrganizationPage() {
           contactEmail: o.contactEmail,
           industry: o.industry,
           memberCount: countMap.get(o.id) ?? 0,
+          accentColor: o.accentColor,
+          logoUrl: o.logoUrl,
+          reportingPreferences: o.reportingPreferences,
         })) as Organization[],
       )
     } catch (err) {
@@ -257,9 +294,18 @@ export default function OrganizationPage() {
               >
                 <CardHeader className="flex flex-row items-start justify-between pb-3">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                      <Building2 className="h-5 w-5 text-primary" />
-                    </div>
+                    {org.logoUrl ? (
+                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg">
+                        <img src={org.logoUrl} alt="" className="h-full w-full object-contain" onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none' }} />
+                      </div>
+                    ) : (
+                      <div
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+                        style={{ backgroundColor: org.accentColor ? `${org.accentColor}20` : 'hsl(var(--primary) / 0.1)' }}
+                      >
+                        <Building2 className="h-5 w-5" style={{ color: org.accentColor || 'hsl(var(--primary))' }} />
+                      </div>
+                    )}
                     <div>
                       <CardTitle className="text-base">{org.name}</CardTitle>
                       {org.industry && (
@@ -531,13 +577,16 @@ export default function OrganizationPage() {
       onBack={() => setSelectedOrgId(null)}
       onUpdate={async (updated) => {
         try {
-          await updateDocument(COLLECTIONS.ORGANIZATIONS, updated.id, {
-            name: updated.name,
-            departments: updated.departments,
-            website: updated.website ?? null,
-            contactEmail: updated.contactEmail ?? null,
-            industry: updated.industry ?? null,
-          })
+  await updateDocument(COLLECTIONS.ORGANIZATIONS, updated.id, {
+  name: updated.name,
+  departments: updated.departments,
+  website: updated.website ?? null,
+  contactEmail: updated.contactEmail ?? null,
+  industry: updated.industry ?? null,
+  accentColor: updated.accentColor ?? null,
+  logoUrl: updated.logoUrl ?? null,
+  reportingPreferences: updated.reportingPreferences ?? null,
+  })
           await fetchOrgs()
         } catch (err) {
           console.error("Failed to update organization:", err)
@@ -672,6 +721,162 @@ function OrgDetailView({
   const [editingMember, setEditingMember] = useState<{ id: string; firstName: string; lastName: string; email: string; department: string; role: string } | null>(null)
   const [editSaving, setEditSaving] = useState(false)
 
+  // Branding & Settings state
+  const [accentColor, setAccentColor] = useState(org.accentColor ?? "#3b82f6")
+  const [logoUrl, setLogoUrl] = useState(org.logoUrl ?? "")
+  const [logoUploading, setLogoUploading] = useState(false)
+  const [anonymizeByDefault, setAnonymizeByDefault] = useState(org.reportingPreferences?.anonymizeByDefault ?? true)
+
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setLogoUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("orgId", org.id)
+      if (logoUrl) formData.append("previousUrl", logoUrl)
+      const res = await fetch("/api/upload/logo", { method: "POST", body: formData })
+      if (!res.ok) throw new Error("Upload failed")
+      const { url } = await res.json()
+      setLogoUrl(url)
+      // Save to Firestore without triggering a full re-fetch/re-mount
+      await updateDocument(COLLECTIONS.ORGANIZATIONS, org.id, { logoUrl: url })
+    } catch (err) {
+      console.error("Logo upload error:", err)
+    }
+    setLogoUploading(false)
+    // Reset the input so the same file can be re-selected
+    e.target.value = ""
+  }
+  const [includeInBenchmarking, setIncludeInBenchmarking] = useState(org.reportingPreferences?.includeInBenchmarking ?? true)
+  const [scorecardCadence, setScorecardCadence] = useState<"weekly" | "biweekly" | "monthly">(org.reportingPreferences?.scorecardCadence ?? "monthly")
+  const [autoReminders, setAutoReminders] = useState(org.reportingPreferences?.autoReminders ?? true)
+  const [settingsExpanded, setSettingsExpanded] = useState(false)
+
+  // Invite members state
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState("")
+  const [inviteRole, setInviteRole] = useState("user")
+  const [inviteDepartment, setInviteDepartment] = useState("")
+  const [inviteCsvFile, setInviteCsvFile] = useState<File | null>(null)
+  const [inviteCsvCount, setInviteCsvCount] = useState(0)
+  const [inviteCsvDepartment, setInviteCsvDepartment] = useState("")
+  const [inviteSending, setInviteSending] = useState(false)
+
+  function handleInviteCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setInviteCsvFile(file)
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const text = event.target?.result as string
+      const lines = text.split("\n").filter((line) => line.trim())
+      setInviteCsvCount(Math.max(0, lines.length - 1))
+    }
+    reader.readAsText(file)
+  }
+
+  function handleDownloadTemplate() {
+    const csvContent = "email,firstName,lastName,department\njane@company.com,Jane,Doe,Engineering\njohn@company.com,John,Smith,Sales"
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = "shift-invite-template.csv"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleInvite() {
+    setInviteSending(true)
+    const emailsToSend: string[] = []
+    try {
+      if (inviteCsvFile) {
+        const text = await inviteCsvFile.text()
+        const lines = text.split("\n").filter((l) => l.trim())
+        const headers = lines[0].toLowerCase().split(",").map((h) => h.trim())
+        const colIdx = {
+          email: Math.max(headers.indexOf("email"), 0),
+          firstName: headers.indexOf("firstname"),
+          lastName: headers.indexOf("lastname"),
+          department: headers.indexOf("department"),
+        }
+        for (let i = 1; i < lines.length; i++) {
+          const parts = lines[i].split(",").map((s) => s.trim())
+          const email = parts[colIdx.email] ?? ""
+          const firstName = colIdx.firstName >= 0 ? properCase(parts[colIdx.firstName] ?? "") : ""
+          const lastName = colIdx.lastName >= 0 ? properCase(parts[colIdx.lastName] ?? "") : ""
+          const dept = inviteCsvDepartment || (colIdx.department >= 0 ? parts[colIdx.department] : "") || ""
+          if (email && email.includes("@")) {
+            await createDocument(COLLECTIONS.INVITES, {
+              email,
+              firstName,
+              lastName,
+              department: dept,
+              organizationId: org.id,
+              role: "user",
+              status: "pending",
+              createdAt: new Date().toISOString(),
+            })
+            emailsToSend.push(email)
+          }
+        }
+      } else if (inviteEmail) {
+        await createDocument(COLLECTIONS.INVITES, {
+          email: inviteEmail,
+          department: inviteDepartment,
+          organizationId: org.id,
+          role: inviteRole,
+          status: "pending",
+          createdAt: new Date().toISOString(),
+        })
+        emailsToSend.push(inviteEmail)
+      }
+      if (emailsToSend.length > 0) {
+        try {
+          await fetch("/api/invite", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ emails: emailsToSend, orgName: org.name }),
+          })
+        } catch { /* email delivery is best-effort */ }
+      }
+    } catch (err) {
+      console.error("Failed to send invite:", err)
+    }
+    setInviteDialogOpen(false)
+    setInviteEmail("")
+    setInviteRole("user")
+    setInviteDepartment("")
+    setInviteCsvFile(null)
+    setInviteCsvCount(0)
+    setInviteCsvDepartment("")
+    setInviteSending(false)
+    // Re-fetch members to show newly invited users
+    try {
+      const docs = await getUsersByOrg(org.id)
+      setMembers(
+        docs.map((d) => {
+          const data = d as Record<string, unknown>
+          const first = (data.firstName as string) ?? ""
+          const last = (data.lastName as string) ?? ""
+          return {
+            id: d.id,
+            firstName: first,
+            lastName: last,
+            name: `${first} ${last}`.trim() || ((data.email as string) ?? "Unknown"),
+            email: (data.email as string) ?? "",
+            department: (data.department as string) ?? "",
+            role: (data.role as string) ?? "user",
+          }
+        }),
+      )
+    } catch { /* ignore */ }
+  }
+
   useEffect(() => {
     async function fetchMembers() {
       try {
@@ -743,6 +948,14 @@ function OrgDetailView({
       contactEmail: contactEmail || undefined,
       industry: industry || undefined,
       departments,
+      accentColor,
+      logoUrl: logoUrl || undefined,
+      reportingPreferences: {
+        anonymizeByDefault,
+        includeInBenchmarking,
+        scorecardCadence,
+        autoReminders,
+      },
     })
     setSaving(false)
   }
@@ -800,14 +1013,35 @@ function OrgDetailView({
           Back to Organizations
         </button>
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-            <Building2 className="h-6 w-6 text-primary" />
-          </div>
+          {logoUrl ? (
+            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg">
+              <img
+                src={logoUrl}
+                alt={`${orgName} logo`}
+                className="h-full w-full object-contain"
+                onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none' }}
+              />
+            </div>
+          ) : (
+            <div
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg"
+              style={{ backgroundColor: `${accentColor}20` }}
+            >
+              <Building2 className="h-6 w-6" style={{ color: accentColor }} />
+            </div>
+          )}
           <div>
             <h1 className="text-2xl font-bold text-foreground">{orgName}</h1>
-            <p className="text-sm text-muted-foreground">
-              Created {org.createdAt}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-muted-foreground">
+                Created {org.createdAt}
+              </p>
+              {org.industry && (
+                <Badge variant="outline" className="text-[10px]">
+                  {org.industry}
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -972,6 +1206,222 @@ function OrgDetailView({
             </CardContent>
           </Card>
 
+          {/* Organization Settings */}
+          <Card id="org-settings-card">
+            <CardHeader>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between"
+                onClick={() => setSettingsExpanded(!settingsExpanded)}
+              >
+                <div>
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <Settings2 className="h-4 w-4" />
+                    Organization Settings
+                  </CardTitle>
+                  <CardDescription className="text-left mt-1">
+                    Branding, department taxonomy, and reporting preferences
+                  </CardDescription>
+                </div>
+                {settingsExpanded ? (
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                )}
+              </button>
+            </CardHeader>
+            {settingsExpanded && (
+              <CardContent className="flex flex-col gap-6">
+                {/* Branding */}
+                <div>
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <Palette className="h-4 w-4" />
+                    Custom Branding
+                  </h3>
+                  <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/30 p-4">
+                    <div className="flex flex-col gap-2">
+                      <Label>Accent Color</Label>
+                      <div className="flex items-center gap-3">
+                        <div className="flex gap-1.5">
+                          {ACCENT_PRESETS.map((preset) => (
+                            <button
+                              key={preset.value}
+                              type="button"
+                              onClick={() => setAccentColor(preset.value)}
+                              className={`h-7 w-7 rounded-full border-2 transition-all ${
+                                accentColor === preset.value
+                                  ? "border-foreground scale-110"
+                                  : "border-transparent hover:scale-105"
+                              }`}
+                              style={{ backgroundColor: preset.value }}
+                              title={preset.label}
+                            />
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="text"
+                            value={accentColor}
+                            onChange={(e) => setAccentColor(e.target.value)}
+                            className="w-24 font-mono text-xs h-7"
+                            placeholder="#3b82f6"
+                          />
+                          <label className="relative h-7 w-7 cursor-pointer rounded border border-border overflow-hidden" title="Pick a custom color">
+                            <div
+                              className="absolute inset-0"
+                              style={{ backgroundColor: accentColor }}
+                            />
+                            <input
+                              type="color"
+                              value={accentColor}
+                              onChange={(e) => setAccentColor(e.target.value)}
+                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Used for headers, buttons, and accents in org-specific reports.
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Label>Organization Logo</Label>
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-dashed border-border bg-card overflow-hidden">
+                          {logoUrl ? (
+                            <img
+                              src={logoUrl}
+                              alt="Org logo"
+                              className="h-full w-full object-contain"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                            />
+                          ) : (
+                            <Image className="h-5 w-5 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <label
+                            htmlFor="org-logo-file"
+                            className={`inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted ${logoUploading ? "pointer-events-none opacity-60" : ""}`}
+                          >
+                            {logoUploading ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Upload className="h-4 w-4" />
+                            )}
+                            {logoUploading ? "Uploading..." : logoUrl ? "Change Logo" : "Upload Logo"}
+                          </label>
+                          <input
+                            id="org-logo-file"
+                            type="file"
+                            accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                            className="sr-only"
+                            onChange={handleLogoUpload}
+                            disabled={logoUploading}
+                          />
+                          <p className="text-[11px] text-muted-foreground">
+                            PNG, JPG, SVG, or WebP. Max 2MB.
+                          </p>
+                          {logoUrl && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                setLogoUrl("")
+                                await updateDocument(COLLECTIONS.ORGANIZATIONS, org.id, { logoUrl: null })
+                              }}
+                              className="self-start text-[11px] text-destructive hover:underline"
+                            >
+                              Remove logo
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Displayed on scorecards, reports, and the org header.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Reporting Preferences */}
+                <div>
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <BarChart3 className="h-4 w-4" />
+                    Reporting Preferences
+                  </h3>
+                  <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+                          <Label className="text-sm">Anonymize by Default</Label>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground ml-5">
+                          Hide individual names in leaderboards and reports unless users opt in.
+                        </p>
+                      </div>
+                      <Switch checked={anonymizeByDefault} onCheckedChange={setAnonymizeByDefault} />
+                    </div>
+                    <div className="border-t border-border" />
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
+                          <Label className="text-sm">Include in Cross-Org Benchmarking</Label>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground ml-5">
+                          Allow anonymized data to be included in industry-wide benchmarks across SHIFT clients.
+                        </p>
+                      </div>
+                      <Switch checked={includeInBenchmarking} onCheckedChange={setIncludeInBenchmarking} />
+                    </div>
+                    <div className="border-t border-border" />
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Bell className="h-3.5 w-3.5 text-muted-foreground" />
+                          <Label className="text-sm">Automated Reminders</Label>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground ml-5">
+                          Send email reminders to non-responders before the scorecard window closes.
+                        </p>
+                      </div>
+                      <Switch checked={autoReminders} onCheckedChange={setAutoReminders} />
+                    </div>
+                    <div className="border-t border-border" />
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2">
+                        <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Label className="text-sm">Preferred Scorecard Cadence</Label>
+                      </div>
+                      <Select value={scorecardCadence} onValueChange={(v) => setScorecardCadence(v as "weekly" | "biweekly" | "monthly")}>
+                        <SelectTrigger className="max-w-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="monthly">Monthly (recommended)</SelectItem>
+                          <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                          <SelectItem value="weekly">Weekly</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[11px] text-muted-foreground">
+                        Default cadence when scheduling scorecards for this organization.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button onClick={handleSave} disabled={saving}>
+                    {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Save className="mr-2 h-4 w-4" />
+                    Save Settings
+                  </Button>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+
           {/* Members */}
           <Card id="members-section">
             <CardHeader>
@@ -984,6 +1434,10 @@ function OrgDetailView({
                     Users assigned to this organization
                   </CardDescription>
                 </div>
+                <Button size="sm" onClick={() => setInviteDialogOpen(true)}>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Invite Members
+                </Button>
               </div>
               {members.length > 0 && (
                 <div className="relative mt-3">
@@ -1161,6 +1615,149 @@ function OrgDetailView({
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          {/* Invite Members Dialog */}
+          <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Invite Members to {org.name}</DialogTitle>
+                <DialogDescription>
+                  Invite users to join this organization. They will receive a registration link via email.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col gap-4 py-4">
+                {/* Single invite */}
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="org-invite-email">Email Address</Label>
+                  <Input
+                    id="org-invite-email"
+                    type="email"
+                    placeholder="name@company.com"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    disabled={!!inviteCsvFile}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-2">
+                    <Label>Role</Label>
+                    <Select value={inviteRole} onValueChange={setInviteRole} disabled={!!inviteCsvFile}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="user">User</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label>Department</Label>
+                    <Select
+                      value={inviteDepartment}
+                      onValueChange={setInviteDepartment}
+                      disabled={!!inviteCsvFile || departments.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={departments.length === 0 ? "No departments" : "Select department"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {departments.map((d) => (
+                          <SelectItem key={d} value={d}>{d}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* CSV bulk section */}
+                <div className="flex flex-col gap-3">
+                  <div className="relative flex items-center">
+                    <div className="flex-1 border-t border-border" />
+                    <span className="px-3 text-xs text-muted-foreground">or bulk invite via CSV</span>
+                    <div className="flex-1 border-t border-border" />
+                  </div>
+                  <label
+                    htmlFor="org-csv-upload"
+                    className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+                  >
+                    <Upload className="h-4 w-4" />
+                    {inviteCsvFile ? (
+                      <span className="font-medium text-foreground">
+                        {inviteCsvFile.name}{" "}
+                        <span className="text-muted-foreground">
+                          ({inviteCsvCount} user{inviteCsvCount !== 1 ? "s" : ""})
+                        </span>
+                      </span>
+                    ) : (
+                      "Upload CSV file"
+                    )}
+                  </label>
+                  <input
+                    id="org-csv-upload"
+                    type="file"
+                    accept=".csv"
+                    className="sr-only"
+                    onChange={handleInviteCsvUpload}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleDownloadTemplate}
+                    className="flex items-center gap-1.5 self-start text-xs font-medium text-primary hover:underline"
+                  >
+                    <FileDown className="h-3.5 w-3.5" />
+                    Download CSV template
+                  </button>
+
+                  {inviteCsvFile && (
+                    <div className="flex flex-col gap-2">
+                      <Label>Department (override CSV column)</Label>
+                      <Select
+                        value={inviteCsvDepartment}
+                        onValueChange={setInviteCsvDepartment}
+                        disabled={departments.length === 0}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={departments.length === 0 ? "No departments" : "Select department (optional)"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {departments.map((d) => (
+                            <SelectItem key={d} value={d}>{d}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        If set, overrides the department column from the CSV for all rows.
+                      </p>
+                    </div>
+                  )}
+
+                  {inviteCsvFile && (
+                    <button
+                      type="button"
+                      onClick={() => { setInviteCsvFile(null); setInviteCsvCount(0) }}
+                      className="self-start text-xs text-destructive hover:underline"
+                    >
+                      Remove file
+                    </button>
+                  )}
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setInviteDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleInvite}
+                  disabled={inviteSending || (!inviteEmail && !inviteCsvFile)}
+                >
+                  {inviteSending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  <Mail className="mr-2 h-4 w-4" />
+                  {inviteCsvFile ? `Invite ${inviteCsvCount} Users` : "Send Invite"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Right sidebar */}
@@ -1229,6 +1826,67 @@ function OrgDetailView({
                     </a>
                   </div>
                 )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Quick Settings Summary */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Settings2 className="h-3.5 w-3.5" />
+                Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Accent Color</span>
+                    <div className="flex items-center gap-1.5">
+                      <label className="relative h-4 w-4 cursor-pointer rounded-full border border-border overflow-hidden" title="Pick color">
+                        <div className="absolute inset-0 rounded-full" style={{ backgroundColor: accentColor }} />
+                        <input
+                          type="color"
+                          value={accentColor}
+                          onChange={(e) => setAccentColor(e.target.value)}
+                          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                        />
+                      </label>
+                      <span className="font-mono text-[10px] text-muted-foreground">{accentColor}</span>
+                    </div>
+                  </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Cadence</span>
+                  <span className="text-xs font-medium capitalize text-foreground">{scorecardCadence}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Anonymize</span>
+                  <Badge variant={anonymizeByDefault ? "default" : "secondary"} className="text-[10px] h-5">
+                    {anonymizeByDefault ? "On" : "Off"}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Benchmarking</span>
+                  <Badge variant={includeInBenchmarking ? "default" : "secondary"} className="text-[10px] h-5">
+                    {includeInBenchmarking ? "Included" : "Excluded"}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Reminders</span>
+                  <Badge variant={autoReminders ? "default" : "secondary"} className="text-[10px] h-5">
+                    {autoReminders ? "On" : "Off"}
+                  </Badge>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSettingsExpanded(true)
+                    setTimeout(() => document.getElementById('org-settings-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
+                  }}
+                  className="mt-1 text-xs text-primary hover:underline text-left"
+                >
+                  Edit settings
+                </button>
               </div>
             </CardContent>
           </Card>
