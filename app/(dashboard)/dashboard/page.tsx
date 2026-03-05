@@ -463,6 +463,28 @@ export default function DashboardPage() {
           <GoalsCard />
         </div>
 
+        {/* ── Champions & Recognition ────────────────── */}
+        <div className="border-t border-border pt-4">
+          <h2 className="text-lg font-semibold text-foreground">Champions & Recognition</h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Top performers and peer recognition (names shown by opt-in only)
+          </p>
+
+          {topPerformers.length > 0 && (
+            <div className="mb-6">
+              <MVPSpotlight performer={topPerformers[0]} />
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <TopPerformers data={topPerformers} />
+            <div className="flex flex-col gap-6">
+              <MostImprovedCard data={mostImproved} />
+              <HighFiveSection performers={topPerformers} currentUserName={user?.firstName ? `${user.firstName} ${user.lastName ?? ""}`.trim() : "User"} />
+            </div>
+          </div>
+        </div>
+
         <QuestionResults data={questionResults} />
 
         <RecentScorecardsCard data={recentScorecards} />
