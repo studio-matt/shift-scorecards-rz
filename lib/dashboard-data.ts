@@ -173,12 +173,21 @@ export async function computeTopPerformers(
   const orgs = await getOrganizations()
   const orgNameMap = new Map(orgs.map((o) => [o.id, (o as Record<string, unknown>).name as string]))
 
+  // Build set of excluded user IDs (admins / non-participants)
+  const allUsers = await getDocuments(COLLECTIONS.USERS)
+  const excludedUserIds = new Set(
+    allUsers
+      .filter((u) => (u as Record<string, unknown>).excludeFromReporting === true)
+      .map((u) => u.id),
+  )
+
   const userMap = new Map<
     string,
     { name: string; orgId: string; dept: string; total: number; count: number; weeks: Set<string>; textAnswers: string[] }
   >()
 
   for (const r of responses) {
+    if (excludedUserIds.has(r.userId)) continue
     if (!userMap.has(r.userId)) {
       userMap.set(r.userId, {
         name: r.userName || r.userId,
@@ -430,7 +439,12 @@ export interface NonResponder {
 }
 
 export async function computeNonResponders(responses: RawResponse[]): Promise<NonResponder[]> {
-  const allUsers = await getDocuments(COLLECTIONS.USERS)
+  const allUsersRaw = await getDocuments(COLLECTIONS.USERS)
+  // Filter out users flagged as excluded from reporting (admins, non-participants)
+  const allUsers = allUsersRaw.filter((u) => {
+    const data = u as Record<string, unknown>
+    return !(data.excludeFromReporting === true)
+  })
   const orgs = await getOrganizations()
   const orgNameMap = new Map(orgs.map((o) => [o.id, (o as Record<string, unknown>).name as string]))
   const allWeeks = Array.from(new Set(responses.map((r) => r.weekOf))).sort()
@@ -688,9 +702,13 @@ export interface FieldReportData {
 
 export async function computeFieldReport(responses: RawResponse[]): Promise<FieldReportData> {
   const orgs = await getOrganizations()
-  const users = await getDocuments(COLLECTIONS.USERS)
-  const uniqueOrgs = new Set(responses.map((r) => r.organizationId))
-  const uniqueUsers = new Set(responses.map((r) => r.userId))
+  const allUsers = await getDocuments(COLLECTIONS.USERS)
+  // Exclude non-participant accounts
+  const excludedIds = new Set(allUsers.filter((u) => (u as Record<string, unknown>).excludeFromReporting === true).map((u) => u.id))
+  const users = allUsers.filter((u) => !excludedIds.has(u.id))
+  const participantResponses = responses.filter((r) => !excludedIds.has(r.userId))
+  const uniqueOrgs = new Set(participantResponses.map((r) => r.organizationId))
+  const uniqueUsers = new Set(participantResponses.map((r) => r.userId))
 
   // Overall avg
   let totalScore = 0

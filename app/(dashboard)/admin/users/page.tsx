@@ -28,7 +28,9 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Mail, CheckCircle2, Clock, Search, Upload, FileDown, Loader2 } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Plus, Mail, CheckCircle2, Clock, Search, Upload, FileDown, Loader2, EyeOff, Users, ShieldAlert } from "lucide-react"
 import {
   getDocuments,
   getOrganizations,
@@ -38,6 +40,15 @@ import {
 } from "@/lib/firestore"
 import type { Organization } from "@/lib/types"
 
+/** Proper-case a name: "kristen abbott" → "Kristen Abbott" */
+function properCase(name: string): string {
+  return name
+    .split(" ")
+    .map((w) => (w.length > 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : ""))
+    .join(" ")
+    .trim()
+}
+
 interface InvitedUser {
   id: string
   name: string
@@ -45,6 +56,8 @@ interface InvitedUser {
   department: string
   role: string
   orgName: string
+  orgId: string
+  excludeFromReporting: boolean
   status: "accepted" | "pending"
 }
 
@@ -88,13 +101,16 @@ export default function ManageUsersPage() {
           const firstName = (data.firstName as string) ?? ""
           const lastName = (data.lastName as string) ?? ""
           const orgId = (data.organizationId as string) ?? ""
+          const rawName = `${firstName} ${lastName}`.trim()
           return {
             id: d.id,
-            name: `${firstName} ${lastName}`.trim() || ((data.email as string) ?? "Unknown"),
+            name: rawName ? properCase(rawName) : ((data.email as string) ?? "Unknown"),
             email: (data.email as string) ?? "",
             department: (data.department as string) ?? "",
             role: (data.role as string) ?? "user",
             orgName: orgMap.get(orgId) ?? "",
+            orgId,
+            excludeFromReporting: (data.excludeFromReporting as boolean) ?? false,
             status: data.authId ? ("accepted" as const) : ("pending" as const),
           }
         }),
@@ -115,7 +131,7 @@ export default function ManageUsersPage() {
   const orgDepartments = selectedOrg?.departments ?? []
 
   function handleDownloadTemplate() {
-    const csvContent = "email,department\njane@company.com,Engineering\njohn@company.com,Sales"
+    const csvContent = "email,firstName,lastName,department\njane@company.com,Jane,Doe,Engineering\njohn@company.com,John,Smith,Sales\nmaria@company.com,Maria,Garcia,Product"
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
@@ -142,12 +158,28 @@ export default function ManageUsersPage() {
 
   async function handleRoleChange(userId: string, newRole: string) {
     try {
-      await updateDocument(COLLECTIONS.USERS, userId, { role: newRole })
+      // When promoting to admin, auto-exclude from reporting if they have no org
+      const user = users.find((u) => u.id === userId)
+      const autoExclude = newRole === "admin" && !user?.orgId
+      const updates: Record<string, unknown> = { role: newRole }
+      if (autoExclude) updates.excludeFromReporting = true
+      await updateDocument(COLLECTIONS.USERS, userId, updates)
       setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u)),
+        prev.map((u) => (u.id === userId ? { ...u, role: newRole, excludeFromReporting: autoExclude ? true : u.excludeFromReporting } : u)),
       )
     } catch (err) {
       console.error("Failed to update role:", err)
+    }
+  }
+
+  async function handleExcludeToggle(userId: string, exclude: boolean) {
+    try {
+      await updateDocument(COLLECTIONS.USERS, userId, { excludeFromReporting: exclude })
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, excludeFromReporting: exclude } : u)),
+      )
+    } catch (err) {
+      console.error("Failed to update exclude flag:", err)
     }
   }
 
@@ -163,20 +195,34 @@ export default function ManageUsersPage() {
 
     try {
       if (csvFile) {
-        // Bulk CSV: all users get role=user
+        // Bulk CSV: parse header row to identify columns
         const text = await csvFile.text()
         const lines = text.split("\n").filter((l) => l.trim())
+        const headerLine = lines[0].toLowerCase()
+        const headers = headerLine.split(",").map((h) => h.trim())
+        const colIdx = {
+          email: headers.indexOf("email"),
+          firstName: headers.indexOf("firstname"),
+          lastName: headers.indexOf("lastname"),
+          department: headers.indexOf("department"),
+        }
+        if (colIdx.email === -1) colIdx.email = 0 // Fallback: first column
+
         for (let i = 1; i < lines.length; i++) {
           const parts = lines[i].split(",").map((s) => s.trim())
-          const email = parts[0]
+          const email = parts[colIdx.email] ?? ""
+          const firstName = colIdx.firstName >= 0 ? properCase(parts[colIdx.firstName] ?? "") : ""
+          const lastName = colIdx.lastName >= 0 ? properCase(parts[colIdx.lastName] ?? "") : ""
           // If a department was selected in the dropdown, override the CSV column
-          const dept = csvDepartment || parts[1] || ""
-          if (email) {
+          const dept = csvDepartment || (colIdx.department >= 0 ? parts[colIdx.department] : "") || ""
+          if (email && email.includes("@")) {
             await createDocument(COLLECTIONS.INVITES, {
               email,
+              firstName,
+              lastName,
               department: dept,
               organizationId: csvCompany,
-              role: "user", // Bulk imports are always role=user
+              role: "user",
               status: "pending",
               createdAt: new Date().toISOString(),
             })
@@ -229,6 +275,8 @@ export default function ManageUsersPage() {
 
   const activeCount = users.filter((u) => u.status === "accepted").length
   const pendingCount = users.filter((u) => u.status === "pending").length
+  const excludedCount = users.filter((u) => u.excludeFromReporting).length
+  const participantCount = users.length - excludedCount
 
   return (
     <div>
@@ -402,7 +450,19 @@ export default function ManageUsersPage() {
       </div>
 
       {/* Stats */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <Users className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Participants</p>
+              <p className="text-2xl font-bold text-foreground">{participantCount}</p>
+              <p className="text-[11px] text-muted-foreground">Counted in reports</p>
+            </div>
+          </CardContent>
+        </Card>
         <Card>
           <CardContent className="flex items-center gap-4 p-5">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
@@ -428,11 +488,12 @@ export default function ManageUsersPage() {
         <Card>
           <CardContent className="flex items-center gap-4 p-5">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-              <Mail className="h-5 w-5 text-muted-foreground" />
+              <EyeOff className="h-5 w-5 text-muted-foreground" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Total Users</p>
-              <p className="text-2xl font-bold text-foreground">{users.length}</p>
+              <p className="text-sm text-muted-foreground">Excluded from Reports</p>
+              <p className="text-2xl font-bold text-foreground">{excludedCount}</p>
+              <p className="text-[11px] text-muted-foreground">Admins / non-participants</p>
             </div>
           </CardContent>
         </Card>
@@ -445,7 +506,7 @@ export default function ManageUsersPage() {
             Team Members
           </CardTitle>
           <CardDescription>
-            View and manage all invited users
+            View and manage all invited users. Uncheck the checkbox to exclude a user from completion metrics and reports (e.g. admin-only accounts).
           </CardDescription>
           <div className="relative mt-2">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -459,13 +520,20 @@ export default function ManageUsersPage() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-2">
+            <TooltipProvider delayDuration={300}>
             {filteredUsers.map((user) => (
               <div
                 key={user.id}
-                className="flex items-center justify-between rounded-lg border border-border p-4"
+                className={`flex items-center justify-between rounded-lg border p-4 transition-colors ${
+                  user.excludeFromReporting
+                    ? "border-border bg-muted/30 opacity-75"
+                    : "border-border"
+                }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground">
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-medium ${
+                    user.excludeFromReporting ? "bg-muted text-muted-foreground" : "bg-muted text-foreground"
+                  }`}>
                     {user.name
                       .split(" ")
                       .map((n) => n[0])
@@ -474,9 +542,27 @@ export default function ManageUsersPage() {
                       .toUpperCase()}
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-foreground">
-                      {user.name}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-foreground">
+                        {user.name}
+                      </p>
+                      {user.excludeFromReporting && (
+                        <Badge variant="outline" className="gap-1 border-amber-200 bg-amber-50 text-amber-700 text-[10px] dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+                          <EyeOff className="h-2.5 w-2.5" />
+                          Excluded
+                        </Badge>
+                      )}
+                      {user.role === "admin" && !user.orgId && !user.department && (
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <ShieldAlert className="h-3.5 w-3.5 text-amber-500" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs">
+                            Admin with no org/department assigned
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       {user.email}
                     </p>
@@ -505,6 +591,21 @@ export default function ManageUsersPage() {
                       <SelectItem value="admin">Admin</SelectItem>
                     </SelectContent>
                   </Select>
+                  {/* Exclude from reporting toggle */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center">
+                        <Checkbox
+                          checked={!user.excludeFromReporting}
+                          onCheckedChange={(checked) => handleExcludeToggle(user.id, !checked)}
+                          aria-label={`Include ${user.name} in reports`}
+                        />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">
+                      {user.excludeFromReporting ? "Excluded from reports. Check to include." : "Included in reports. Uncheck to exclude."}
+                    </TooltipContent>
+                  </Tooltip>
                   <span
                     className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${
                       user.status === "accepted"
@@ -517,6 +618,7 @@ export default function ManageUsersPage() {
                 </div>
               </div>
             ))}
+            </TooltipProvider>
             {filteredUsers.length === 0 && (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 {searchQuery

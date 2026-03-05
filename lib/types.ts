@@ -12,6 +12,7 @@ export interface User {
   phone: string
   avatar?: string
   organizationId: string
+  excludeFromReporting?: boolean
   createdAt: string
   lastLogin: string
 }
