@@ -25,6 +25,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog"
 import {
@@ -48,6 +49,9 @@ import {
   Loader2,
   Search,
   Save,
+  Upload,
+  FileDown,
+  UserPlus,
 } from "lucide-react"
 import type { Organization } from "@/lib/types"
 import {
@@ -60,6 +64,15 @@ import {
   setDocument,
   COLLECTIONS,
 } from "@/lib/firestore"
+
+/** Proper-case a name: "kristen abbott" → "Kristen Abbott" */
+function properCase(name: string): string {
+  return name
+    .split(" ")
+    .map((w) => (w.length > 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : ""))
+    .join(" ")
+    .trim()
+}
 
 const KNOWN_DEPARTMENTS = [
   "Engineering", "Design", "Product", "Marketing", "Sales",
@@ -672,6 +685,129 @@ function OrgDetailView({
   const [editingMember, setEditingMember] = useState<{ id: string; firstName: string; lastName: string; email: string; department: string; role: string } | null>(null)
   const [editSaving, setEditSaving] = useState(false)
 
+  // Invite members state
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState("")
+  const [inviteRole, setInviteRole] = useState("user")
+  const [inviteDepartment, setInviteDepartment] = useState("")
+  const [inviteCsvFile, setInviteCsvFile] = useState<File | null>(null)
+  const [inviteCsvCount, setInviteCsvCount] = useState(0)
+  const [inviteCsvDepartment, setInviteCsvDepartment] = useState("")
+  const [inviteSending, setInviteSending] = useState(false)
+
+  function handleInviteCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setInviteCsvFile(file)
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const text = event.target?.result as string
+      const lines = text.split("\n").filter((line) => line.trim())
+      setInviteCsvCount(Math.max(0, lines.length - 1))
+    }
+    reader.readAsText(file)
+  }
+
+  function handleDownloadTemplate() {
+    const csvContent = "email,firstName,lastName,department\njane@company.com,Jane,Doe,Engineering\njohn@company.com,John,Smith,Sales"
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = "shift-invite-template.csv"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleInvite() {
+    setInviteSending(true)
+    const emailsToSend: string[] = []
+    try {
+      if (inviteCsvFile) {
+        const text = await inviteCsvFile.text()
+        const lines = text.split("\n").filter((l) => l.trim())
+        const headers = lines[0].toLowerCase().split(",").map((h) => h.trim())
+        const colIdx = {
+          email: Math.max(headers.indexOf("email"), 0),
+          firstName: headers.indexOf("firstname"),
+          lastName: headers.indexOf("lastname"),
+          department: headers.indexOf("department"),
+        }
+        for (let i = 1; i < lines.length; i++) {
+          const parts = lines[i].split(",").map((s) => s.trim())
+          const email = parts[colIdx.email] ?? ""
+          const firstName = colIdx.firstName >= 0 ? properCase(parts[colIdx.firstName] ?? "") : ""
+          const lastName = colIdx.lastName >= 0 ? properCase(parts[colIdx.lastName] ?? "") : ""
+          const dept = inviteCsvDepartment || (colIdx.department >= 0 ? parts[colIdx.department] : "") || ""
+          if (email && email.includes("@")) {
+            await createDocument(COLLECTIONS.INVITES, {
+              email,
+              firstName,
+              lastName,
+              department: dept,
+              organizationId: org.id,
+              role: "user",
+              status: "pending",
+              createdAt: new Date().toISOString(),
+            })
+            emailsToSend.push(email)
+          }
+        }
+      } else if (inviteEmail) {
+        await createDocument(COLLECTIONS.INVITES, {
+          email: inviteEmail,
+          department: inviteDepartment,
+          organizationId: org.id,
+          role: inviteRole,
+          status: "pending",
+          createdAt: new Date().toISOString(),
+        })
+        emailsToSend.push(inviteEmail)
+      }
+      if (emailsToSend.length > 0) {
+        try {
+          await fetch("/api/invite", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ emails: emailsToSend, orgName: org.name }),
+          })
+        } catch { /* email delivery is best-effort */ }
+      }
+    } catch (err) {
+      console.error("Failed to send invite:", err)
+    }
+    setInviteDialogOpen(false)
+    setInviteEmail("")
+    setInviteRole("user")
+    setInviteDepartment("")
+    setInviteCsvFile(null)
+    setInviteCsvCount(0)
+    setInviteCsvDepartment("")
+    setInviteSending(false)
+    // Re-fetch members to show newly invited users
+    try {
+      const docs = await getUsersByOrg(org.id)
+      setMembers(
+        docs.map((d) => {
+          const data = d as Record<string, unknown>
+          const first = (data.firstName as string) ?? ""
+          const last = (data.lastName as string) ?? ""
+          return {
+            id: d.id,
+            firstName: first,
+            lastName: last,
+            name: `${first} ${last}`.trim() || ((data.email as string) ?? "Unknown"),
+            email: (data.email as string) ?? "",
+            department: (data.department as string) ?? "",
+            role: (data.role as string) ?? "user",
+          }
+        }),
+      )
+    } catch { /* ignore */ }
+  }
+
   useEffect(() => {
     async function fetchMembers() {
       try {
@@ -984,6 +1120,10 @@ function OrgDetailView({
                     Users assigned to this organization
                   </CardDescription>
                 </div>
+                <Button size="sm" onClick={() => setInviteDialogOpen(true)}>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Invite Members
+                </Button>
               </div>
               {members.length > 0 && (
                 <div className="relative mt-3">
@@ -1157,6 +1297,149 @@ function OrgDetailView({
                   {editSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   <Save className="mr-2 h-4 w-4" />
                   Save Changes
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Invite Members Dialog */}
+          <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Invite Members to {org.name}</DialogTitle>
+                <DialogDescription>
+                  Invite users to join this organization. They will receive a registration link via email.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col gap-4 py-4">
+                {/* Single invite */}
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="org-invite-email">Email Address</Label>
+                  <Input
+                    id="org-invite-email"
+                    type="email"
+                    placeholder="name@company.com"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    disabled={!!inviteCsvFile}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-2">
+                    <Label>Role</Label>
+                    <Select value={inviteRole} onValueChange={setInviteRole} disabled={!!inviteCsvFile}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="user">User</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label>Department</Label>
+                    <Select
+                      value={inviteDepartment}
+                      onValueChange={setInviteDepartment}
+                      disabled={!!inviteCsvFile || departments.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={departments.length === 0 ? "No departments" : "Select department"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {departments.map((d) => (
+                          <SelectItem key={d} value={d}>{d}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* CSV bulk section */}
+                <div className="flex flex-col gap-3">
+                  <div className="relative flex items-center">
+                    <div className="flex-1 border-t border-border" />
+                    <span className="px-3 text-xs text-muted-foreground">or bulk invite via CSV</span>
+                    <div className="flex-1 border-t border-border" />
+                  </div>
+                  <label
+                    htmlFor="org-csv-upload"
+                    className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+                  >
+                    <Upload className="h-4 w-4" />
+                    {inviteCsvFile ? (
+                      <span className="font-medium text-foreground">
+                        {inviteCsvFile.name}{" "}
+                        <span className="text-muted-foreground">
+                          ({inviteCsvCount} user{inviteCsvCount !== 1 ? "s" : ""})
+                        </span>
+                      </span>
+                    ) : (
+                      "Upload CSV file"
+                    )}
+                  </label>
+                  <input
+                    id="org-csv-upload"
+                    type="file"
+                    accept=".csv"
+                    className="sr-only"
+                    onChange={handleInviteCsvUpload}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleDownloadTemplate}
+                    className="flex items-center gap-1.5 self-start text-xs font-medium text-primary hover:underline"
+                  >
+                    <FileDown className="h-3.5 w-3.5" />
+                    Download CSV template
+                  </button>
+
+                  {inviteCsvFile && (
+                    <div className="flex flex-col gap-2">
+                      <Label>Department (override CSV column)</Label>
+                      <Select
+                        value={inviteCsvDepartment}
+                        onValueChange={setInviteCsvDepartment}
+                        disabled={departments.length === 0}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={departments.length === 0 ? "No departments" : "Select department (optional)"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {departments.map((d) => (
+                            <SelectItem key={d} value={d}>{d}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        If set, overrides the department column from the CSV for all rows.
+                      </p>
+                    </div>
+                  )}
+
+                  {inviteCsvFile && (
+                    <button
+                      type="button"
+                      onClick={() => { setInviteCsvFile(null); setInviteCsvCount(0) }}
+                      className="self-start text-xs text-destructive hover:underline"
+                    >
+                      Remove file
+                    </button>
+                  )}
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setInviteDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleInvite}
+                  disabled={inviteSending || (!inviteEmail && !inviteCsvFile)}
+                >
+                  {inviteSending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  <Mail className="mr-2 h-4 w-4" />
+                  {inviteCsvFile ? `Invite ${inviteCsvCount} Users` : "Send Invite"}
                 </Button>
               </DialogFooter>
             </DialogContent>
