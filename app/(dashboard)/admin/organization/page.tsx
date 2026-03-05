@@ -152,6 +152,9 @@ export default function OrganizationPage() {
           contactEmail: o.contactEmail,
           industry: o.industry,
           memberCount: countMap.get(o.id) ?? 0,
+          accentColor: o.accentColor,
+          logoUrl: o.logoUrl,
+          reportingPreferences: o.reportingPreferences,
         })) as Organization[],
       )
     } catch (err) {
@@ -735,8 +738,8 @@ function OrgDetailView({
       if (!res.ok) throw new Error("Upload failed")
       const { url } = await res.json()
       setLogoUrl(url)
-      // Auto-save to Firestore immediately so the logo appears everywhere
-      onUpdate({ ...org, logoUrl: url })
+      // Save to Firestore without triggering a full re-fetch/re-mount
+      await updateDocument(COLLECTIONS.ORGANIZATIONS, org.id, { logoUrl: url })
     } catch (err) {
       console.error("Logo upload error:", err)
     }
@@ -1318,9 +1321,9 @@ function OrgDetailView({
                           {logoUrl && (
                             <button
                               type="button"
-                              onClick={() => {
+                              onClick={async () => {
                                 setLogoUrl("")
-                                onUpdate({ ...org, logoUrl: undefined })
+                                await updateDocument(COLLECTIONS.ORGANIZATIONS, org.id, { logoUrl: null })
                               }}
                               className="self-start text-[11px] text-destructive hover:underline"
                             >
