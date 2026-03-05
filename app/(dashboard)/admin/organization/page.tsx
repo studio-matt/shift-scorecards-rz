@@ -294,16 +294,18 @@ export default function OrganizationPage() {
               >
                 <CardHeader className="flex flex-row items-start justify-between pb-3">
                   <div className="flex items-center gap-3">
-                    <div
-                      className="flex h-10 w-10 items-center justify-center rounded-lg"
-                      style={{ backgroundColor: org.accentColor ? `${org.accentColor}20` : undefined, ...(org.accentColor ? {} : { background: 'hsl(var(--primary) / 0.1)' }) }}
-                    >
-                      {org.logoUrl ? (
-                        <img src={org.logoUrl} alt="" className="h-6 w-6 rounded object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                      ) : (
+                    {org.logoUrl ? (
+                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg">
+                        <img src={org.logoUrl} alt="" className="h-full w-full object-contain" onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none' }} />
+                      </div>
+                    ) : (
+                      <div
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+                        style={{ backgroundColor: org.accentColor ? `${org.accentColor}20` : 'hsl(var(--primary) / 0.1)' }}
+                      >
                         <Building2 className="h-5 w-5" style={{ color: org.accentColor || 'hsl(var(--primary))' }} />
-                      )}
-                    </div>
+                      </div>
+                    )}
                     <div>
                       <CardTitle className="text-base">{org.name}</CardTitle>
                       {org.industry && (
@@ -1011,21 +1013,23 @@ function OrgDetailView({
           Back to Organizations
         </button>
         <div className="flex items-center gap-3">
-          <div
-            className="flex h-12 w-12 items-center justify-center rounded-lg"
-            style={{ backgroundColor: `${accentColor}20` }}
-          >
-            {logoUrl ? (
+          {logoUrl ? (
+            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg">
               <img
                 src={logoUrl}
                 alt={`${orgName} logo`}
-                className="h-8 w-8 rounded object-contain"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                className="h-full w-full object-contain"
+                onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none' }}
               />
-            ) : (
+            </div>
+          ) : (
+            <div
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg"
+              style={{ backgroundColor: `${accentColor}20` }}
+            >
               <Building2 className="h-6 w-6" style={{ color: accentColor }} />
-            )}
-          </div>
+            </div>
+          )}
           <div>
             <h1 className="text-2xl font-bold text-foreground">{orgName}</h1>
             <div className="flex items-center gap-2">
@@ -1283,12 +1287,12 @@ function OrgDetailView({
                     <div className="flex flex-col gap-2">
                       <Label>Organization Logo</Label>
                       <div className="flex items-center gap-3">
-                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-dashed border-border bg-card overflow-hidden">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-dashed border-border bg-card overflow-hidden">
                           {logoUrl ? (
                             <img
                               src={logoUrl}
                               alt="Org logo"
-                              className="h-12 w-12 rounded object-contain"
+                              className="h-full w-full object-contain"
                               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                             />
                           ) : (
