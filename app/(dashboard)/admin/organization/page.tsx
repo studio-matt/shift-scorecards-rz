@@ -52,7 +52,17 @@ import {
   Upload,
   FileDown,
   UserPlus,
+  Palette,
+  Image,
+  Settings2,
+  Eye,
+  EyeOff,
+  BarChart3,
+  Bell,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
 import type { Organization } from "@/lib/types"
 import {
   getOrganizations,
@@ -73,6 +83,17 @@ function properCase(name: string): string {
     .join(" ")
     .trim()
 }
+
+const ACCENT_PRESETS = [
+  { label: "Blue", value: "#3b82f6" },
+  { label: "Indigo", value: "#6366f1" },
+  { label: "Teal", value: "#14b8a6" },
+  { label: "Green", value: "#22c55e" },
+  { label: "Amber", value: "#f59e0b" },
+  { label: "Red", value: "#ef4444" },
+  { label: "Rose", value: "#f43f5e" },
+  { label: "Slate", value: "#64748b" },
+]
 
 const KNOWN_DEPARTMENTS = [
   "Engineering", "Design", "Product", "Marketing", "Sales",
@@ -270,8 +291,15 @@ export default function OrganizationPage() {
               >
                 <CardHeader className="flex flex-row items-start justify-between pb-3">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                      <Building2 className="h-5 w-5 text-primary" />
+                    <div
+                      className="flex h-10 w-10 items-center justify-center rounded-lg"
+                      style={{ backgroundColor: org.accentColor ? `${org.accentColor}20` : undefined, ...(org.accentColor ? {} : { background: 'hsl(var(--primary) / 0.1)' }) }}
+                    >
+                      {org.logoUrl ? (
+                        <img src={org.logoUrl} alt="" className="h-6 w-6 rounded object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                      ) : (
+                        <Building2 className="h-5 w-5" style={{ color: org.accentColor || 'hsl(var(--primary))' }} />
+                      )}
                     </div>
                     <div>
                       <CardTitle className="text-base">{org.name}</CardTitle>
@@ -544,13 +572,16 @@ export default function OrganizationPage() {
       onBack={() => setSelectedOrgId(null)}
       onUpdate={async (updated) => {
         try {
-          await updateDocument(COLLECTIONS.ORGANIZATIONS, updated.id, {
-            name: updated.name,
-            departments: updated.departments,
-            website: updated.website ?? null,
-            contactEmail: updated.contactEmail ?? null,
-            industry: updated.industry ?? null,
-          })
+  await updateDocument(COLLECTIONS.ORGANIZATIONS, updated.id, {
+  name: updated.name,
+  departments: updated.departments,
+  website: updated.website ?? null,
+  contactEmail: updated.contactEmail ?? null,
+  industry: updated.industry ?? null,
+  accentColor: updated.accentColor ?? null,
+  logoUrl: updated.logoUrl ?? null,
+  reportingPreferences: updated.reportingPreferences ?? null,
+  })
           await fetchOrgs()
         } catch (err) {
           console.error("Failed to update organization:", err)
@@ -684,6 +715,15 @@ function OrgDetailView({
   const [memberSearch, setMemberSearch] = useState("")
   const [editingMember, setEditingMember] = useState<{ id: string; firstName: string; lastName: string; email: string; department: string; role: string } | null>(null)
   const [editSaving, setEditSaving] = useState(false)
+
+  // Branding & Settings state
+  const [accentColor, setAccentColor] = useState(org.accentColor ?? "#3b82f6")
+  const [logoUrl, setLogoUrl] = useState(org.logoUrl ?? "")
+  const [anonymizeByDefault, setAnonymizeByDefault] = useState(org.reportingPreferences?.anonymizeByDefault ?? true)
+  const [includeInBenchmarking, setIncludeInBenchmarking] = useState(org.reportingPreferences?.includeInBenchmarking ?? true)
+  const [scorecardCadence, setScorecardCadence] = useState<"weekly" | "biweekly" | "monthly">(org.reportingPreferences?.scorecardCadence ?? "monthly")
+  const [autoReminders, setAutoReminders] = useState(org.reportingPreferences?.autoReminders ?? true)
+  const [settingsExpanded, setSettingsExpanded] = useState(false)
 
   // Invite members state
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
@@ -879,6 +919,14 @@ function OrgDetailView({
       contactEmail: contactEmail || undefined,
       industry: industry || undefined,
       departments,
+      accentColor,
+      logoUrl: logoUrl || undefined,
+      reportingPreferences: {
+        anonymizeByDefault,
+        includeInBenchmarking,
+        scorecardCadence,
+        autoReminders,
+      },
     })
     setSaving(false)
   }
@@ -936,14 +984,33 @@ function OrgDetailView({
           Back to Organizations
         </button>
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-            <Building2 className="h-6 w-6 text-primary" />
+          <div
+            className="flex h-12 w-12 items-center justify-center rounded-lg"
+            style={{ backgroundColor: `${accentColor}20` }}
+          >
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt={`${orgName} logo`}
+                className="h-8 w-8 rounded object-contain"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+              />
+            ) : (
+              <Building2 className="h-6 w-6" style={{ color: accentColor }} />
+            )}
           </div>
           <div>
             <h1 className="text-2xl font-bold text-foreground">{orgName}</h1>
-            <p className="text-sm text-muted-foreground">
-              Created {org.createdAt}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-muted-foreground">
+                Created {org.createdAt}
+              </p>
+              {org.industry && (
+                <Badge variant="outline" className="text-[10px]">
+                  {org.industry}
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1106,6 +1173,184 @@ function OrgDetailView({
                 )}
               </div>
             </CardContent>
+          </Card>
+
+          {/* Organization Settings */}
+          <Card>
+            <CardHeader>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between"
+                onClick={() => setSettingsExpanded(!settingsExpanded)}
+              >
+                <div>
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <Settings2 className="h-4 w-4" />
+                    Organization Settings
+                  </CardTitle>
+                  <CardDescription className="text-left mt-1">
+                    Branding, department taxonomy, and reporting preferences
+                  </CardDescription>
+                </div>
+                {settingsExpanded ? (
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                )}
+              </button>
+            </CardHeader>
+            {settingsExpanded && (
+              <CardContent className="flex flex-col gap-6">
+                {/* Branding */}
+                <div>
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <Palette className="h-4 w-4" />
+                    Custom Branding
+                  </h3>
+                  <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/30 p-4">
+                    <div className="flex flex-col gap-2">
+                      <Label>Accent Color</Label>
+                      <div className="flex items-center gap-3">
+                        <div className="flex gap-1.5">
+                          {ACCENT_PRESETS.map((preset) => (
+                            <button
+                              key={preset.value}
+                              type="button"
+                              onClick={() => setAccentColor(preset.value)}
+                              className={`h-7 w-7 rounded-full border-2 transition-all ${
+                                accentColor === preset.value
+                                  ? "border-foreground scale-110"
+                                  : "border-transparent hover:scale-105"
+                              }`}
+                              style={{ backgroundColor: preset.value }}
+                              title={preset.label}
+                            />
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="text"
+                            value={accentColor}
+                            onChange={(e) => setAccentColor(e.target.value)}
+                            className="w-24 font-mono text-xs h-7"
+                            placeholder="#3b82f6"
+                          />
+                          <div
+                            className="h-7 w-7 rounded border border-border"
+                            style={{ backgroundColor: accentColor }}
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Used for headers, buttons, and accents in org-specific reports.
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="org-logo-url">Logo URL</Label>
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-dashed border-border bg-card">
+                          {logoUrl ? (
+                            <img
+                              src={logoUrl}
+                              alt="Org logo"
+                              className="h-10 w-10 rounded object-contain"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                            />
+                          ) : (
+                            <Image className="h-5 w-5 text-muted-foreground" />
+                          )}
+                        </div>
+                        <Input
+                          id="org-logo-url"
+                          placeholder="https://company.com/logo.png"
+                          value={logoUrl}
+                          onChange={(e) => setLogoUrl(e.target.value)}
+                        />
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Displayed on scorecards, reports, and the org header.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Reporting Preferences */}
+                <div>
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <BarChart3 className="h-4 w-4" />
+                    Reporting Preferences
+                  </h3>
+                  <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+                          <Label className="text-sm">Anonymize by Default</Label>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground ml-5">
+                          Hide individual names in leaderboards and reports unless users opt in.
+                        </p>
+                      </div>
+                      <Switch checked={anonymizeByDefault} onCheckedChange={setAnonymizeByDefault} />
+                    </div>
+                    <div className="border-t border-border" />
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
+                          <Label className="text-sm">Include in Cross-Org Benchmarking</Label>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground ml-5">
+                          Allow anonymized data to be included in industry-wide benchmarks across SHIFT clients.
+                        </p>
+                      </div>
+                      <Switch checked={includeInBenchmarking} onCheckedChange={setIncludeInBenchmarking} />
+                    </div>
+                    <div className="border-t border-border" />
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Bell className="h-3.5 w-3.5 text-muted-foreground" />
+                          <Label className="text-sm">Automated Reminders</Label>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground ml-5">
+                          Send email reminders to non-responders before the scorecard window closes.
+                        </p>
+                      </div>
+                      <Switch checked={autoReminders} onCheckedChange={setAutoReminders} />
+                    </div>
+                    <div className="border-t border-border" />
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2">
+                        <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Label className="text-sm">Preferred Scorecard Cadence</Label>
+                      </div>
+                      <Select value={scorecardCadence} onValueChange={(v) => setScorecardCadence(v as "weekly" | "biweekly" | "monthly")}>
+                        <SelectTrigger className="max-w-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="monthly">Monthly (recommended)</SelectItem>
+                          <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                          <SelectItem value="weekly">Weekly</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[11px] text-muted-foreground">
+                        Default cadence when scheduling scorecards for this organization.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button onClick={handleSave} disabled={saving}>
+                    {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Save className="mr-2 h-4 w-4" />
+                    Save Settings
+                  </Button>
+                </div>
+              </CardContent>
+            )}
           </Card>
 
           {/* Members */}
@@ -1512,6 +1757,59 @@ function OrgDetailView({
                     </a>
                   </div>
                 )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Quick Settings Summary */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Settings2 className="h-3.5 w-3.5" />
+                Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Accent Color</span>
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-4 w-4 rounded-full border border-border" style={{ backgroundColor: accentColor }} />
+                    <span className="font-mono text-[10px] text-muted-foreground">{accentColor}</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Cadence</span>
+                  <span className="text-xs font-medium capitalize text-foreground">{scorecardCadence}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Anonymize</span>
+                  <Badge variant={anonymizeByDefault ? "default" : "secondary"} className="text-[10px] h-5">
+                    {anonymizeByDefault ? "On" : "Off"}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Benchmarking</span>
+                  <Badge variant={includeInBenchmarking ? "default" : "secondary"} className="text-[10px] h-5">
+                    {includeInBenchmarking ? "Included" : "Excluded"}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Reminders</span>
+                  <Badge variant={autoReminders ? "default" : "secondary"} className="text-[10px] h-5">
+                    {autoReminders ? "On" : "Off"}
+                  </Badge>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSettingsExpanded(true)
+                    setTimeout(() => document.querySelector('[data-settings-card]')?.scrollIntoView({ behavior: 'smooth' }), 100)
+                  }}
+                  className="mt-1 text-xs text-primary hover:underline text-left"
+                >
+                  Edit settings
+                </button>
               </div>
             </CardContent>
           </Card>

@@ -26,6 +26,16 @@ export interface Organization {
   contactEmail?: string
   industry?: string
   memberCount?: number
+  // Branding
+  accentColor?: string
+  logoUrl?: string
+  // Reporting preferences
+  reportingPreferences?: {
+    anonymizeByDefault?: boolean
+    includeInBenchmarking?: boolean
+    scorecardCadence?: "weekly" | "biweekly" | "monthly"
+    autoReminders?: boolean
+  }
 }
 
 export interface ScorecardQuestion {
