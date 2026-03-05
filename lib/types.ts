@@ -70,6 +70,12 @@ export interface ScorecardRelease {
   recurringFrequency?: "weekly" | "biweekly" | "monthly"
   recipientCount: number
   responseCount: number
+  reminders?: {
+    hoursBefore: number
+    label: string
+    scheduledFor: string
+    sent: boolean
+  }[]
   status: "scheduled" | "active" | "paused" | "completed" | "expired"
   createdAt: string
   createdBy: string
