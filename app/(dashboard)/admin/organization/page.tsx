@@ -719,7 +719,29 @@ function OrgDetailView({
   // Branding & Settings state
   const [accentColor, setAccentColor] = useState(org.accentColor ?? "#3b82f6")
   const [logoUrl, setLogoUrl] = useState(org.logoUrl ?? "")
+  const [logoUploading, setLogoUploading] = useState(false)
   const [anonymizeByDefault, setAnonymizeByDefault] = useState(org.reportingPreferences?.anonymizeByDefault ?? true)
+
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setLogoUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("orgId", org.id)
+      if (logoUrl) formData.append("previousUrl", logoUrl)
+      const res = await fetch("/api/upload/logo", { method: "POST", body: formData })
+      if (!res.ok) throw new Error("Upload failed")
+      const { url } = await res.json()
+      setLogoUrl(url)
+    } catch (err) {
+      console.error("Logo upload error:", err)
+    }
+    setLogoUploading(false)
+    // Reset the input so the same file can be re-selected
+    e.target.value = ""
+  }
   const [includeInBenchmarking, setIncludeInBenchmarking] = useState(org.reportingPreferences?.includeInBenchmarking ?? true)
   const [scorecardCadence, setScorecardCadence] = useState<"weekly" | "biweekly" | "monthly">(org.reportingPreferences?.scorecardCadence ?? "monthly")
   const [autoReminders, setAutoReminders] = useState(org.reportingPreferences?.autoReminders ?? true)
@@ -1254,26 +1276,53 @@ function OrgDetailView({
                       </p>
                     </div>
                     <div className="flex flex-col gap-2">
-                      <Label htmlFor="org-logo-url">Logo URL</Label>
+                      <Label>Organization Logo</Label>
                       <div className="flex items-center gap-3">
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-dashed border-border bg-card">
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-dashed border-border bg-card overflow-hidden">
                           {logoUrl ? (
                             <img
                               src={logoUrl}
                               alt="Org logo"
-                              className="h-10 w-10 rounded object-contain"
+                              className="h-12 w-12 rounded object-contain"
                               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                             />
                           ) : (
                             <Image className="h-5 w-5 text-muted-foreground" />
                           )}
                         </div>
-                        <Input
-                          id="org-logo-url"
-                          placeholder="https://company.com/logo.png"
-                          value={logoUrl}
-                          onChange={(e) => setLogoUrl(e.target.value)}
-                        />
+                        <div className="flex flex-col gap-1.5">
+                          <label
+                            htmlFor="org-logo-file"
+                            className={`inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted ${logoUploading ? "pointer-events-none opacity-60" : ""}`}
+                          >
+                            {logoUploading ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Upload className="h-4 w-4" />
+                            )}
+                            {logoUploading ? "Uploading..." : logoUrl ? "Change Logo" : "Upload Logo"}
+                          </label>
+                          <input
+                            id="org-logo-file"
+                            type="file"
+                            accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                            className="sr-only"
+                            onChange={handleLogoUpload}
+                            disabled={logoUploading}
+                          />
+                          <p className="text-[11px] text-muted-foreground">
+                            PNG, JPG, SVG, or WebP. Max 2MB.
+                          </p>
+                          {logoUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setLogoUrl("")}
+                              className="self-start text-[11px] text-destructive hover:underline"
+                            >
+                              Remove logo
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <p className="text-[11px] text-muted-foreground">
                         Displayed on scorecards, reports, and the org header.
