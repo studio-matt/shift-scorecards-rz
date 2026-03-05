@@ -1176,7 +1176,7 @@ function OrgDetailView({
           </Card>
 
           {/* Organization Settings */}
-          <Card>
+          <Card id="org-settings-card">
             <CardHeader>
               <button
                 type="button"
@@ -1235,10 +1235,18 @@ function OrgDetailView({
                             className="w-24 font-mono text-xs h-7"
                             placeholder="#3b82f6"
                           />
-                          <div
-                            className="h-7 w-7 rounded border border-border"
-                            style={{ backgroundColor: accentColor }}
-                          />
+                          <label className="relative h-7 w-7 cursor-pointer rounded border border-border overflow-hidden" title="Pick a custom color">
+                            <div
+                              className="absolute inset-0"
+                              style={{ backgroundColor: accentColor }}
+                            />
+                            <input
+                              type="color"
+                              value={accentColor}
+                              onChange={(e) => setAccentColor(e.target.value)}
+                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                            />
+                          </label>
                         </div>
                       </div>
                       <p className="text-[11px] text-muted-foreground">
@@ -1771,13 +1779,21 @@ function OrgDetailView({
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Accent Color</span>
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-4 w-4 rounded-full border border-border" style={{ backgroundColor: accentColor }} />
-                    <span className="font-mono text-[10px] text-muted-foreground">{accentColor}</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Accent Color</span>
+                    <div className="flex items-center gap-1.5">
+                      <label className="relative h-4 w-4 cursor-pointer rounded-full border border-border overflow-hidden" title="Pick color">
+                        <div className="absolute inset-0 rounded-full" style={{ backgroundColor: accentColor }} />
+                        <input
+                          type="color"
+                          value={accentColor}
+                          onChange={(e) => setAccentColor(e.target.value)}
+                          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                        />
+                      </label>
+                      <span className="font-mono text-[10px] text-muted-foreground">{accentColor}</span>
+                    </div>
                   </div>
-                </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Cadence</span>
                   <span className="text-xs font-medium capitalize text-foreground">{scorecardCadence}</span>
@@ -1804,7 +1820,7 @@ function OrgDetailView({
                   type="button"
                   onClick={() => {
                     setSettingsExpanded(true)
-                    setTimeout(() => document.querySelector('[data-settings-card]')?.scrollIntoView({ behavior: 'smooth' }), 100)
+                    setTimeout(() => document.getElementById('org-settings-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
                   }}
                   className="mt-1 text-xs text-primary hover:underline text-left"
                 >
