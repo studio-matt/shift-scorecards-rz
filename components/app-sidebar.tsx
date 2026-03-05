@@ -12,13 +12,16 @@ import {
   LogOut,
   Users,
   Building2,
-  ChevronDown,
   ChevronRight,
+  ChevronDown,
   History,
   Send,
+  Sun,
+  Moon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
+import { useTheme } from "@/lib/theme-context"
 import { ShiftLogo } from "./shift-logo"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -51,6 +54,7 @@ const adminNavItems = [
 export function AppSidebar() {
   const pathname = usePathname()
   const { user, isAdmin, logout, switchRole } = useAuth()
+  const { theme, toggleTheme } = useTheme()
   const isScorecardActive = pathname.startsWith("/scorecard")
   const [scorecardsOpen, setScorecardsOpen] = useState(isScorecardActive)
 
@@ -59,21 +63,32 @@ export function AppSidebar() {
   const initials = `${user.firstName[0]}${user.lastName[0]}`
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
-      <div className="flex items-center gap-2 border-b border-sidebar-border px-5 py-4">
+    <aside className="relative flex h-screen w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+      {/* Subtle gradient overlay on sidebar */}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-primary/[0.04] via-transparent to-transparent" />
+
+      <div className="relative flex items-center justify-between border-b border-sidebar-border px-5 py-4">
         <ShiftLogo size="sm" variant="white" />
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          aria-label="Toggle theme"
+        >
+          {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+        </button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-4">
+      <nav className="relative flex-1 overflow-y-auto px-3 py-4">
         <ul className="flex flex-col gap-1">
           {/* Dashboard */}
           <li>
             <Link
               href="/dashboard"
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
                 pathname === "/dashboard"
-                  ? "bg-sidebar-accent text-sidebar-primary"
+                  ? "bg-gradient-to-r from-primary/20 to-primary/5 text-primary shadow-[0_0_12px_-3px_hsl(var(--primary)/0.3)]"
                   : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
               )}
             >
@@ -88,9 +103,9 @@ export function AppSidebar() {
               type="button"
               onClick={() => setScorecardsOpen((prev) => !prev)}
               className={cn(
-                "flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
                 isScorecardActive
-                  ? "bg-sidebar-accent text-sidebar-primary"
+                  ? "bg-gradient-to-r from-primary/20 to-primary/5 text-primary shadow-[0_0_12px_-3px_hsl(var(--primary)/0.3)]"
                   : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
               )}
             >
@@ -98,13 +113,13 @@ export function AppSidebar() {
               <span className="flex-1 text-left">Scorecards</span>
               <ChevronRight
                 className={cn(
-                  "h-3.5 w-3.5 transition-transform",
+                  "h-3.5 w-3.5 transition-transform duration-200",
                   scorecardsOpen && "rotate-90",
                 )}
               />
             </button>
             {scorecardsOpen && (
-              <ul className="ml-7 mt-1 flex flex-col gap-0.5 border-l border-sidebar-border pl-3">
+              <ul className="ml-7 mt-1 flex flex-col gap-0.5 border-l border-sidebar-border/50 pl-3">
                 {scorecardSubItems.map((sub) => {
                   const isSubActive = pathname === sub.href
                   return (
@@ -114,8 +129,8 @@ export function AppSidebar() {
                         className={cn(
                           "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
                           isSubActive
-                            ? "font-medium text-sidebar-primary"
-                            : "text-sidebar-foreground/60 hover:text-sidebar-foreground",
+                            ? "font-medium text-primary"
+                            : "text-sidebar-foreground/50 hover:text-sidebar-foreground",
                         )}
                       >
                         {sub.label}
@@ -138,9 +153,9 @@ export function AppSidebar() {
                   <Link
                     href={item.href}
                     className={cn(
-                      "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
                       isActive
-                        ? "bg-sidebar-accent text-sidebar-primary"
+                        ? "bg-gradient-to-r from-primary/20 to-primary/5 text-primary shadow-[0_0_12px_-3px_hsl(var(--primary)/0.3)]"
                         : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
                     )}
                   >
@@ -154,8 +169,8 @@ export function AppSidebar() {
 
         {isAdmin && (
           <>
-            <div className="my-4 border-t border-sidebar-border" />
-            <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/50">
+            <div className="my-4 border-t border-sidebar-border/50" />
+            <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
               Admin
             </p>
             <ul className="flex flex-col gap-1">
@@ -168,9 +183,9 @@ export function AppSidebar() {
                     <Link
                       href={item.href}
                       className={cn(
-                        "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                        "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
                         isActive
-                          ? "bg-sidebar-accent text-sidebar-primary"
+                          ? "bg-gradient-to-r from-primary/20 to-primary/5 text-primary shadow-[0_0_12px_-3px_hsl(var(--primary)/0.3)]"
                           : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
                       )}
                     >
@@ -185,15 +200,15 @@ export function AppSidebar() {
         )}
       </nav>
 
-      <div className="border-t border-sidebar-border p-3">
+      <div className="relative border-t border-sidebar-border p-3">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors hover:bg-sidebar-accent"
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-sidebar-accent"
             >
               <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-sidebar-primary text-xs text-sidebar-primary-foreground">
+                <AvatarFallback className="bg-gradient-to-br from-primary to-cyan text-xs text-white">
                   {initials}
                 </AvatarFallback>
               </Avatar>
@@ -201,11 +216,11 @@ export function AppSidebar() {
                 <p className="text-sm font-medium text-sidebar-foreground">
                   {user.firstName} {user.lastName}
                 </p>
-                <p className="text-xs text-sidebar-foreground/60">
+                <p className="text-xs text-sidebar-foreground/50">
                   {user.email}
                 </p>
               </div>
-              <ChevronDown className="h-4 w-4 text-sidebar-foreground/50" />
+              <ChevronDown className="h-4 w-4 text-sidebar-foreground/40" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="start" className="w-56">

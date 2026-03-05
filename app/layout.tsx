@@ -8,13 +8,13 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 
 export const metadata: Metadata = {
-  title: "Shift Scorecard",
+  title: "Shift Scorecard | AI Adoption Platform",
   description:
-    "Track and visualize your scorecard results over time with powerful analytics and insights.",
+    "The first AI adoption measurement platform. Track your AI journey with scorecards, personalized action plans, and team benchmarking.",
 }
 
 export const viewport: Viewport = {
-  themeColor: "#2563eb",
+  themeColor: "#7C3AED",
   width: "device-width",
   initialScale: 1,
 }
@@ -25,7 +25,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="dark" suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{

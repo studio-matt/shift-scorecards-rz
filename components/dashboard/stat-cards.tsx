@@ -32,36 +32,37 @@ export function StatCards({
   const vsGoal = avgScore - myGoal
 
   const streakColor =
-    streak >= 8 ? "text-red-500" :
-    streak >= 4 ? "text-orange-500" :
-    streak >= 2 ? "text-amber-500" :
+    streak >= 8 ? "text-red-400" :
+    streak >= 4 ? "text-orange-400" :
+    streak >= 2 ? "text-amber-400" :
     "text-muted-foreground"
 
   const streakBg =
-    streak >= 8 ? "bg-red-500/10" :
-    streak >= 4 ? "bg-orange-500/10" :
-    streak >= 2 ? "bg-amber-500/10" :
+    streak >= 8 ? "bg-red-500/15" :
+    streak >= 4 ? "bg-orange-500/15" :
+    streak >= 2 ? "bg-amber-500/15" :
     "bg-muted"
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {/* Average Score -- with all 3 references */}
-      <Card className="min-h-[120px]">
-        <CardContent className="flex h-full items-start gap-4 p-5">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+      {/* Average Score */}
+      <Card className="relative min-h-[120px] overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent" />
+        <CardContent className="relative flex h-full items-start gap-4 p-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 ring-1 ring-primary/20">
             <TrendingUp className="h-5 w-5 text-primary" />
           </div>
           <div>
             <p className="text-sm font-medium leading-snug text-muted-foreground">Average Score</p>
             <p className="text-2xl font-bold text-foreground">{avgScore.toFixed(1)}</p>
             <div className="mt-1 flex flex-col gap-0.5">
-              <p className={`text-[11px] ${scoreDiff >= 0 ? "text-emerald-600" : "text-amber-600"}`}>
+              <p className={`text-[11px] ${scoreDiff >= 0 ? "text-emerald-400" : "text-amber-400"}`}>
                 {scoreDiff >= 0 ? "+" : ""}{scoreDiff.toFixed(1)} vs last month
               </p>
-              <p className={`text-[11px] ${vsField >= 0 ? "text-emerald-600" : "text-amber-600"}`}>
+              <p className={`text-[11px] ${vsField >= 0 ? "text-emerald-400" : "text-amber-400"}`}>
                 {vsField >= 0 ? "+" : ""}{vsField.toFixed(1)} vs field ({fieldAverage.toFixed(1)})
               </p>
-              <p className={`text-[11px] ${vsGoal >= 0 ? "text-emerald-600" : "text-amber-600"}`}>
+              <p className={`text-[11px] ${vsGoal >= 0 ? "text-emerald-400" : "text-amber-400"}`}>
                 {vsGoal >= 0 ? "+" : ""}{vsGoal.toFixed(1)} vs goal ({myGoal.toFixed(1)})
               </p>
             </div>
@@ -69,10 +70,11 @@ export function StatCards({
         </CardContent>
       </Card>
 
-      {/* Streak -- visual flame element */}
-      <Card className="min-h-[120px]">
-        <CardContent className="flex h-full items-start gap-4 p-5">
-          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${streakBg}`}>
+      {/* Streak */}
+      <Card className="relative min-h-[120px] overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-orange-500/10 via-transparent to-transparent" />
+        <CardContent className="relative flex h-full items-start gap-4 p-5">
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${streakBg} ring-1 ring-orange-500/20`}>
             <Flame className={`h-5 w-5 ${streakColor}`} />
           </div>
           <div>
@@ -96,11 +98,12 @@ export function StatCards({
         </CardContent>
       </Card>
 
-      {/* Completed -- clarified as scorecard sections */}
-      <Card className="min-h-[120px]">
-        <CardContent className="flex h-full items-start gap-4 p-5">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-            <CheckCircle2 className="h-5 w-5 text-primary" />
+      {/* Completed */}
+      <Card className="relative min-h-[120px] overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-transparent to-transparent" />
+        <CardContent className="relative flex h-full items-start gap-4 p-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 ring-1 ring-emerald-500/20">
+            <CheckCircle2 className="h-5 w-5 text-emerald-400" />
           </div>
           <div>
             <p className="text-sm font-medium leading-snug text-muted-foreground">Completed</p>
@@ -109,17 +112,18 @@ export function StatCards({
               scorecard sections this period
             </p>
             {completedSections === totalSections && (
-              <p className="mt-0.5 text-[11px] text-emerald-600 font-medium">All sections complete!</p>
+              <p className="mt-0.5 text-[11px] font-medium text-emerald-400">All sections complete!</p>
             )}
           </div>
         </CardContent>
       </Card>
 
       {/* Percentile rank */}
-      <Card className="min-h-[120px]">
-        <CardContent className="flex h-full items-start gap-4 p-5">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-            <Target className="h-5 w-5 text-primary" />
+      <Card className="relative min-h-[120px] overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-cyan/10 via-transparent to-transparent" />
+        <CardContent className="relative flex h-full items-start gap-4 p-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan/15 ring-1 ring-cyan/20">
+            <Target className="h-5 w-5 text-cyan" />
           </div>
           <div>
             <p className="text-sm font-medium leading-snug text-muted-foreground">Your Rank</p>
@@ -128,7 +132,7 @@ export function StatCards({
               percentile in your company
             </p>
             {percentile >= 75 && (
-              <p className="mt-0.5 text-[11px] text-emerald-600 font-medium">Top quartile performer</p>
+              <p className="mt-0.5 text-[11px] font-medium text-emerald-400">Top quartile performer</p>
             )}
           </div>
         </CardContent>
@@ -150,16 +154,27 @@ interface AdminStatCardsProps {
   targets?: DashboardTargets
 }
 
+const adminGradients = [
+  "from-primary/10",
+  "from-emerald-500/10",
+  "from-cyan/10",
+  "from-amber-500/10",
+  "from-primary/10",
+]
+
+const adminIconColors = [
+  { bg: "bg-primary/15 ring-1 ring-primary/20", text: "text-primary" },
+  { bg: "bg-emerald-500/15 ring-1 ring-emerald-500/20", text: "text-emerald-400" },
+  { bg: "bg-cyan/15 ring-1 ring-cyan/20", text: "text-cyan" },
+  { bg: "bg-amber-500/15 ring-1 ring-amber-500/20", text: "text-amber-400" },
+  { bg: "bg-primary/15 ring-1 ring-primary/20", text: "text-primary" },
+]
+
 export function AdminStatCards({ data: s, targets }: AdminStatCardsProps) {
   const tAvgScore = targets?.avgScore ?? 7.0
   const tCompletionRate = targets?.completionRate ?? 85
   const tActiveUsers = targets?.activeUsers ?? 100
   const tScorecardsSent = targets?.scorecardsSent ?? 50
-
-  const scoreGap = tAvgScore - s.avgScore
-  const completionGap = tCompletionRate - s.completionRate
-  const usersGap = tActiveUsers - s.activeUsers
-  const sentGap = tScorecardsSent - s.scorecardsSent
 
   function vsTarget(actual: number, target: number, unit = "") {
     const diff = actual - target
@@ -213,11 +228,12 @@ export function AdminStatCards({ data: s, targets }: AdminStatCardsProps) {
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-      {adminCards.map((stat) => (
-        <Card key={stat.label} className="min-h-[120px]">
-          <CardContent className="flex h-full items-start gap-4 p-5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-              <stat.icon className="h-5 w-5 text-primary" />
+      {adminCards.map((stat, idx) => (
+        <Card key={stat.label} className="relative min-h-[120px] overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+          <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${adminGradients[idx]} via-transparent to-transparent`} />
+          <CardContent className="relative flex h-full items-start gap-4 p-5">
+            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${adminIconColors[idx].bg}`}>
+              <stat.icon className={`h-5 w-5 ${adminIconColors[idx].text}`} />
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium leading-snug text-muted-foreground">
@@ -226,7 +242,7 @@ export function AdminStatCards({ data: s, targets }: AdminStatCardsProps) {
               <p className="text-2xl font-bold text-foreground">
                 {stat.value}
               </p>
-              <p className={`mt-0.5 text-xs ${stat.positive === false ? "text-amber-600" : "text-success"}`}>
+              <p className={`mt-0.5 text-xs ${stat.positive === false ? "text-amber-400" : "text-emerald-400"}`}>
                 {stat.change}
               </p>
             </div>

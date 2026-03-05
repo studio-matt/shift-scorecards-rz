@@ -136,10 +136,10 @@ export function PersonalStreakCard({ data }: { data: UserPersonalStreak }) {
   // Encouraging onboarding state
   if (!hasActivity) {
     return (
-      <Card className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent" />
+      <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent" />
         <CardContent className="relative flex flex-col items-center gap-4 p-6 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/15 ring-1 ring-primary/20">
             <Rocket className="h-8 w-8 text-primary" />
           </div>
           <div>
@@ -150,7 +150,7 @@ export function PersonalStreakCard({ data }: { data: UserPersonalStreak }) {
               Complete your first scorecard to see your streak, benchmarks, and personalized insights.
             </p>
           </div>
-          <Button size="sm" variant="default" asChild>
+          <Button size="sm" variant="default" className="bg-gradient-to-r from-primary to-primary/80 shadow-lg shadow-primary/20" asChild>
             <a href="/scorecard">Take Your First Scorecard</a>
           </Button>
         </CardContent>
@@ -165,8 +165,9 @@ export function PersonalStreakCard({ data }: { data: UserPersonalStreak }) {
     "hsl(var(--muted-foreground))"
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-orange-500/5 via-transparent to-transparent" />
+      <CardHeader className="relative pb-2">
         <CardTitle className="flex items-center justify-between text-sm font-semibold">
           <span className="flex items-center gap-2">
             <Flame className="h-4 w-4" style={{ color: streakColor }} />
@@ -175,7 +176,7 @@ export function PersonalStreakCard({ data }: { data: UserPersonalStreak }) {
           <FlameStack streak={data.currentStreak} />
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="relative">
         <div className="flex items-center gap-5">
           <ProgressRing
             value={data.currentStreak}
@@ -250,8 +251,9 @@ export function PersonalBenchmarkCard({
   const lastMonth = lastMonthAvg ?? (data.myAvg - data.myVelocity * 4)
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
+      <CardHeader className="relative pb-2">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
           <Target className="h-4 w-4 text-primary" />
           Your Score in Context
@@ -260,10 +262,10 @@ export function PersonalBenchmarkCard({
           How you compare across three key reference points
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <CardContent className="relative flex flex-col gap-4">
         {/* Primary score */}
         <div className="flex items-center gap-4">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-[3px] border-primary bg-primary/5">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-[3px] border-primary bg-primary/10">
             <span className="text-2xl font-bold text-primary">{data.myAvg}</span>
           </div>
           <div className="flex-1">
@@ -344,15 +346,16 @@ export function HoursSavedCard({
   if (totalResponses === 0) return null
 
   return (
-    <Card className="relative overflow-hidden">
-      <div className="absolute right-0 top-0 h-24 w-24 translate-x-6 -translate-y-6 rounded-full bg-emerald-500/5" />
-      <CardHeader className="pb-2">
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-transparent to-transparent" />
+      <div className="absolute right-0 top-0 h-24 w-24 translate-x-6 -translate-y-6 rounded-full bg-emerald-500/10 blur-xl" />
+      <CardHeader className="relative pb-2">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-          <Clock className="h-4 w-4 text-emerald-600" />
+          <Clock className="h-4 w-4 text-emerald-400" />
           Your Hours Saved
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="relative">
         <div className="flex items-end gap-4">
           <div>
             <p className="text-3xl font-bold text-foreground">{hoursSaved}<span className="text-lg text-muted-foreground"> hrs</span></p>
