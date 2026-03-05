@@ -735,6 +735,8 @@ function OrgDetailView({
       if (!res.ok) throw new Error("Upload failed")
       const { url } = await res.json()
       setLogoUrl(url)
+      // Auto-save to Firestore immediately so the logo appears everywhere
+      onUpdate({ ...org, logoUrl: url })
     } catch (err) {
       console.error("Logo upload error:", err)
     }
@@ -1316,7 +1318,10 @@ function OrgDetailView({
                           {logoUrl && (
                             <button
                               type="button"
-                              onClick={() => setLogoUrl("")}
+                              onClick={() => {
+                                setLogoUrl("")
+                                onUpdate({ ...org, logoUrl: undefined })
+                              }}
                               className="self-start text-[11px] text-destructive hover:underline"
                             >
                               Remove logo
