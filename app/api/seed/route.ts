@@ -96,6 +96,7 @@ const templates = [
     name: "AI Productivity Scorecard",
     description: "Weekly assessment of AI tool adoption and productivity impact",
     status: "active",
+    version: "V1.0",
     questionCount: 7,
     questions: [
       { id: "q1", text: "Rate your overall AI productivity impact this week", type: "scale", min: 1, max: 10, order: 1 },
@@ -112,6 +113,7 @@ const templates = [
     name: "Team Collaboration Check",
     description: "Weekly pulse on team dynamics and cross-functional work",
     status: "active",
+    version: "V1.0",
     questionCount: 7,
     questions: [
       { id: "c1", text: "Rate the quality of team collaboration this week", type: "scale", min: 1, max: 10, order: 1 },
@@ -128,6 +130,7 @@ const templates = [
     name: "Innovation & Growth Pulse",
     description: "Monthly check on creative output and professional development",
     status: "active",
+    version: "V1.0",
     questionCount: 7,
     questions: [
       { id: "i1", text: "Rate your creative output this period", type: "scale", min: 1, max: 10, order: 1 },

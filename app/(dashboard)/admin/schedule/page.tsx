@@ -60,6 +60,7 @@ interface TemplateOption {
   name: string
   status: string
   questionCount: number
+  version?: string
 }
 
 export default function ScheduleReleasePage() {
@@ -120,6 +121,7 @@ export default function ScheduleReleasePage() {
           name: (d.name as string) ?? "",
           status: (d.status as string) ?? "active",
           questionCount: (d.questionCount as number) ?? (d.questions as unknown[])?.length ?? 0,
+          version: (d.version as string) ?? undefined,
         })),
       )
       const paused = (allReleases as unknown as Record<string, unknown>[])
@@ -313,7 +315,7 @@ export default function ScheduleReleasePage() {
                   )}
                   {publishedTemplates.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
-                      {t.name} ({t.questionCount} questions)
+                      {t.name}{t.version ? ` ${t.version}` : ""} ({t.questionCount} questions)
                     </SelectItem>
                   ))}
                 </SelectContent>

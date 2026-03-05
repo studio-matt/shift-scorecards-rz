@@ -109,6 +109,8 @@ export default function NewScorecardBuilderPage() {
   const [questions, setQuestions] = useState<BuilderQuestion[]>([])
   const [newQuestionText, setNewQuestionText] = useState("")
   const [newQuestionType, setNewQuestionType] = useState<"scale" | "number" | "text">("scale")
+  const [version, setVersion] = useState("V1.0")
+  const [originalQuestionHash, setOriginalQuestionHash] = useState("")
 
   // Insight rules
   const [useGlobalInsights, setUseGlobalInsights] = useState(true)
@@ -143,6 +145,9 @@ export default function NewScorecardBuilderPage() {
             type: q.type ?? "scale",
           })),
         )
+        if (d.version) setVersion(d.version as string)
+        // Store question hash so we can detect changes and auto-bump version
+        setOriginalQuestionHash(JSON.stringify(rawQ.map((q) => ({ text: q.text, type: q.type }))))
         if (typeof d.useGlobalInsights === "boolean") setUseGlobalInsights(d.useGlobalInsights)
         if (d.scoreInsightRules) setScoreInsightRules(d.scoreInsightRules as ScoreInsightRule[])
         if (d.percentileInsightRules) setPercentileInsightRules(d.percentileInsightRules as PercentileInsightRule[])
@@ -187,15 +192,27 @@ export default function NewScorecardBuilderPage() {
 
   // ---------- Save helpers ----------
 
+  function bumpMinorVersion(v: string): string {
+    const match = v.match(/^V?(\d+)\.(\d+)$/)
+    if (!match) return "V1.1"
+    return `V${match[1]}.${parseInt(match[2]) + 1}`
+  }
+
   async function saveTemplate(saveStatus: "active" | "draft") {
     if (!scorecardName.trim()) return
     setSaving(true)
     try {
+      // Auto-bump version if questions changed
+      const currentHash = JSON.stringify(questions.map((q) => ({ text: q.text, type: q.type })))
+      const questionsChanged = isEditing && originalQuestionHash && currentHash !== originalQuestionHash
+      const saveVersion = questionsChanged ? bumpMinorVersion(version) : version
+
       const payload = {
         name: scorecardName.trim(),
         description: description.trim(),
         questions,
         questionCount: questions.length,
+        version: saveVersion,
         status: saveStatus,
         useGlobalInsights,
         scoreInsightRules: useGlobalInsights ? [] : scoreInsightRules,
@@ -290,11 +307,33 @@ export default function NewScorecardBuilderPage() {
                   rows={2}
                 />
               </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="sc-version">Version</Label>
+                <div className="flex items-center gap-3">
+                  <Input
+                    id="sc-version"
+                    placeholder="V1.0"
+                    value={version}
+                    onChange={(e) => setVersion(e.target.value)}
+                    className="w-28 font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Auto-increments when questions change. Use major versions (V2.0) for methodology shifts.
+                  </p>
+                </div>
+              </div>
 
               {/* Questions */}
               <div>
                 <div className="mb-3">
+                  <div className="flex items-center gap-2">
                   <Label>Questions ({questions.length})</Label>
+                  {questions.length > 0 && (
+                    <span className="text-[11px] text-muted-foreground">
+                      {questions.filter((q) => q.type === "scale").length} scale, {questions.filter((q) => q.type === "number").length} numeric, {questions.filter((q) => q.type === "text").length} text
+                    </span>
+                  )}
+                </div>
                 </div>
                 <div className="flex flex-col gap-2">
                   {questions.map((q, idx) => (

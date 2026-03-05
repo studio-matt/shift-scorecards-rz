@@ -41,6 +41,7 @@ export interface ScorecardTemplate {
   name: string
   description: string
   questions: ScorecardQuestion[]
+  version?: string
   createdBy: string
   createdAt: string
   customLogic?: string

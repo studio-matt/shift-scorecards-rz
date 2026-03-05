@@ -46,11 +46,26 @@ interface Template {
   id: string
   name: string
   description: string
-  questions: unknown[]
+  questions: { id: string; text: string; type: string }[]
   questionCount: number
+  version?: string
   status: "active" | "draft" | "archived"
   updatedAt?: unknown
   createdAt?: unknown
+}
+
+function questionBreakdown(questions: { type: string }[]): string {
+  const counts: Record<string, number> = {}
+  for (const q of questions) {
+    const t = q.type || "scale"
+    counts[t] = (counts[t] || 0) + 1
+  }
+  const parts: string[] = []
+  if (counts.scale) parts.push(`${counts.scale} scale`)
+  if (counts.number) parts.push(`${counts.number} numeric`)
+  if (counts.text) parts.push(`${counts.text} text`)
+  const total = questions.length
+  return `${total} questions (${parts.join(", ")})`
 }
 
 interface InsightRule {
@@ -151,16 +166,21 @@ export default function TemplatesPage() {
       }
       const docs = await getDocuments(COLLECTIONS.TEMPLATES, orderBy("name"))
       setItems(
-        docs.map((d) => ({
-          id: d.id,
-          name: (d as Record<string, unknown>).name as string ?? "",
-          description: (d as Record<string, unknown>).description as string ?? "",
-          questions: ((d as Record<string, unknown>).questions as unknown[]) ?? [],
-          questionCount: ((d as Record<string, unknown>).questionCount as number) ?? ((d as Record<string, unknown>).questions as unknown[])?.length ?? 0,
-          status: ((d as Record<string, unknown>).status as "active" | "draft" | "archived") ?? "draft",
-          updatedAt: (d as Record<string, unknown>).updatedAt,
-          createdAt: (d as Record<string, unknown>).createdAt,
-        })),
+        docs.map((d) => {
+          const raw = d as Record<string, unknown>
+          const questions = (raw.questions as { id: string; text: string; type: string }[]) ?? []
+          return {
+            id: d.id,
+            name: (raw.name as string) ?? "",
+            description: (raw.description as string) ?? "",
+            questions,
+            questionCount: (raw.questionCount as number) ?? questions.length,
+            version: (raw.version as string) ?? undefined,
+            status: (raw.status as "active" | "draft" | "archived") ?? "draft",
+            updatedAt: raw.updatedAt,
+            createdAt: raw.createdAt,
+          }
+        }),
       )
     } catch (err) {
       console.error("Failed to fetch templates:", err)
@@ -234,6 +254,7 @@ export default function TemplatesPage() {
         description: tmpl.description,
         questions: tmpl.questions,
         questionCount: tmpl.questionCount,
+        version: "V1.0",
         status: "draft",
       })
       await fetchTemplates()
@@ -296,6 +317,11 @@ export default function TemplatesPage() {
                   >
                     {tmpl.name}
                   </Link>
+                  {tmpl.version && (
+                    <Badge variant="outline" className="text-[10px] font-mono">
+                      {tmpl.version}
+                    </Badge>
+                  )}
                   <Badge
                     variant="secondary"
                     className={`text-xs capitalize ${statusColors[tmpl.status]}`}
@@ -307,7 +333,7 @@ export default function TemplatesPage() {
                   {tmpl.description}
                 </p>
                 <div className="mt-1.5 flex items-center gap-4 text-xs text-muted-foreground">
-                  <span>{tmpl.questionCount} questions</span>
+                  <span>{tmpl.questions.length > 0 ? questionBreakdown(tmpl.questions) : `${tmpl.questionCount} questions`}</span>
                   <span>Modified {formatDate(tmpl.updatedAt)}</span>
                 </div>
               </div>
