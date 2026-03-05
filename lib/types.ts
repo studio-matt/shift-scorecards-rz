@@ -89,6 +89,7 @@ export interface TopPerformer {
   department: string
   avgScore: number
   streak: number
+  winNarrative?: string
 }
 
 export interface WeeklyTrend {

@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { StatCards, AdminStatCards } from "@/components/dashboard/stat-cards"
-import { TopPerformers } from "@/components/dashboard/top-performers"
+import { TopPerformers, MVPSpotlight, HighFiveSection } from "@/components/dashboard/top-performers"
 import { DepartmentPerformanceChart } from "@/components/dashboard/department-performance"
 import { WeeklyTrendChart } from "@/components/dashboard/weekly-trend"
 import { QuestionResults } from "@/components/dashboard/question-results"
@@ -382,10 +382,21 @@ export default function DashboardPage() {
           {/* ── Champions ─────────────────────────────── */}
           <div className="border-t border-border pt-4">
             <h2 className="text-lg font-semibold text-foreground">Champions</h2>
-            <p className="mb-4 text-sm text-muted-foreground">Top performers and most improved</p>
+            <p className="mb-4 text-sm text-muted-foreground">Top performers, most improved, and peer recognition</p>
+
+            {/* MVP Spotlight */}
+            {topPerformers.length > 0 && (
+              <div className="mb-6">
+                <MVPSpotlight performer={topPerformers[0]} />
+              </div>
+            )}
+
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <TopPerformers showCompany data={topPerformers} />
-              <MostImprovedCard showCompany data={mostImproved} />
+              <div className="flex flex-col gap-6">
+                <MostImprovedCard showCompany data={mostImproved} />
+                <HighFiveSection performers={topPerformers} currentUserName={user?.firstName ? `${user.firstName} ${user.lastName ?? ""}`.trim() : "Admin"} />
+              </div>
             </div>
           </div>
 

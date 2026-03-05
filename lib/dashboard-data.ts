@@ -1,4 +1,4 @@
-import { getDocuments, getOrganizations, COLLECTIONS } from "./firestore"
+import { getDocument, getDocuments, getOrganizations, COLLECTIONS } from "./firestore"
 import type {
   WeeklyTrend,
   DepartmentPerformance,
@@ -175,7 +175,7 @@ export async function computeTopPerformers(
 
   const userMap = new Map<
     string,
-    { name: string; orgId: string; dept: string; total: number; count: number; weeks: Set<string> }
+    { name: string; orgId: string; dept: string; total: number; count: number; weeks: Set<string>; textAnswers: string[] }
   >()
 
   for (const r of responses) {
@@ -187,12 +187,18 @@ export async function computeTopPerformers(
         total: 0,
         count: 0,
         weeks: new Set(),
+        textAnswers: [],
       })
     }
     const entry = userMap.get(r.userId)!
     const scaleVals = Object.values(r.answers).filter(
       (v) => typeof v === "number" && v >= 1 && v <= 10,
     ) as number[]
+    // Collect text answers as potential win narratives
+    const textVals = Object.values(r.answers).filter(
+      (v) => typeof v === "string" && v.length > 15,
+    ) as string[]
+    entry.textAnswers.push(...textVals)
     if (scaleVals.length === 0) continue
     const avg = scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length
     entry.total += avg
@@ -200,8 +206,15 @@ export async function computeTopPerformers(
     entry.weeks.add(r.weekOf)
   }
 
+  // Also load admin-set win narratives from settings
+  let adminNarratives: Record<string, string> = {}
+  try {
+    const doc = await getDocument(COLLECTIONS.SETTINGS, "winNarratives")
+    if (doc) adminNarratives = (doc as Record<string, unknown>).narratives as Record<string, string> ?? {}
+  } catch { /* ignore */ }
+
   return Array.from(userMap.entries())
-    .map(([userId, { name, orgId, dept, total, count, weeks }]) => ({
+    .map(([userId, { name, orgId, dept, total, count, weeks, textAnswers }]) => ({
       id: userId,
       name,
       company: orgNameMap.get(orgId) ?? orgId,
@@ -209,6 +222,8 @@ export async function computeTopPerformers(
       department: dept,
       avgScore: Math.round((total / count) * 10) / 10,
       streak: weeks.size,
+      // Prefer admin-set narrative, then most recent text answer
+      winNarrative: adminNarratives[userId] || textAnswers[textAnswers.length - 1] || undefined,
     }))
     .sort((a, b) => b.avgScore - a.avgScore)
     .slice(0, limit)
