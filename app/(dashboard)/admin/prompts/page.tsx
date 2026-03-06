@@ -162,7 +162,13 @@ export default function AdminPromptsPage() {
   // Load settings from Firestore
   useEffect(() => {
     async function loadSettings() {
-      if (!user?.organizationId) return
+      // If no organization, use defaults and stop loading
+      if (!user?.organizationId) {
+        setActionPrompts(DEFAULT_ACTION_PROMPTS)
+        setPromptPacks(DEFAULT_PROMPT_PACKS)
+        setLoading(false)
+        return
+      }
       try {
         const settings = await getDocument<PromptSettings>(
           COLLECTIONS.SETTINGS,
