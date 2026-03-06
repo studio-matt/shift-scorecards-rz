@@ -2,13 +2,13 @@ import { ShiftLogo } from "./shift-logo"
 
 export function AppFooter() {
   return (
-    <footer className="border-t border-border bg-card px-6 py-8">
-      <div className="mx-auto flex max-w-7xl flex-col gap-8 md:flex-row md:justify-between">
+    <footer className="relative border-t border-border/50 bg-card/50 backdrop-blur-sm px-6 py-8">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-primary/5 via-transparent to-transparent" />
+      <div className="relative mx-auto flex max-w-7xl flex-col gap-8 md:flex-row md:justify-between">
         <div className="max-w-xs">
           <ShiftLogo size="sm" />
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-            Track and visualize your scorecard results over time with powerful
-            analytics and insights.
+            The first AI adoption measurement platform. Track your journey with personalized scorecards, action plans, and team benchmarks.
           </p>
         </div>
         <div className="flex gap-16">
@@ -47,8 +47,8 @@ export function AppFooter() {
           </div>
         </div>
       </div>
-      <div className="mx-auto mt-8 max-w-7xl border-t border-border pt-6 text-center text-xs text-muted-foreground">
-        2025 Shift Scorecard. All rights reserved.
+      <div className="relative mx-auto mt-8 max-w-7xl border-t border-border/50 pt-6 text-center text-xs text-muted-foreground">
+        2026 Shift Scorecard. The first AI adoption measurement platform.
       </div>
     </footer>
   )

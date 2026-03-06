@@ -28,13 +28,14 @@ interface WeeklyTrendChartProps {
 export function WeeklyTrendChart({ data, targetScore = 7.0, fieldAverage = 6.2 }: WeeklyTrendChartProps) {
   if (data.length === 0) {
     return (
-      <Card>
-        <CardHeader>
+      <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
+        <CardHeader className="relative">
           <CardTitle className="text-base font-semibold">
             Score Trend
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="relative">
           <div className="flex h-64 items-center justify-center">
             <p className="text-sm text-muted-foreground">
               No trend data available yet
@@ -65,21 +66,22 @@ export function WeeklyTrendChart({ data, targetScore = 7.0, fieldAverage = 6.2 }
   }))
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between">
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
+      <CardHeader className="relative flex flex-row items-start justify-between">
         <div>
           <CardTitle className="text-base font-semibold">
             Score Trend - Last {data.length} Weeks
           </CardTitle>
           <p className="mt-1 text-xs text-muted-foreground">
             Period change:{" "}
-            <span className={delta >= 0 ? "font-semibold text-green-600" : "font-semibold text-red-500"}>
+            <span className={delta >= 0 ? "font-semibold text-emerald-400" : "font-semibold text-red-400"}>
               {deltaStr}
             </span>
           </p>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="relative">
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={enriched}>

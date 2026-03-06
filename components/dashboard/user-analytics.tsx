@@ -398,10 +398,11 @@ export function HighFivesReceivedCard({
   if (count === 0) return null
 
   return (
-    <Card>
-      <CardContent className="flex items-center gap-4 p-5">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-amber-50 dark:bg-amber-950/30">
-          <Hand className="h-6 w-6 text-amber-500" />
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-500/10 via-transparent to-transparent" />
+      <CardContent className="relative flex items-center gap-4 p-5">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-amber-500/15 ring-1 ring-amber-500/20">
+          <Hand className="h-6 w-6 text-amber-400" />
         </div>
         <div>
           <p className="text-2xl font-bold text-foreground">{count}</p>
@@ -435,8 +436,9 @@ export function AIActionPlanCard({
       ]
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
+      <CardHeader className="relative pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
           <Sparkles className="h-4 w-4 text-primary" />
           Your AI Action Plan
@@ -445,13 +447,13 @@ export function AIActionPlanCard({
           Personalized recommendations based on your scorecard results
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3">
+      <CardContent className="relative flex flex-col gap-3">
         {planItems.map((item, idx) => (
           <div
             key={item.category}
-            className="flex gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-muted/50"
+            className="flex gap-3 rounded-lg border border-border/50 bg-muted/30 p-3 transition-colors hover:bg-muted/50"
           >
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 ring-1 ring-primary/20 text-xs font-bold text-primary">
               {idx + 1}
             </div>
             <div className="flex-1">
@@ -535,24 +537,25 @@ export function PromptPacksCard({
   })
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-cyan/5 via-transparent to-transparent" />
+      <CardHeader className="relative pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-          <BookOpen className="h-4 w-4 text-primary" />
+          <BookOpen className="h-4 w-4 text-cyan" />
           Prompt Packs
         </CardTitle>
         <CardDescription className="text-[11px]">
           Curated prompt libraries to accelerate your weakest areas
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="relative">
         <div className="flex flex-col gap-2">
           {sorted.slice(0, 4).map((pack) => (
             <div
               key={pack.id}
-              className="group flex items-center gap-3 rounded-lg border border-border p-3 transition-colors hover:border-primary/30 hover:bg-primary/5 cursor-pointer"
+              className="group flex items-center gap-3 rounded-lg border border-border/50 bg-muted/30 p-3 transition-colors hover:border-cyan/30 hover:bg-cyan/5 cursor-pointer"
             >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/50 ring-1 ring-border/50">
                 <pack.icon className="h-4 w-4 text-foreground" />
               </div>
               <div className="flex-1 min-w-0">
@@ -575,8 +578,9 @@ export function PromptPacksCard({
 export function PersonalTrendChart({ data }: { data: PersonalTrendPoint[] }) {
   if (data.length === 0) return null
   return (
-    <Card>
-      <CardHeader className="pb-2">
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
+      <CardHeader className="relative pb-2">
         <CardTitle className="text-sm font-semibold">
           Your Score Trend vs. Averages
         </CardTitle>
@@ -584,7 +588,7 @@ export function PersonalTrendChart({ data }: { data: PersonalTrendPoint[] }) {
           Your scores compared to anonymized department and company averages over time
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="relative">
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={data} margin={{ left: 0, right: 12, top: 4, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
