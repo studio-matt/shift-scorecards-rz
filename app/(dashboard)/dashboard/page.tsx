@@ -12,6 +12,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Sparkles } from "lucide-react"
+import { EpicMeaningSection } from "@/components/epic-meaning"
 import { StatCards, AdminStatCards } from "@/components/dashboard/stat-cards"
 import { TopPerformers, MVPSpotlight, HighFiveSection } from "@/components/dashboard/top-performers"
 import { DepartmentPerformanceChart } from "@/components/dashboard/department-performance"
@@ -494,6 +495,12 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* ── Epic Meaning: Why This Matters + Movement Counter ── */}
+        <EpicMeaningSection
+          totalProfessionals={adminStats?.activeUsers ?? 4200}
+          totalOrganizations={orgs.length || 47}
+        />
 
         {/* ── Stat Cards (contextual) ───────────────────── */}
         <StatCards

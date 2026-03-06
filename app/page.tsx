@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { ReasonWhyBanner, MovementCounter } from "@/components/epic-meaning"
 
 function LoginForm() {
   const [email, setEmail] = useState("")
@@ -149,6 +150,15 @@ function LoginForm() {
               ? "Sign in to continue your AI adoption journey"
               : "Set up your account to get started"}
           </CardDescription>
+          {/* Movement Counter */}
+          <div className="mt-4">
+            <MovementCounter
+              totalProfessionals={4200}
+              totalOrganizations={47}
+              thisMonth
+              variant="compact"
+            />
+          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4" data-lpignore="true">
@@ -343,6 +353,11 @@ function LoginForm() {
             >
               Need help? Contact Support
             </button>
+          </div>
+
+          {/* Rotating Reason Why */}
+          <div className="mt-6 border-t border-border/50 pt-4">
+            <ReasonWhyBanner />
           </div>
         </CardContent>
       </Card>
