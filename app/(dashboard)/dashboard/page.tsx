@@ -408,7 +408,7 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ── Champions ─────────────────────────────── */}
+          {/* ── Champions ───────────────────────────���─── */}
           <div className="border-t border-border pt-4">
             <h2 className="text-lg font-semibold text-foreground">Champions</h2>
             <p className="mb-4 text-sm text-muted-foreground">Top performers, most improved, and peer recognition</p>
@@ -482,14 +482,14 @@ export default function DashboardPage() {
     isNew: idx === 0, // First one is "new" for demo
   })) : []
 
-  // Mock department rankings (in real app, compute from responses)
-  const departmentRankings: DepartmentRanking[] = departmentPerformance.map((dept, idx) => ({
-    department: dept.department,
-    avgScore: dept.avgScore,
-    rank: idx + 1,
-    change: idx === 0 ? 1 : idx === 1 ? -1 : 0,
-    participationRate: Math.round(65 + Math.random() * 30),
-  }))
+  // Mock department rankings (in real app, compute from responses grouped by department)
+  const departmentRankings: DepartmentRanking[] = [
+    { department: "Operations", avgScore: 7.8, rank: 1, change: 1, participationRate: 92 },
+    { department: "Marketing", avgScore: 7.5, rank: 2, change: -1, participationRate: 85 },
+    { department: "Engineering", avgScore: 7.2, rank: 3, change: 0, participationRate: 78 },
+    { department: "Sales", avgScore: 6.9, rank: 4, change: 2, participationRate: 71 },
+    { department: "HR", avgScore: 6.5, rank: 5, change: -1, participationRate: 65 },
+  ]
 
   // Calculate days until deadline (assume monthly cadence, 7 days remaining)
   const daysUntilDeadline = 7 // In real app, calculate from release schedule
