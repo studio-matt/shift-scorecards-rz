@@ -6,20 +6,22 @@ import { useState, useEffect } from "react"
 import {
   LayoutDashboard,
   ClipboardList,
-  FileText,
   HelpCircle,
   Settings,
-  LogOut,
+  FileText,
+  Send,
   Users,
   Building2,
-  ChevronRight,
+  LogOut,
   ChevronDown,
-  History,
-  Send,
+  ChevronRight,
   Sun,
   Moon,
+  History,
   ChevronsLeft,
   ChevronsRight,
+  Shield,
+  Sparkles,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
@@ -56,6 +58,7 @@ const adminNavItems = [
   { href: "/admin/builder", label: "Templates", icon: FileText },
   { href: "/admin/schedule", label: "Schedule Release", icon: Send },
   { href: "/admin/users", label: "Manage Users", icon: Users },
+  { href: "/admin/prompts", label: "AI Prompts", icon: Sparkles },
   { href: "/admin/organization", label: "Organization", icon: Building2 },
 ]
 

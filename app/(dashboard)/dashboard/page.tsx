@@ -45,6 +45,7 @@ import {
   PercentileDistribution,
 } from "@/components/dashboard/user-analytics"
 import { getOrganizations, getDocument, COLLECTIONS } from "@/lib/firestore"
+import { getPromptSettings, type ActionPrompt, type PromptPack } from "@/lib/prompt-settings"
 import {
   fetchAllResponses,
   computeAdminStats,
@@ -130,15 +131,18 @@ export default function DashboardPage() {
     fieldAverage: 6.2,
   })
   const [varianceFeedback, setVarianceFeedback] = useState<Record<string, unknown> | undefined>(undefined)
+  const [actionPrompts, setActionPrompts] = useState<ActionPrompt[]>([])
+  const [promptPacks, setPromptPacks] = useState<PromptPack[]>([])
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      const [orgDocs, responses, targetsDoc, feedbackDoc] = await Promise.all([
+      const [orgDocs, responses, targetsDoc, feedbackDoc, promptSettings] = await Promise.all([
         getOrganizations(),
         fetchAllResponses(selectedOrg, selectedDept),
         getDocument(COLLECTIONS.SETTINGS, "dashboardTargets"),
         getDocument(COLLECTIONS.SETTINGS, "analyticsFeedback"),
+        user?.organizationId ? getPromptSettings(user.organizationId) : Promise.resolve(null),
       ])
       if (targetsDoc) {
         const t = targetsDoc as Record<string, unknown>
@@ -153,6 +157,10 @@ export default function DashboardPage() {
       if (feedbackDoc) {
         const f = feedbackDoc as Record<string, unknown>
         if (f.varianceFeedback) setVarianceFeedback(f.varianceFeedback as Record<string, unknown>)
+      }
+      if (promptSettings) {
+        setActionPrompts(promptSettings.actionPrompts)
+        setPromptPacks(promptSettings.promptPacks)
       }
       setOrgs(orgDocs as unknown as Organization[])
 
@@ -507,11 +515,12 @@ export default function DashboardPage() {
             Specific next actions with ready-to-use prompt templates based on your results
           </p>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <AIActionPlanCard
-              weakCategories={weakCategories}
-              score={personalBenchmark?.myAvg ?? 0}
-            />
-            <PromptPacksCard weakCategories={weakCategories} />
+<AIActionPlanCard
+  weakCategories={weakCategories}
+  score={personalBenchmark?.myAvg ?? 0}
+  actionPrompts={actionPrompts}
+  />
+  <PromptPacksCard weakCategories={weakCategories} promptPacks={promptPacks} />
           </div>
         </div>
 
