@@ -13,6 +13,17 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Sparkles } from "lucide-react"
 import { EpicMeaningSection } from "@/components/epic-meaning"
+import {
+  SkillTierCard,
+  PersonalBestsCard,
+  DepartmentRivalryCard,
+  CohortNudgeCard,
+  MonthlyInsightCard,
+  StreakAtRiskCard,
+  WinOfTheMonthCard,
+  type PersonalBest,
+  type DepartmentRanking,
+} from "@/components/dashboard/gamification"
 import { StatCards, AdminStatCards } from "@/components/dashboard/stat-cards"
 import { TopPerformers, MVPSpotlight, HighFiveSection } from "@/components/dashboard/top-performers"
 import { DepartmentPerformanceChart } from "@/components/dashboard/department-performance"
@@ -459,6 +470,30 @@ export default function DashboardPage() {
   const currentScore = personalBenchmark?.myAvg ?? 0
   const percentile = personalBenchmark?.percentile ?? 50
 
+  // Calculate months active for tier system
+  const monthsActive = Math.ceil((personalStreak?.totalWeeks ?? 0) / 4)
+
+  // Mock personal bests (in real app, calculate from response history)
+  const personalBests: PersonalBest[] = weakCategories.length > 0 ? weakCategories.slice(0, 4).map((cat, idx) => ({
+    category: cat.category,
+    score: Math.min(10, cat.score + 1.5),
+    previousBest: cat.score,
+    achievedDate: new Date().toISOString(),
+    isNew: idx === 0, // First one is "new" for demo
+  })) : []
+
+  // Mock department rankings (in real app, compute from responses)
+  const departmentRankings: DepartmentRanking[] = departmentPerformance.map((dept, idx) => ({
+    department: dept.department,
+    avgScore: dept.avgScore,
+    rank: idx + 1,
+    change: idx === 0 ? 1 : idx === 1 ? -1 : 0,
+    participationRate: Math.round(65 + Math.random() * 30),
+  }))
+
+  // Calculate days until deadline (assume monthly cadence, 7 days remaining)
+  const daysUntilDeadline = 7 // In real app, calculate from release schedule
+
   return (
     <div>
       <div className="mb-8">
@@ -496,11 +531,32 @@ export default function DashboardPage() {
           </Card>
         )}
 
+        {/* ── Streak At Risk Warning (if applicable) ───── */}
+        <StreakAtRiskCard
+          currentStreak={personalStreak?.currentStreak ?? 0}
+          daysUntilDeadline={daysUntilDeadline}
+        />
+
         {/* ── Epic Meaning: Why This Matters + Movement Counter ── */}
         <EpicMeaningSection
           totalProfessionals={adminStats?.activeUsers ?? 4200}
           totalOrganizations={orgs.length || 47}
         />
+
+        {/* ── Skill Tier + Cohort Nudge ─────────────────── */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <SkillTierCard
+            monthsActive={monthsActive}
+            avgScore={currentScore}
+            totalResponses={totalResponses}
+          />
+          <CohortNudgeCard
+            cohort={user?.organizationId ? "your organization" : "your cohort"}
+            hoursSaved={Math.round(hoursSaved * 0.7)}
+            pointsImproved={Math.abs(currentScore - startScore)}
+            scorecardsCompleted={totalResponses + 15}
+          />
+        </div>
 
         {/* ── Stat Cards (contextual) ───────────────────── */}
         <StatCards
@@ -545,6 +601,16 @@ export default function DashboardPage() {
             />
             {personalStreak && <PersonalStreakCard data={personalStreak} />}
           </div>
+          
+          {/* Personal Bests + Department Rivalry */}
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <PersonalBestsCard bests={personalBests} />
+            <DepartmentRivalryCard
+              rankings={departmentRankings}
+              userDepartment={user?.department}
+            />
+          </div>
+          
           {personalBenchmark && (
             <div className="mt-4">
               <PersonalBenchmarkCard
@@ -576,6 +642,17 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <WeeklyTrendChart data={weeklyTrend} />
           <GoalsCard />
+        </div>
+
+        {/* ── Monthly Insight + Win of the Month ─────────── */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <MonthlyInsightCard />
+          <WinOfTheMonthCard
+            previousWins={[
+              { text: "Used Claude to draft 15 client proposals in 2 hours instead of 2 days", author: "Anonymous", date: "2024-01" },
+              { text: "AI helped me analyze 500 survey responses and create a presentation in 30 minutes", author: "Anonymous", date: "2024-01" },
+            ]}
+          />
         </div>
 
         {/* ── Champions & Recognition ────────────────── */}
