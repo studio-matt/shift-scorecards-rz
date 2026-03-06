@@ -40,6 +40,7 @@ import {
   Lightbulb,
   Save,
   GripVertical,
+  AlertTriangle,
 } from "lucide-react"
 import { getDocument, setDocument, COLLECTIONS } from "@/lib/firestore"
 
@@ -145,6 +146,41 @@ const DEFAULT_PROMPT_PACKS: PromptPack[] = [
   },
 ]
 
+// Default "Why This Matters" reasons
+const DEFAULT_REASONS_WHY: string[] = [
+  "AI won't replace you. Someone using AI will.",
+  "The best time to build AI fluency was yesterday. The second best time is now.",
+  "Your expertise + AI = exponential impact.",
+  "AI is a tool. Mastery is a choice.",
+  "The future belongs to the AI-augmented professional.",
+  "Every hour saved is an hour invested in what matters most.",
+  "AI doesn't take jobs. It transforms them.",
+  "Your competitive advantage is your ability to learn.",
+  "The gap between AI-fluent and AI-resistant grows daily.",
+  "AI multiplies human potential. It doesn't replace it.",
+  "The organizations that win will be the ones that adapt.",
+  "Your AI journey is your career insurance policy.",
+  "Small improvements compound into massive advantages.",
+  "AI capability is the new literacy.",
+  "The best professionals will be those who can work with AI, not against it.",
+  "Your value isn't in what you know. It's in how you apply it.",
+  "AI handles the routine so you can focus on the remarkable.",
+  "The future is human + machine, not human versus machine.",
+  "Building AI capability is investing in your future self.",
+  "The question isn't whether to use AI. It's how well you'll use it.",
+  "AI is the great equalizer. Talent + AI beats pedigree alone.",
+  "Your mindset about AI determines your trajectory.",
+  "Every interaction with AI is a learning opportunity.",
+  "The professionals who embrace AI will lead their fields.",
+  "AI capability compounds. Start today, lead tomorrow.",
+]
+
+interface ContentSettings {
+  actionPrompts: ActionPrompt[]
+  promptPacks: PromptPack[]
+  reasonsWhy: string[]
+}
+
 // ─── Component ────────────────────────────────────────────────────────
 export default function AdminPromptsPage() {
   const { user, isAdmin } = useAuth()
@@ -152,6 +188,8 @@ export default function AdminPromptsPage() {
   const [saving, setSaving] = useState(false)
   const [actionPrompts, setActionPrompts] = useState<ActionPrompt[]>([])
   const [promptPacks, setPromptPacks] = useState<PromptPack[]>([])
+  const [reasonsWhy, setReasonsWhy] = useState<string[]>([])
+  const [newReason, setNewReason] = useState("")
   
   // Dialog states
   const [editingAction, setEditingAction] = useState<ActionPrompt | null>(null)
@@ -166,26 +204,30 @@ export default function AdminPromptsPage() {
       if (!user?.organizationId) {
         setActionPrompts(DEFAULT_ACTION_PROMPTS)
         setPromptPacks(DEFAULT_PROMPT_PACKS)
+        setReasonsWhy(DEFAULT_REASONS_WHY)
         setLoading(false)
         return
       }
       try {
-        const settings = await getDocument<PromptSettings>(
+        const settings = await getDocument<ContentSettings>(
           COLLECTIONS.SETTINGS,
           `prompts_${user.organizationId}`
         )
         if (settings) {
           setActionPrompts(settings.actionPrompts || DEFAULT_ACTION_PROMPTS)
           setPromptPacks(settings.promptPacks || DEFAULT_PROMPT_PACKS)
+          setReasonsWhy(settings.reasonsWhy || DEFAULT_REASONS_WHY)
         } else {
           // Use defaults if no settings exist
           setActionPrompts(DEFAULT_ACTION_PROMPTS)
           setPromptPacks(DEFAULT_PROMPT_PACKS)
+          setReasonsWhy(DEFAULT_REASONS_WHY)
         }
       } catch (err) {
         console.error("Failed to load prompt settings:", err)
         setActionPrompts(DEFAULT_ACTION_PROMPTS)
         setPromptPacks(DEFAULT_PROMPT_PACKS)
+        setReasonsWhy(DEFAULT_REASONS_WHY)
       } finally {
         setLoading(false)
       }
@@ -201,6 +243,7 @@ export default function AdminPromptsPage() {
       await setDocument(COLLECTIONS.SETTINGS, `prompts_${user.organizationId}`, {
         actionPrompts,
         promptPacks,
+        reasonsWhy,
       })
     } catch (err) {
       console.error("Failed to save prompt settings:", err)
@@ -493,6 +536,81 @@ export default function AdminPromptsPage() {
                 </p>
               )}
             </div>
+          </CardContent>
+        </Card>
+
+        {/* ── Why This Matters (Reasons) ─────────────────────────────────── */}
+        <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Lightbulb className="h-4 w-4 text-amber-500" />
+                  "Why This Matters" Messages
+                </CardTitle>
+                <CardDescription>
+                  Rotating motivational messages shown on login and dashboard to reinforce the value of AI capability
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {/* Add new reason */}
+            <div className="mb-4 flex gap-2">
+              <Input
+                placeholder="Enter a new reason why AI capability matters..."
+                value={newReason}
+                onChange={(e) => setNewReason(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newReason.trim()) {
+                    setReasonsWhy((prev) => [...prev, newReason.trim()])
+                    setNewReason("")
+                  }
+                }}
+              />
+              <Button
+                size="sm"
+                disabled={!newReason.trim()}
+                onClick={() => {
+                  if (newReason.trim()) {
+                    setReasonsWhy((prev) => [...prev, newReason.trim()])
+                    setNewReason("")
+                  }
+                }}
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                Add
+              </Button>
+            </div>
+
+            {/* List of reasons */}
+            <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
+              {reasonsWhy.map((reason, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/30 px-3 py-2"
+                >
+                  <span className="text-xs text-muted-foreground w-6">{idx + 1}.</span>
+                  <p className="flex-1 text-sm text-foreground">{reason}</p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                    onClick={() => setReasonsWhy((prev) => prev.filter((_, i) => i !== idx))}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+              {reasonsWhy.length === 0 && (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  No reasons configured. Add one above.
+                </p>
+              )}
+            </div>
+            <p className="mt-3 text-[11px] text-muted-foreground">
+              {reasonsWhy.length} reasons configured. They rotate every 8 seconds on login/dashboard.
+            </p>
           </CardContent>
         </Card>
       </div>

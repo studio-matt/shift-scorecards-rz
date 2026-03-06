@@ -2,58 +2,39 @@
 
 import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
-import { Users, Building2, Sparkles, TrendingUp, Lightbulb } from "lucide-react"
+import { Users, Sparkles, Lightbulb } from "lucide-react"
+import { DEFAULT_REASONS_WHY } from "@/lib/prompt-settings"
 
-// ── The 25 Reasons Why ─────────────────────────────────────────────────
-// Philosophical foundation for why someone should care about building AI capability
-export const REASONS_WHY = [
-  "AI won't replace you. Someone using AI will.",
-  "The best time to build AI fluency was yesterday. The second best time is now.",
-  "Your expertise + AI = exponential impact.",
-  "AI is a tool. Mastery is a choice.",
-  "The future belongs to the AI-augmented professional.",
-  "Every hour saved is an hour invested in what matters most.",
-  "AI doesn't take jobs. It transforms them.",
-  "Your competitive advantage is your ability to learn.",
-  "The gap between AI-fluent and AI-resistant grows daily.",
-  "AI multiplies human potential. It doesn't replace it.",
-  "The organizations that win will be the ones that adapt.",
-  "Your AI journey is your career insurance policy.",
-  "Small improvements compound into massive advantages.",
-  "AI capability is the new literacy.",
-  "The best professionals will be those who can work with AI, not against it.",
-  "Your value isn't in what you know. It's in how you apply it.",
-  "AI handles the routine so you can focus on the remarkable.",
-  "The future is human + machine, not human versus machine.",
-  "Building AI capability is investing in your future self.",
-  "The question isn't whether to use AI. It's how well you'll use it.",
-  "AI is the great equalizer. Talent + AI beats pedigree alone.",
-  "Your mindset about AI determines your trajectory.",
-  "Every interaction with AI is a learning opportunity.",
-  "The professionals who embrace AI will lead their fields.",
-  "AI capability compounds. Start today, lead tomorrow.",
-]
+// Re-export for backward compatibility
+export const REASONS_WHY = DEFAULT_REASONS_WHY
 
-export function ReasonWhyBanner({ className = "" }: { className?: string }) {
+export function ReasonWhyBanner({ 
+  className = "",
+  reasons,
+}: { 
+  className?: string
+  reasons?: string[]
+}) {
+  const reasonsList = reasons && reasons.length > 0 ? reasons : DEFAULT_REASONS_WHY
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isVisible, setIsVisible] = useState(true)
 
   useEffect(() => {
     // Start with a random reason
-    setCurrentIndex(Math.floor(Math.random() * REASONS_WHY.length))
-  }, [])
+    setCurrentIndex(Math.floor(Math.random() * reasonsList.length))
+  }, [reasonsList.length])
 
   useEffect(() => {
     const interval = setInterval(() => {
       setIsVisible(false)
       setTimeout(() => {
-        setCurrentIndex((prev) => (prev + 1) % REASONS_WHY.length)
+        setCurrentIndex((prev) => (prev + 1) % reasonsList.length)
         setIsVisible(true)
       }, 300)
     }, 8000) // Rotate every 8 seconds
 
     return () => clearInterval(interval)
-  }, [])
+  }, [reasonsList.length])
 
   return (
     <div className={`flex items-center gap-3 ${className}`}>
@@ -63,21 +44,22 @@ export function ReasonWhyBanner({ className = "" }: { className?: string }) {
           isVisible ? "opacity-100" : "opacity-0"
         }`}
       >
-        "{REASONS_WHY[currentIndex]}"
+        "{reasonsList[currentIndex]}"
       </p>
     </div>
   )
 }
 
-export function WhyThisMattersCard() {
+export function WhyThisMattersCard({ reasons }: { reasons?: string[] }) {
+  const reasonsList = reasons && reasons.length > 0 ? reasons : DEFAULT_REASONS_WHY
   const [currentIndex, setCurrentIndex] = useState(0)
 
   useEffect(() => {
-    setCurrentIndex(Math.floor(Math.random() * REASONS_WHY.length))
-  }, [])
+    setCurrentIndex(Math.floor(Math.random() * reasonsList.length))
+  }, [reasonsList.length])
 
   const nextReason = () => {
-    setCurrentIndex((prev) => (prev + 1) % REASONS_WHY.length)
+    setCurrentIndex((prev) => (prev + 1) % reasonsList.length)
   }
 
   return (
@@ -93,7 +75,7 @@ export function WhyThisMattersCard() {
               Why This Matters
             </p>
             <p className="mt-1 text-base font-medium text-foreground leading-relaxed">
-              "{REASONS_WHY[currentIndex]}"
+              "{reasonsList[currentIndex]}"
             </p>
             <button
               onClick={nextReason}
@@ -190,13 +172,15 @@ export function MovementCounter({
 export function EpicMeaningSection({
   totalProfessionals,
   totalOrganizations,
+  reasons,
 }: {
   totalProfessionals: number
   totalOrganizations: number
+  reasons?: string[]
 }) {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <WhyThisMattersCard />
+      <WhyThisMattersCard reasons={reasons} />
       <MovementCounter
         totalProfessionals={totalProfessionals}
         totalOrganizations={totalOrganizations}

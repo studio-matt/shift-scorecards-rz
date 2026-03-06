@@ -34,7 +34,37 @@ export interface PromptPack {
 export interface PromptSettings {
   actionPrompts: ActionPrompt[]
   promptPacks: PromptPack[]
+  reasonsWhy?: string[]
 }
+
+// ─── Default "Why This Matters" reasons ───────────────────────────────
+export const DEFAULT_REASONS_WHY: string[] = [
+  "AI won't replace you. Someone using AI will.",
+  "The best time to build AI fluency was yesterday. The second best time is now.",
+  "Your expertise + AI = exponential impact.",
+  "AI is a tool. Mastery is a choice.",
+  "The future belongs to the AI-augmented professional.",
+  "Every hour saved is an hour invested in what matters most.",
+  "AI doesn't take jobs. It transforms them.",
+  "Your competitive advantage is your ability to learn.",
+  "The gap between AI-fluent and AI-resistant grows daily.",
+  "AI multiplies human potential. It doesn't replace it.",
+  "The organizations that win will be the ones that adapt.",
+  "Your AI journey is your career insurance policy.",
+  "Small improvements compound into massive advantages.",
+  "AI capability is the new literacy.",
+  "The best professionals will be those who can work with AI, not against it.",
+  "Your value isn't in what you know. It's in how you apply it.",
+  "AI handles the routine so you can focus on the remarkable.",
+  "The future is human + machine, not human versus machine.",
+  "Building AI capability is investing in your future self.",
+  "The question isn't whether to use AI. It's how well you'll use it.",
+  "AI is the great equalizer. Talent + AI beats pedigree alone.",
+  "Your mindset about AI determines your trajectory.",
+  "Every interaction with AI is a learning opportunity.",
+  "The professionals who embrace AI will lead their fields.",
+  "AI capability compounds. Start today, lead tomorrow.",
+]
 
 // ─── Icon mapping ─────────────────────────────────────────────────────
 export const ICON_MAP: Record<string, LucideIcon> = {
@@ -164,6 +194,7 @@ export async function getPromptSettings(orgId: string): Promise<PromptSettings> 
       return {
         actionPrompts: settings.actionPrompts || DEFAULT_ACTION_PROMPTS,
         promptPacks: settings.promptPacks || DEFAULT_PROMPT_PACKS,
+        reasonsWhy: settings.reasonsWhy || DEFAULT_REASONS_WHY,
       }
     }
   } catch (err) {
@@ -172,5 +203,6 @@ export async function getPromptSettings(orgId: string): Promise<PromptSettings> 
   return {
     actionPrompts: DEFAULT_ACTION_PROMPTS,
     promptPacks: DEFAULT_PROMPT_PACKS,
+    reasonsWhy: DEFAULT_REASONS_WHY,
   }
 }
