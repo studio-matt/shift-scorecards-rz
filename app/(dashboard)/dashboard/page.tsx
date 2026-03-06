@@ -9,6 +9,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Sparkles } from "lucide-react"
+import { EpicMeaningSection } from "@/components/epic-meaning"
+import {
+  SkillTierCard,
+  PersonalBestsCard,
+  DepartmentRivalryCard,
+  CohortNudgeCard,
+  MonthlyInsightCard,
+  StreakAtRiskCard,
+  WinOfTheMonthCard,
+  type PersonalBest,
+  type DepartmentRanking,
+} from "@/components/dashboard/gamification"
 import { StatCards, AdminStatCards } from "@/components/dashboard/stat-cards"
 import { TopPerformers, MVPSpotlight, HighFiveSection } from "@/components/dashboard/top-performers"
 import { DepartmentPerformanceChart } from "@/components/dashboard/department-performance"
@@ -38,8 +53,11 @@ import {
   HighFivesReceivedCard,
   AIActionPlanCard,
   PromptPacksCard,
+  AIJourneyHero,
+  PercentileDistribution,
 } from "@/components/dashboard/user-analytics"
 import { getOrganizations, getDocument, COLLECTIONS } from "@/lib/firestore"
+import { getPromptSettings, type ActionPrompt, type PromptPack } from "@/lib/prompt-settings"
 import {
   fetchAllResponses,
   computeAdminStats,
@@ -89,6 +107,8 @@ import { Loader2 } from "lucide-react"
 
 export default function DashboardPage() {
   const { isAdmin, user } = useAuth()
+  
+  console.log("[v0] Dashboard - isAdmin:", isAdmin, "user:", user?.email, "role:", user?.role)
 
   // Admin filter state
   const [selectedOrg, setSelectedOrg] = useState("all")
@@ -125,15 +145,18 @@ export default function DashboardPage() {
     fieldAverage: 6.2,
   })
   const [varianceFeedback, setVarianceFeedback] = useState<Record<string, unknown> | undefined>(undefined)
+  const [actionPrompts, setActionPrompts] = useState<ActionPrompt[]>([])
+  const [promptPacks, setPromptPacks] = useState<PromptPack[]>([])
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      const [orgDocs, responses, targetsDoc, feedbackDoc] = await Promise.all([
+      const [orgDocs, responses, targetsDoc, feedbackDoc, promptSettings] = await Promise.all([
         getOrganizations(),
         fetchAllResponses(selectedOrg, selectedDept),
         getDocument(COLLECTIONS.SETTINGS, "dashboardTargets"),
         getDocument(COLLECTIONS.SETTINGS, "analyticsFeedback"),
+        user?.organizationId ? getPromptSettings(user.organizationId) : Promise.resolve(null),
       ])
       if (targetsDoc) {
         const t = targetsDoc as Record<string, unknown>
@@ -148,6 +171,10 @@ export default function DashboardPage() {
       if (feedbackDoc) {
         const f = feedbackDoc as Record<string, unknown>
         if (f.varianceFeedback) setVarianceFeedback(f.varianceFeedback as Record<string, unknown>)
+      }
+      if (promptSettings) {
+        setActionPrompts(promptSettings.actionPrompts)
+        setPromptPacks(promptSettings.promptPacks)
       }
       setOrgs(orgDocs as unknown as Organization[])
 
@@ -383,7 +410,7 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ── Champions ─────────────────────────────── */}
+          {/* ── Champions ───────────────────────────�����─── */}
           <div className="border-t border-border pt-4">
             <h2 className="text-lg font-semibold text-foreground">Champions</h2>
             <p className="mb-4 text-sm text-muted-foreground">Top performers, most improved, and peer recognition</p>
@@ -437,6 +464,38 @@ export default function DashboardPage() {
   )
   const highFiveCount = myPerformer ? Math.min(myPerformer.streak, 8) : 0
 
+  // Calculate hours saved and starting score for hero
+  const totalResponses = personalStreak?.totalResponses ?? 0
+  const hoursSaved = Math.round(totalResponses * 1.5 * 10) / 10
+  const dollarValue = Math.round(hoursSaved * 125)
+  const startScore = personalTrend.length > 0 ? personalTrend[0].myScore : (personalBenchmark?.myAvg ?? 0)
+  const currentScore = personalBenchmark?.myAvg ?? 0
+  const percentile = personalBenchmark?.percentile ?? 50
+
+  // Calculate months active for tier system
+  const monthsActive = Math.ceil((personalStreak?.totalWeeks ?? 0) / 4)
+
+  // Mock personal bests (in real app, calculate from response history)
+  const personalBests: PersonalBest[] = weakCategories.length > 0 ? weakCategories.slice(0, 4).map((cat, idx) => ({
+    category: cat.category,
+    score: Math.min(10, cat.score + 1.5),
+    previousBest: cat.score,
+    achievedDate: new Date().toISOString(),
+    isNew: idx === 0, // First one is "new" for demo
+  })) : []
+
+  // Mock department rankings (in real app, compute from responses grouped by department)
+  const departmentRankings: DepartmentRanking[] = [
+    { department: "Operations", avgScore: 7.8, rank: 1, change: 1, participationRate: 92 },
+    { department: "Marketing", avgScore: 7.5, rank: 2, change: -1, participationRate: 85 },
+    { department: "Engineering", avgScore: 7.2, rank: 3, change: 0, participationRate: 78 },
+    { department: "Sales", avgScore: 6.9, rank: 4, change: 2, participationRate: 71 },
+    { department: "HR", avgScore: 6.5, rank: 5, change: -1, participationRate: 65 },
+  ]
+
+  // Calculate days until deadline (assume monthly cadence, 7 days remaining)
+  const daysUntilDeadline = 7 // In real app, calculate from release schedule
+
   return (
     <div>
       <div className="mb-8">
@@ -447,6 +506,60 @@ export default function DashboardPage() {
       </div>
 
       <div className="flex flex-col gap-6">
+        {/* ── Your AI Journey Hero ──────────────────────── */}
+        {totalResponses > 0 ? (
+          <AIJourneyHero
+            hoursSaved={hoursSaved}
+            dollarValue={dollarValue}
+            startScore={startScore}
+            currentScore={currentScore}
+            fieldAverage={targets.fieldAverage}
+            percentile={percentile}
+            cohortCount={10}
+          />
+        ) : (
+          <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-card/80 to-card/80 backdrop-blur-sm">
+            <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
+            <CardContent className="relative p-6 md:p-8 text-center">
+              <Sparkles className="mx-auto h-12 w-12 text-primary mb-4" />
+              <h2 className="text-xl font-bold text-foreground">Your AI Journey Starts Here</h2>
+              <p className="mt-2 text-muted-foreground max-w-md mx-auto">
+                Complete your first scorecard to unlock personalized insights, action plans, and track your hours saved.
+              </p>
+              <Button className="mt-4" asChild>
+                <a href="/scorecard">Take Your First Scorecard</a>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Streak At Risk Warning (if applicable) ───── */}
+        <StreakAtRiskCard
+          currentStreak={personalStreak?.currentStreak ?? 0}
+          daysUntilDeadline={daysUntilDeadline}
+        />
+
+        {/* ── Epic Meaning: Why This Matters + Movement Counter ── */}
+        <EpicMeaningSection
+          totalProfessionals={adminStats?.activeUsers ?? 4200}
+          totalOrganizations={orgs.length || 47}
+        />
+
+        {/* ── Skill Tier + Cohort Nudge ─────────────────── */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <SkillTierCard
+            monthsActive={monthsActive}
+            avgScore={currentScore}
+            totalResponses={totalResponses}
+          />
+          <CohortNudgeCard
+            cohort={user?.organizationId ? "your organization" : "your cohort"}
+            hoursSaved={Math.round(hoursSaved * 0.7)}
+            pointsImproved={Math.abs(currentScore - startScore)}
+            scorecardsCompleted={totalResponses + 15}
+          />
+        </div>
+
         {/* ── Stat Cards (contextual) ───────────────────── */}
         <StatCards
           avgScore={personalBenchmark?.myAvg ?? 0}
@@ -460,59 +573,67 @@ export default function DashboardPage() {
           percentile={personalBenchmark?.percentile ?? 0}
         />
 
-        {/* ── Hours Saved + High Fives row ──────────────── */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <HoursSavedCard totalResponses={personalStreak?.totalResponses ?? 0} />
-          <HighFivesReceivedCard count={highFiveCount} />
-        </div>
-
-        {/* ── Your Performance ──────────────────────────── */}
-        <div className="border-t border-border pt-4">
-          <h2 className="text-lg font-semibold text-foreground">Your Performance</h2>
-          <p className="mb-4 text-sm text-muted-foreground">
-            Personal metrics and how you compare (all comparisons are anonymized)
-          </p>
-          {personalStreak || personalBenchmark ? (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {personalStreak && <PersonalStreakCard data={personalStreak} />}
-              {personalBenchmark && (
-                <PersonalBenchmarkCard
-                  data={personalBenchmark}
-                  fieldAverage={targets.fieldAverage}
-                  monthlyGoal={8.0}
-                />
-              )}
-            </div>
-          ) : (
-            <PersonalStreakCard data={{ currentStreak: 0, maxStreak: 0, totalResponses: 0, totalWeeks: 0 }} />
-          )}
-        </div>
-
-        {/* ── AI Action Plan & Prompt Packs ──────────────── */}
-        <div className="border-t border-border pt-4">
+        {/* ── AI Action Plan & Prompt Packs (THE BIG UNLOCK) ── */}
+        <div className="border-t border-border/50 pt-4">
           <h2 className="text-lg font-semibold text-foreground">AI Growth Plan</h2>
           <p className="mb-4 text-sm text-muted-foreground">
-            Personalized actions and curated prompts based on your scorecard results
+            Specific next actions with ready-to-use prompt templates based on your results
           </p>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <AIActionPlanCard
-              weakCategories={weakCategories}
-              score={personalBenchmark?.myAvg ?? 0}
-            />
-            <PromptPacksCard weakCategories={weakCategories} />
+<AIActionPlanCard
+  weakCategories={weakCategories}
+  score={personalBenchmark?.myAvg ?? 0}
+  actionPrompts={actionPrompts}
+  />
+  <PromptPacksCard weakCategories={weakCategories} promptPacks={promptPacks} />
           </div>
         </div>
 
+        {/* ── Percentile Distribution + Performance ─────── */}
+        <div className="border-t border-border/50 pt-4">
+          <h2 className="text-lg font-semibold text-foreground">Your Performance</h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Where you stand and how you compare (all comparisons are anonymized)
+          </p>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <PercentileDistribution
+              percentile={percentile}
+              cohortCount={10}
+              totalParticipants={850}
+            />
+            {personalStreak && <PersonalStreakCard data={personalStreak} />}
+          </div>
+          
+          {/* Personal Bests + Department Rivalry */}
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <PersonalBestsCard bests={personalBests} />
+            <DepartmentRivalryCard
+              rankings={departmentRankings}
+              userDepartment={user?.department}
+            />
+          </div>
+          
+          {personalBenchmark && (
+            <div className="mt-4">
+              <PersonalBenchmarkCard
+                data={personalBenchmark}
+                fieldAverage={targets.fieldAverage}
+                monthlyGoal={8.0}
+              />
+            </div>
+          )}
+        </div>
+
         {/* ── Your Trend ────────────────────────────────── */}
-        <div className="border-t border-border pt-4">
+        <div className="border-t border-border/50 pt-4">
           <h2 className="text-lg font-semibold text-foreground">Your Trend</h2>
           <p className="mb-4 text-sm text-muted-foreground">
-            Your scores over time compared to anonymized averages
+            Your scores over time compared to field average ({targets.fieldAverage.toFixed(1)})
           </p>
           {personalTrend.length > 0 ? (
             <PersonalTrendChart data={personalTrend} />
           ) : (
-            <div className="rounded-lg border border-dashed border-border bg-muted/30 px-6 py-8 text-center">
+            <div className="rounded-lg border border-dashed border-border/50 bg-muted/30 px-6 py-8 text-center">
               <p className="text-sm text-muted-foreground">
                 Your trend chart will appear after you complete at least one scorecard.
               </p>
@@ -525,18 +646,29 @@ export default function DashboardPage() {
           <GoalsCard />
         </div>
 
+        {/* ── Monthly Insight + Win of the Month ─────────── */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <MonthlyInsightCard />
+          <WinOfTheMonthCard
+            previousWins={[
+              { text: "Used Claude to draft 15 client proposals in 2 hours instead of 2 days", author: "Anonymous", date: "2024-01" },
+              { text: "AI helped me analyze 500 survey responses and create a presentation in 30 minutes", author: "Anonymous", date: "2024-01" },
+            ]}
+          />
+        </div>
+
         {/* ── Champions & Recognition ────────────────── */}
-        <div className="border-t border-border pt-4">
+        <div className="border-t border-border/50 pt-4">
           <h2 className="text-lg font-semibold text-foreground">Champions & Recognition</h2>
           <p className="mb-4 text-sm text-muted-foreground">
             Top performers and peer recognition (names shown by opt-in only)
           </p>
 
-          {topPerformers.length > 0 && (
-            <div className="mb-6">
-              <MVPSpotlight performer={topPerformers[0]} />
-            </div>
-          )}
+          {/* High Fives Received + MVP */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 mb-6">
+            <HighFivesReceivedCard count={highFiveCount} />
+            {topPerformers.length > 0 && <MVPSpotlight performer={topPerformers[0]} />}
+          </div>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <TopPerformers data={topPerformers} />

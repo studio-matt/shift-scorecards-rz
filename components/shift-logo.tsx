@@ -7,10 +7,28 @@ export function ShiftLogo({
   imageScale = 1,
 }: {
   className?: string
-  size?: "sm" | "default" | "lg"
+  size?: "sm" | "default" | "lg" | "icon"
   variant?: "color" | "white"
   imageScale?: number
 }) {
+  // Icon-only mode for collapsed sidebar
+  if (size === "icon") {
+    const src = variant === "white" ? "/shift-white.png" : "/shift-logo.webp"
+    return (
+      <div className={className}>
+        <Image
+          src={src}
+          alt="Shift logo"
+          width={24}
+          height={28}
+          className="object-contain"
+          style={{ width: 24, height: 28 }}
+          priority
+        />
+      </div>
+    )
+  }
+
   const sizeMap = {
     sm: { h: 28, text: "text-lg" },
     default: { h: 32, text: "text-xl" },

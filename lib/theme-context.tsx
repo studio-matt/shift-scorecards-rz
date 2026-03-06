@@ -22,13 +22,16 @@ const THEME_KEY = "shift-theme"
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("light")
+  const [theme, setThemeState] = useState<Theme>("dark")
 
   useEffect(() => {
     const stored = localStorage.getItem(THEME_KEY) as Theme | null
     if (stored === "dark" || stored === "light") {
       setThemeState(stored)
       document.documentElement.classList.toggle("dark", stored === "dark")
+    } else {
+      // Default to dark premium theme
+      document.documentElement.classList.add("dark")
     }
   }, [])
 

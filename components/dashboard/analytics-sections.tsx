@@ -57,14 +57,15 @@ export function StreaksCard({ data }: { data: UserStreak[] }) {
   // Max streak across all users for bar scaling
   const maxW = Math.max(...top.map((s) => s.maxStreak), 1)
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-orange-500/5 via-transparent to-transparent" />
+      <CardHeader className="relative pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-          <Flame className="h-4 w-4 text-orange-500" />
+          <Flame className="h-4 w-4 text-orange-400" />
           Response Streaks
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="relative">
         {top.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted-foreground">No streak data yet</p>
         ) : (
@@ -115,14 +116,15 @@ export function NonRespondersCard({ data }: { data: NonResponder[] }) {
   const droppedOff = data.filter((n) => n.lastResponseWeek !== "Never").slice(0, 6)
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-destructive/5 via-transparent to-transparent" />
+      <CardHeader className="relative pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
           <UserX className="h-4 w-4 text-destructive" />
           Non-Responders
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="relative">
         {data.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted-foreground">Everyone responded!</p>
         ) : (
@@ -189,11 +191,12 @@ export function ScoreVelocityCard({ data }: { data: ScoreVelocity[] }) {
   const improving = data.filter((d) => d.velocity > 0).slice(0, 5)
   const declining = data.filter((d) => d.velocity < 0).slice(0, 5)
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
+      <CardHeader className="relative pb-3">
         <CardTitle className="text-sm font-semibold">Score Velocity</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="relative">
         <div className="grid grid-cols-2 gap-4">
           <div>
             <p className="mb-2 flex items-center gap-1 text-xs font-medium text-success">
@@ -271,11 +274,12 @@ export function DepartmentVarianceCard({ data, feedbackSettings }: { data: Depar
   const chartData = data.map((d) => ({ name: d.department, avg: d.avgScore, stdDev: d.stdDev }))
   const highThreshold = feedbackSettings?.highVarianceThreshold ?? 1.5
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
+      <CardHeader className="relative pb-3">
         <CardTitle className="text-sm font-semibold">Department Score Variance</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="relative">
         {chartData.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted-foreground">No data yet</p>
         ) : (
@@ -329,12 +333,13 @@ function generateCorrelationInsight(c: QuestionCorrelation): string | null {
 export function QuestionCorrelationsCard({ data }: { data: QuestionCorrelation[] }) {
   const top = data.slice(0, 6)
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-cyan/5 via-transparent to-transparent" />
+      <CardHeader className="relative pb-3">
         <CardTitle className="text-sm font-semibold">Question Correlations</CardTitle>
         <p className="text-xs text-muted-foreground">Strongest relationships between scorecard questions</p>
       </CardHeader>
-      <CardContent>
+      <CardContent className="relative">
         {top.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted-foreground">Not enough data for correlations</p>
         ) : (
@@ -441,8 +446,9 @@ export function DeptOverTimeChart({ data }: { data: DeptOverTime[] }) {
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
+      <CardHeader className="relative pb-3">
         <div className="flex items-start justify-between">
           <div>
             <CardTitle className="text-sm font-semibold">Department Comparison Over Time</CardTitle>
@@ -464,7 +470,7 @@ export function DeptOverTimeChart({ data }: { data: DeptOverTime[] }) {
           )}
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="relative">
         {/* Department toggles */}
         <div className="mb-3 flex flex-wrap gap-1.5">
           {departments.map((dept, i) => {
@@ -529,20 +535,21 @@ export function DeptOverTimeChart({ data }: { data: DeptOverTime[] }) {
 // ── Org benchmarks ────────────────────────────────────────────────────
 export function OrgBenchmarkCard({ data }: { data: OrgBenchmark[] }) {
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
+      <CardHeader className="relative pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
           <Building2 className="h-4 w-4 text-primary" />
           Cross-Organization Benchmarks
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="relative">
         {data.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted-foreground">No benchmark data</p>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {data.map((o) => (
-              <div key={o.orgName} className="rounded-lg border border-border p-3">
+              <div key={o.orgName} className="rounded-lg border border-border/50 bg-muted/30 p-3">
                 <p className="text-sm font-semibold text-foreground">{o.orgName}</p>
                 <div className="mt-2 flex items-end gap-3">
                   <div>
@@ -599,8 +606,9 @@ export function FieldReportCard({ data }: { data: FieldReportData | null }) {
   }
 
   return (
-    <Card ref={reportRef}>
-      <CardHeader className="pb-3">
+    <Card ref={reportRef} className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
+      <CardHeader className="relative pb-3">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 text-primary" />
@@ -609,13 +617,13 @@ export function FieldReportCard({ data }: { data: FieldReportData | null }) {
               <p className="text-xs text-muted-foreground">Anonymized cross-organization intelligence -- the SHIFT thought leadership asset</p>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={handleExport}>
+          <Button variant="outline" size="sm" className="border-border/50" onClick={handleExport}>
             <Download className="mr-1.5 h-3.5 w-3.5" />
             Export
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="relative">
         <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
           <p className="text-sm leading-relaxed text-foreground">
             Across <span className="font-bold">{data.totalOrganizations} organizations</span> and{" "}
@@ -669,8 +677,9 @@ export function FieldReportCard({ data }: { data: FieldReportData | null }) {
 // ── Alerts ─────────────────────────────────────────────────────────────
 export function AlertsCard({ data }: { data: ThresholdAlert[] }) {
   return (
-    <Card>
-      <CardContent className="pt-4">
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-destructive/5 via-transparent to-transparent" />
+      <CardContent className="relative pt-4">
         {data.length === 0 ? (
           <p className="py-2 text-center text-sm text-muted-foreground">No alerts at this time</p>
         ) : (

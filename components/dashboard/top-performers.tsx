@@ -46,8 +46,9 @@ export interface HighFive {
 export function MVPSpotlight({ performer }: { performer: TopPerformer | null }) {
   if (!performer) return null
   return (
-    <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
-      <CardContent className="p-5">
+    <Card className="relative overflow-hidden border-primary/30 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent" />
+      <CardContent className="relative p-5">
         <div className="mb-3 flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
             <Trophy className="h-4 w-4 text-primary" />
@@ -148,15 +149,16 @@ export function HighFiveSection({
   const recentFives = highFives.slice(0, 6)
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-500/5 via-transparent to-transparent" />
+      <CardHeader className="relative pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-          <Hand className="h-4 w-4 text-primary" />
+          <Hand className="h-4 w-4 text-amber-400" />
           High Fives
         </CardTitle>
         <p className="text-xs text-muted-foreground">Give recognition to your colleagues</p>
       </CardHeader>
-      <CardContent>
+      <CardContent className="relative">
         {/* Quick send buttons */}
         <div className="mb-3 flex flex-wrap gap-1.5">
           {performers.slice(0, 8).map((p) => (
@@ -247,8 +249,9 @@ export function TopPerformers({ showCompany = false, data }: TopPerformersProps)
   const [showNames, setShowNames] = useState(false)
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
+      <CardHeader className="relative">
         <div className="flex items-start justify-between">
           <div>
             <CardTitle className="text-base font-semibold">
@@ -260,7 +263,7 @@ export function TopPerformers({ showCompany = false, data }: TopPerformersProps)
           </div>
           <button
             onClick={() => setShowNames(!showNames)}
-            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted transition-colors"
+            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted/50 transition-colors"
             title={showNames ? "Hide names for privacy" : "Show full names"}
           >
             {showNames ? (
@@ -271,7 +274,7 @@ export function TopPerformers({ showCompany = false, data }: TopPerformersProps)
           </button>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="relative">
         <div className="flex flex-col gap-3">
           {data.length === 0 && (
             <p className="py-4 text-center text-sm text-muted-foreground">
