@@ -107,6 +107,8 @@ import { Loader2 } from "lucide-react"
 
 export default function DashboardPage() {
   const { isAdmin, user } = useAuth()
+  
+  console.log("[v0] Dashboard - isAdmin:", isAdmin, "user:", user?.email, "role:", user?.role)
 
   // Admin filter state
   const [selectedOrg, setSelectedOrg] = useState("all")
@@ -408,7 +410,7 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ── Champions ───────────────────────────���─── */}
+          {/* ── Champions ───────────────────────────�����─── */}
           <div className="border-t border-border pt-4">
             <h2 className="text-lg font-semibold text-foreground">Champions</h2>
             <p className="mb-4 text-sm text-muted-foreground">Top performers, most improved, and peer recognition</p>
