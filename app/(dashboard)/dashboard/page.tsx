@@ -9,6 +9,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Sparkles } from "lucide-react"
 import { StatCards, AdminStatCards } from "@/components/dashboard/stat-cards"
 import { TopPerformers, MVPSpotlight, HighFiveSection } from "@/components/dashboard/top-performers"
 import { DepartmentPerformanceChart } from "@/components/dashboard/department-performance"
@@ -38,6 +41,8 @@ import {
   HighFivesReceivedCard,
   AIActionPlanCard,
   PromptPacksCard,
+  AIJourneyHero,
+  PercentileDistribution,
 } from "@/components/dashboard/user-analytics"
 import { getOrganizations, getDocument, COLLECTIONS } from "@/lib/firestore"
 import {
@@ -437,6 +442,14 @@ export default function DashboardPage() {
   )
   const highFiveCount = myPerformer ? Math.min(myPerformer.streak, 8) : 0
 
+  // Calculate hours saved and starting score for hero
+  const totalResponses = personalStreak?.totalResponses ?? 0
+  const hoursSaved = Math.round(totalResponses * 1.5 * 10) / 10
+  const dollarValue = Math.round(hoursSaved * 125)
+  const startScore = personalTrend.length > 0 ? personalTrend[0].myScore : (personalBenchmark?.myAvg ?? 0)
+  const currentScore = personalBenchmark?.myAvg ?? 0
+  const percentile = personalBenchmark?.percentile ?? 50
+
   return (
     <div>
       <div className="mb-8">
@@ -447,6 +460,33 @@ export default function DashboardPage() {
       </div>
 
       <div className="flex flex-col gap-6">
+        {/* ── Your AI Journey Hero ──────────────────────── */}
+        {totalResponses > 0 ? (
+          <AIJourneyHero
+            hoursSaved={hoursSaved}
+            dollarValue={dollarValue}
+            startScore={startScore}
+            currentScore={currentScore}
+            fieldAverage={targets.fieldAverage}
+            percentile={percentile}
+            cohortCount={10}
+          />
+        ) : (
+          <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-card/80 to-card/80 backdrop-blur-sm">
+            <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
+            <CardContent className="relative p-6 md:p-8 text-center">
+              <Sparkles className="mx-auto h-12 w-12 text-primary mb-4" />
+              <h2 className="text-xl font-bold text-foreground">Your AI Journey Starts Here</h2>
+              <p className="mt-2 text-muted-foreground max-w-md mx-auto">
+                Complete your first scorecard to unlock personalized insights, action plans, and track your hours saved.
+              </p>
+              <Button className="mt-4" asChild>
+                <a href="/scorecard">Take Your First Scorecard</a>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {/* ── Stat Cards (contextual) ───────────────────── */}
         <StatCards
           avgScore={personalBenchmark?.myAvg ?? 0}
@@ -460,39 +500,11 @@ export default function DashboardPage() {
           percentile={personalBenchmark?.percentile ?? 0}
         />
 
-        {/* ── Hours Saved + High Fives row ──────────────── */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <HoursSavedCard totalResponses={personalStreak?.totalResponses ?? 0} />
-          <HighFivesReceivedCard count={highFiveCount} />
-        </div>
-
-        {/* ── Your Performance ──────────────────────────── */}
-        <div className="border-t border-border pt-4">
-          <h2 className="text-lg font-semibold text-foreground">Your Performance</h2>
-          <p className="mb-4 text-sm text-muted-foreground">
-            Personal metrics and how you compare (all comparisons are anonymized)
-          </p>
-          {personalStreak || personalBenchmark ? (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {personalStreak && <PersonalStreakCard data={personalStreak} />}
-              {personalBenchmark && (
-                <PersonalBenchmarkCard
-                  data={personalBenchmark}
-                  fieldAverage={targets.fieldAverage}
-                  monthlyGoal={8.0}
-                />
-              )}
-            </div>
-          ) : (
-            <PersonalStreakCard data={{ currentStreak: 0, maxStreak: 0, totalResponses: 0, totalWeeks: 0 }} />
-          )}
-        </div>
-
-        {/* ── AI Action Plan & Prompt Packs ──────────────── */}
-        <div className="border-t border-border pt-4">
+        {/* ── AI Action Plan & Prompt Packs (THE BIG UNLOCK) ── */}
+        <div className="border-t border-border/50 pt-4">
           <h2 className="text-lg font-semibold text-foreground">AI Growth Plan</h2>
           <p className="mb-4 text-sm text-muted-foreground">
-            Personalized actions and curated prompts based on your scorecard results
+            Specific next actions with ready-to-use prompt templates based on your results
           </p>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <AIActionPlanCard
@@ -503,16 +515,41 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* ── Percentile Distribution + Performance ─────── */}
+        <div className="border-t border-border/50 pt-4">
+          <h2 className="text-lg font-semibold text-foreground">Your Performance</h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Where you stand and how you compare (all comparisons are anonymized)
+          </p>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <PercentileDistribution
+              percentile={percentile}
+              cohortCount={10}
+              totalParticipants={850}
+            />
+            {personalStreak && <PersonalStreakCard data={personalStreak} />}
+          </div>
+          {personalBenchmark && (
+            <div className="mt-4">
+              <PersonalBenchmarkCard
+                data={personalBenchmark}
+                fieldAverage={targets.fieldAverage}
+                monthlyGoal={8.0}
+              />
+            </div>
+          )}
+        </div>
+
         {/* ── Your Trend ────────────────────────────────── */}
-        <div className="border-t border-border pt-4">
+        <div className="border-t border-border/50 pt-4">
           <h2 className="text-lg font-semibold text-foreground">Your Trend</h2>
           <p className="mb-4 text-sm text-muted-foreground">
-            Your scores over time compared to anonymized averages
+            Your scores over time compared to field average ({targets.fieldAverage.toFixed(1)})
           </p>
           {personalTrend.length > 0 ? (
             <PersonalTrendChart data={personalTrend} />
           ) : (
-            <div className="rounded-lg border border-dashed border-border bg-muted/30 px-6 py-8 text-center">
+            <div className="rounded-lg border border-dashed border-border/50 bg-muted/30 px-6 py-8 text-center">
               <p className="text-sm text-muted-foreground">
                 Your trend chart will appear after you complete at least one scorecard.
               </p>
@@ -526,17 +563,17 @@ export default function DashboardPage() {
         </div>
 
         {/* ── Champions & Recognition ────────────────── */}
-        <div className="border-t border-border pt-4">
+        <div className="border-t border-border/50 pt-4">
           <h2 className="text-lg font-semibold text-foreground">Champions & Recognition</h2>
           <p className="mb-4 text-sm text-muted-foreground">
             Top performers and peer recognition (names shown by opt-in only)
           </p>
 
-          {topPerformers.length > 0 && (
-            <div className="mb-6">
-              <MVPSpotlight performer={topPerformers[0]} />
-            </div>
-          )}
+          {/* High Fives Received + MVP */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 mb-6">
+            <HighFivesReceivedCard count={highFiveCount} />
+            {topPerformers.length > 0 && <MVPSpotlight performer={topPerformers[0]} />}
+          </div>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <TopPerformers data={topPerformers} />
