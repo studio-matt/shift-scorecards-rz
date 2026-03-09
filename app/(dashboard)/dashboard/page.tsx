@@ -108,11 +108,10 @@ import { Loader2 } from "lucide-react"
 export default function DashboardPage() {
   const { isAdmin, isSuperAdmin, isCompanyAdmin, user } = useAuth()
 
+  console.log("[v0] Dashboard mount - isCompanyAdmin:", isCompanyAdmin, "user?.organizationId:", user?.organizationId, "user?.company:", user?.company)
+
   // Admin filter state
-  // Company admins start with their org selected, super admins start with "all"
-  const [selectedOrg, setSelectedOrg] = useState(() => 
-    isCompanyAdmin && user?.organizationId ? user.organizationId : "all"
-  )
+  const [selectedOrg, setSelectedOrg] = useState("all")
   const [selectedDept, setSelectedDept] = useState("all")
   const [timePeriod, setTimePeriod] = useState("this-week")
 
@@ -238,6 +237,15 @@ export default function DashboardPage() {
     loadData()
   }, [loadData])
 
+  // Lock org selection for company admins once user data is available
+  useEffect(() => {
+    console.log("[v0] Company admin effect - isCompanyAdmin:", isCompanyAdmin, "orgId:", user?.organizationId)
+    if (isCompanyAdmin && user?.organizationId && selectedOrg === "all") {
+      console.log("[v0] Setting selectedOrg to:", user.organizationId)
+      setSelectedOrg(user.organizationId)
+    }
+  }, [isCompanyAdmin, user?.organizationId, selectedOrg])
+
   const activeOrg = orgs.find((o) => o.id === selectedOrg)
 
   const departments = useMemo(() => {
@@ -283,6 +291,7 @@ export default function DashboardPage() {
   }
 
   if (isAdmin) {
+    console.log("[v0] Admin render - selectedOrg:", selectedOrg, "activeOrg:", activeOrg, "orgs count:", orgs.length)
     // For company admins, use their locked organization name
     const companyAdminOrgName = isCompanyAdmin 
       ? activeOrg?.name ?? user?.company ?? "Your Organization"

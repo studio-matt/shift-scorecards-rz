@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -30,7 +31,7 @@ import {
 } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Plus, Mail, CheckCircle2, Clock, Search, Upload, FileDown, Loader2, EyeOff, Users, ShieldAlert } from "lucide-react"
+import { Plus, Mail, CheckCircle2, Clock, Search, Upload, FileDown, Loader2, EyeOff, Users, ShieldAlert, Pencil } from "lucide-react"
 import {
   getDocuments,
   getOrganizations,
@@ -638,6 +639,18 @@ export default function ManageUsersPage() {
                   >
                     {user.status}
                   </span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Link href={`/profile/${user.id}`}>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </Link>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">
+                      Edit user profile
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               </div>
             ))}
