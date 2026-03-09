@@ -109,7 +109,10 @@ export default function DashboardPage() {
   const { isAdmin, isSuperAdmin, isCompanyAdmin, user } = useAuth()
 
   // Admin filter state
-  const [selectedOrg, setSelectedOrg] = useState("all")
+  // Company admins start with their org selected, super admins start with "all"
+  const [selectedOrg, setSelectedOrg] = useState(() => 
+    isCompanyAdmin && user?.organizationId ? user.organizationId : "all"
+  )
   const [selectedDept, setSelectedDept] = useState("all")
   const [timePeriod, setTimePeriod] = useState("this-week")
 
@@ -235,13 +238,6 @@ export default function DashboardPage() {
     loadData()
   }, [loadData])
 
-  // For company admins, lock their organization on mount
-  useEffect(() => {
-    if (isCompanyAdmin && user?.organizationId) {
-      setSelectedOrg(user.organizationId)
-    }
-  }, [isCompanyAdmin, user?.organizationId])
-
   const activeOrg = orgs.find((o) => o.id === selectedOrg)
 
   const departments = useMemo(() => {
@@ -287,9 +283,9 @@ export default function DashboardPage() {
   }
 
   if (isAdmin) {
-    // For company admins, find their organization name
+    // For company admins, use their locked organization name
     const companyAdminOrgName = isCompanyAdmin 
-      ? orgs.find(o => o.id === user?.organizationId)?.name ?? "Your Organization"
+      ? activeOrg?.name ?? user?.company ?? "Your Organization"
       : null
 
     return (
