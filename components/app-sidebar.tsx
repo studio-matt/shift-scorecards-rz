@@ -64,7 +64,7 @@ const adminNavItems = [
 
 export function AppSidebar() {
   const pathname = usePathname()
-  const { user, isAdmin, logout, switchRole } = useAuth()
+  const { user, isAdmin, isSuperAdmin, isCompanyAdmin, logout, switchRole } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const isScorecardActive = pathname.startsWith("/scorecard")
   const [scorecardsOpen, setScorecardsOpen] = useState(isScorecardActive)
@@ -254,7 +254,7 @@ export function AppSidebar() {
               <div className="my-4 border-t border-sidebar-border/50" />
               {isExpanded && (
                 <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
-                  Admin
+                  {isCompanyAdmin ? "CEO View" : "Admin"}
                 </p>
               )}
               <ul className="flex flex-col gap-1">
@@ -318,14 +318,17 @@ export function AppSidebar() {
                 <p className="text-xs text-muted-foreground">{user.email}</p>
                 <Badge
                   variant="secondary"
-                  className="mt-1 text-xs capitalize"
+                  className="mt-1 text-xs"
                 >
-                  {user.role}
+                  {user.role === "admin" ? "Super Admin" : user.role === "company_admin" ? "Company Admin" : "User"}
                 </Badge>
               </div>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => switchRole("admin")}>
-                Switch to Admin
+                Switch to Super Admin
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => switchRole("company_admin")}>
+                Switch to Company Admin (CEO View)
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => switchRole("user")}>
                 Switch to User

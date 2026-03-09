@@ -106,9 +106,7 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2 } from "lucide-react"
 
 export default function DashboardPage() {
-  const { isAdmin, user } = useAuth()
-  
-  console.log("[v0] Dashboard - isAdmin:", isAdmin, "user:", user?.email, "role:", user?.role)
+  const { isAdmin, isSuperAdmin, isCompanyAdmin, user } = useAuth()
 
   // Admin filter state
   const [selectedOrg, setSelectedOrg] = useState("all")
@@ -237,6 +235,13 @@ export default function DashboardPage() {
     loadData()
   }, [loadData])
 
+  // For company admins, lock their organization on mount
+  useEffect(() => {
+    if (isCompanyAdmin && user?.organizationId) {
+      setSelectedOrg(user.organizationId)
+    }
+  }, [isCompanyAdmin, user?.organizationId])
+
   const activeOrg = orgs.find((o) => o.id === selectedOrg)
 
   const departments = useMemo(() => {
@@ -282,6 +287,11 @@ export default function DashboardPage() {
   }
 
   if (isAdmin) {
+    // For company admins, find their organization name
+    const companyAdminOrgName = isCompanyAdmin 
+      ? orgs.find(o => o.id === user?.organizationId)?.name ?? "Your Organization"
+      : null
+
     return (
       <div>
         {/* Admin header with filters */}
@@ -289,35 +299,44 @@ export default function DashboardPage() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h1 className="text-2xl font-bold text-foreground">
-                Admin Dashboard
+                {isCompanyAdmin ? "CEO View: Dashboard" : "Admin Dashboard"}
               </h1>
               <p className="mt-1 text-muted-foreground">
-                Global performance metrics and analytics across all companies
+                {isCompanyAdmin 
+                  ? `Performance metrics and analytics for ${companyAdminOrgName}`
+                  : "Global performance metrics and analytics across all companies"}
               </p>
             </div>
           </div>
 
           {/* Filter bar */}
           <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-3">
-            <Select
-              value={selectedOrg}
-              onValueChange={(val) => {
-                setSelectedOrg(val)
-                setSelectedDept("all")
-              }}
-            >
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="All Companies" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Companies</SelectItem>
-                {orgs.map((org) => (
-                  <SelectItem key={org.id} value={org.id}>
-                    {org.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Company admin sees locked org, super admin can select */}
+            {isCompanyAdmin ? (
+              <div className="flex h-10 w-48 items-center rounded-md border border-input bg-muted px-3 text-sm">
+                {companyAdminOrgName}
+              </div>
+            ) : (
+              <Select
+                value={selectedOrg}
+                onValueChange={(val) => {
+                  setSelectedOrg(val)
+                  setSelectedDept("all")
+                }}
+              >
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="All Companies" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Companies</SelectItem>
+                  {orgs.map((org) => (
+                    <SelectItem key={org.id} value={org.id}>
+                      {org.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
 
             <Select
               value={selectedDept}

@@ -38,6 +38,7 @@ import {
   updateDocument,
   COLLECTIONS,
 } from "@/lib/firestore"
+import { useAuth } from "@/lib/auth-context"
 import type { Organization } from "@/lib/types"
 
 /** Proper-case a name: "kristen abbott" → "Kristen Abbott" */
@@ -62,6 +63,8 @@ interface InvitedUser {
 }
 
 export default function ManageUsersPage() {
+  const { user: authUser, isCompanyAdmin, isSuperAdmin } = useAuth()
+  
   // ── Single invite fields ──
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState("user")
@@ -94,33 +97,43 @@ export default function ManageUsersPage() {
         memberCount: 0,
       })) as Organization[]
       const orgMap = new Map(orgList.map((o) => [o.id, o.name]))
-      setOrgs(orgList)
-      setUsers(
-        userDocs.map((d) => {
-          const data = d as Record<string, unknown>
-          const firstName = (data.firstName as string) ?? ""
-          const lastName = (data.lastName as string) ?? ""
-          const orgId = (data.organizationId as string) ?? ""
-          const rawName = `${firstName} ${lastName}`.trim()
-          return {
-            id: d.id,
-            name: rawName ? properCase(rawName) : ((data.email as string) ?? "Unknown"),
-            email: (data.email as string) ?? "",
-            department: (data.department as string) ?? "",
-            role: (data.role as string) ?? "user",
-            orgName: orgMap.get(orgId) ?? "",
-            orgId,
-            excludeFromReporting: (data.excludeFromReporting as boolean) ?? false,
-            status: data.authId ? ("accepted" as const) : ("pending" as const),
-          }
-        }),
-      )
+      // For company admins, only show their organization
+      const filteredOrgList = isCompanyAdmin && authUser?.organizationId
+        ? orgList.filter(o => o.id === authUser.organizationId)
+        : orgList
+      setOrgs(filteredOrgList)
+      
+      // Filter users by organization for company admins
+      const mappedUsers = userDocs.map((d) => {
+        const data = d as Record<string, unknown>
+        const firstName = (data.firstName as string) ?? ""
+        const lastName = (data.lastName as string) ?? ""
+        const orgId = (data.organizationId as string) ?? ""
+        const rawName = `${firstName} ${lastName}`.trim()
+        return {
+          id: d.id,
+          name: rawName ? properCase(rawName) : ((data.email as string) ?? "Unknown"),
+          email: (data.email as string) ?? "",
+          department: (data.department as string) ?? "",
+          role: (data.role as string) ?? "user",
+          orgName: orgMap.get(orgId) ?? "",
+          orgId,
+          excludeFromReporting: (data.excludeFromReporting as boolean) ?? false,
+          status: data.authId ? ("accepted" as const) : ("pending" as const),
+        }
+      })
+      
+      // Company admins only see users from their organization
+      const filteredUsers = isCompanyAdmin && authUser?.organizationId
+        ? mappedUsers.filter(u => u.orgId === authUser.organizationId)
+        : mappedUsers
+      setUsers(filteredUsers)
     } catch (err) {
       console.error("Failed to fetch data:", err)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [isCompanyAdmin, authUser?.organizationId])
 
   useEffect(() => {
     fetchData()
@@ -282,9 +295,13 @@ export default function ManageUsersPage() {
     <div>
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Manage Users</h1>
+          <h1 className="text-2xl font-bold text-foreground">
+            {isCompanyAdmin ? "CEO View: Manage Users" : "Manage Users"}
+          </h1>
           <p className="mt-1 text-muted-foreground">
-            Invite and manage team members for your organization
+            {isCompanyAdmin
+              ? "Manage team members within your organization"
+              : "Invite and manage team members for your organization"}
           </p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -327,7 +344,10 @@ export default function ManageUsersPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="company_admin">Company Admin (CEO View)</SelectItem>
+                    {isSuperAdmin && (
+                      <SelectItem value="admin">Super Admin</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
                 {csvFile && (
@@ -583,12 +603,15 @@ export default function ManageUsersPage() {
                     value={user.role}
                     onValueChange={(val) => handleRoleChange(user.id, val)}
                   >
-                    <SelectTrigger className="h-7 w-24 text-xs">
+                    <SelectTrigger className="h-7 w-32 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="user">User</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="company_admin">Company Admin</SelectItem>
+                      {isSuperAdmin && (
+                        <SelectItem value="admin">Super Admin</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                   {/* Exclude from reporting toggle */}
