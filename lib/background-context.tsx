@@ -1,5 +1,6 @@
 "use client"
 
+// Branding context provider for organization colors throughout the app
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react"
 import { useAuth } from "@/lib/auth-context"
 import { getDocument, COLLECTIONS } from "@/lib/firestore"

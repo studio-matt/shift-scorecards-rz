@@ -1,5 +1,6 @@
 "use client"
 
+// Main dashboard page with analytics, performance metrics, and branding support
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { useAuth } from "@/lib/auth-context"
 import { useBackground } from "@/lib/background-context"
