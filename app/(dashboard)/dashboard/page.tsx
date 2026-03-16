@@ -239,12 +239,21 @@ export default function DashboardPage() {
 
   // Lock org selection for company admins once user data is available
   useEffect(() => {
-    console.log("[v0] Company admin effect - isCompanyAdmin:", isCompanyAdmin, "orgId:", user?.organizationId)
-    if (isCompanyAdmin && user?.organizationId && selectedOrg === "all") {
-      console.log("[v0] Setting selectedOrg to:", user.organizationId)
-      setSelectedOrg(user.organizationId)
+    console.log("[v0] Company admin effect - isCompanyAdmin:", isCompanyAdmin, "orgId:", user?.organizationId, "company:", user?.company, "orgs:", orgs.map(o => ({ id: o.id, name: o.name })))
+    if (isCompanyAdmin && selectedOrg === "all") {
+      // Try organizationId first, then fall back to finding org by company name
+      if (user?.organizationId) {
+        console.log("[v0] Setting selectedOrg to organizationId:", user.organizationId)
+        setSelectedOrg(user.organizationId)
+      } else if (user?.company && orgs.length > 0) {
+        const matchedOrg = orgs.find(o => o.name.toLowerCase() === user.company?.toLowerCase())
+        if (matchedOrg) {
+          console.log("[v0] Setting selectedOrg by company name match:", matchedOrg.id, matchedOrg.name)
+          setSelectedOrg(matchedOrg.id)
+        }
+      }
     }
-  }, [isCompanyAdmin, user?.organizationId, selectedOrg])
+  }, [isCompanyAdmin, user?.organizationId, user?.company, selectedOrg, orgs])
 
   const activeOrg = orgs.find((o) => o.id === selectedOrg)
 
@@ -291,10 +300,10 @@ export default function DashboardPage() {
   }
 
   if (isAdmin) {
-    console.log("[v0] Admin render - selectedOrg:", selectedOrg, "activeOrg:", activeOrg, "orgs count:", orgs.length)
-    // For company admins, use their locked organization name
+    console.log("[v0] Admin render - selectedOrg:", selectedOrg, "activeOrg:", activeOrg?.name, "user.company:", user?.company, "orgs count:", orgs.length)
+    // For company admins, use their locked organization name (try multiple sources)
     const companyAdminOrgName = isCompanyAdmin 
-      ? activeOrg?.name ?? user?.company ?? "Your Organization"
+      ? activeOrg?.name ?? orgs.find(o => o.name.toLowerCase() === user?.company?.toLowerCase())?.name ?? user?.company ?? "Your Organization"
       : null
 
     return (
