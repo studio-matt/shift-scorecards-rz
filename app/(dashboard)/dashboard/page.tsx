@@ -521,7 +521,10 @@ export default function DashboardPage() {
   // Calculate hours saved and starting score for hero
   const totalResponses = personalStreak?.totalResponses ?? 0
   const hoursSaved = Math.round(totalResponses * 1.5 * 10) / 10
-  const dollarValue = Math.round(hoursSaved * 125)
+  // Use org's hourly rate if available, otherwise default to $100/hr
+  const userOrg = orgs.find((o) => o.id === user?.organizationId)
+  const effectiveHourlyRate = activeOrg?.hourlyRate ?? userOrg?.hourlyRate ?? 100
+  const dollarValue = Math.round(hoursSaved * effectiveHourlyRate)
   const startScore = personalTrend.length > 0 ? personalTrend[0].myScore : (personalBenchmark?.myAvg ?? 0)
   const currentScore = personalBenchmark?.myAvg ?? 0
   const percentile = personalBenchmark?.percentile ?? 50
@@ -570,6 +573,7 @@ export default function DashboardPage() {
             fieldAverage={targets.fieldAverage}
             percentile={percentile}
             cohortCount={10}
+            hourlyRate={effectiveHourlyRate}
           />
         ) : (
           <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-card/80 to-card/80 backdrop-blur-sm">

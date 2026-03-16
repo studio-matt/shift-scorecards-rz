@@ -55,6 +55,7 @@ export function AIJourneyHero({
   fieldAverage,
   percentile,
   cohortCount = 10,
+  hourlyRate = 100,
 }: {
   hoursSaved: number
   dollarValue: number
@@ -63,6 +64,7 @@ export function AIJourneyHero({
   fieldAverage: number
   percentile: number
   cohortCount?: number
+  hourlyRate?: number
 }) {
   const weeksEquivalent = Math.round(hoursSaved / 40 * 10) / 10
   const scoreGrowth = currentScore - startScore
@@ -96,10 +98,13 @@ export function AIJourneyHero({
               <span className="text-xl text-muted-foreground">hours saved</span>
             </div>
             <p className="mt-2 text-lg text-muted-foreground">{impactStatement}</p>
-            <div className="mt-4 inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 w-fit">
-              <DollarSign className="h-5 w-5 text-emerald-400" />
-              <span className="text-2xl font-bold text-emerald-400">${dollarValue.toLocaleString()}</span>
-              <span className="text-sm text-emerald-400/80">in reclaimed capacity</span>
+            <div className="mt-4 flex flex-col items-start gap-1">
+              <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 w-fit">
+                <DollarSign className="h-5 w-5 text-emerald-400" />
+                <span className="text-2xl font-bold text-emerald-400">${dollarValue.toLocaleString()}</span>
+                <span className="text-sm text-emerald-400/80">in reclaimed capacity</span>
+              </div>
+              <span className="text-[10px] text-muted-foreground/60 ml-1">Based on ${hourlyRate}/hr rate</span>
             </div>
           </div>
 
@@ -542,7 +547,7 @@ export function PersonalBenchmarkCard({
 export function HoursSavedCard({
   totalResponses,
   hoursPerResponse = 1.5,
-  hourlyRate = 125,
+  hourlyRate = 100,
 }: {
   totalResponses: number
   hoursPerResponse?: number
