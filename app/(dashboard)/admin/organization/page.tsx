@@ -2061,19 +2061,19 @@ function OrgDetailView({
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Anonymize</span>
-                  <Badge variant={anonymizeByDefault ? "default" : "secondary"} className="text-[10px] h-5">
+                  <Badge variant={anonymizeByDefault ? "default" : "secondary"} className={`text-[10px] h-5 ${anonymizeByDefault ? "org-button-primary" : ""}`}>
                     {anonymizeByDefault ? "On" : "Off"}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Benchmarking</span>
-                  <Badge variant={includeInBenchmarking ? "default" : "secondary"} className="text-[10px] h-5">
+                  <Badge variant={includeInBenchmarking ? "default" : "secondary"} className={`text-[10px] h-5 ${includeInBenchmarking ? "org-button-primary" : ""}`}>
                     {includeInBenchmarking ? "Included" : "Excluded"}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Reminders</span>
-                  <Badge variant={autoReminders ? "default" : "secondary"} className="text-[10px] h-5">
+                  <Badge variant={autoReminders ? "default" : "secondary"} className={`text-[10px] h-5 ${autoReminders ? "org-button-primary" : ""}`}>
                     {autoReminders ? "On" : "Off"}
                   </Badge>
                 </div>
