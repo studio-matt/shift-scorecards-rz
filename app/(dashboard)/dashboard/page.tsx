@@ -108,8 +108,6 @@ import { Loader2 } from "lucide-react"
 export default function DashboardPage() {
   const { isAdmin, isSuperAdmin, isCompanyAdmin, user } = useAuth()
 
-  console.log("[v0] Dashboard mount - isCompanyAdmin:", isCompanyAdmin, "user?.organizationId:", user?.organizationId, "user?.company:", user?.company)
-
   // Admin filter state
   const [selectedOrg, setSelectedOrg] = useState("all")
   const [selectedDept, setSelectedDept] = useState("all")
@@ -239,16 +237,13 @@ export default function DashboardPage() {
 
   // Lock org selection for company admins once user data is available
   useEffect(() => {
-    console.log("[v0] Company admin effect - isCompanyAdmin:", isCompanyAdmin, "orgId:", user?.organizationId, "company:", user?.company, "orgs:", orgs.map(o => ({ id: o.id, name: o.name })))
     if (isCompanyAdmin && selectedOrg === "all") {
       // Try organizationId first, then fall back to finding org by company name
       if (user?.organizationId) {
-        console.log("[v0] Setting selectedOrg to organizationId:", user.organizationId)
         setSelectedOrg(user.organizationId)
       } else if (user?.company && orgs.length > 0) {
         const matchedOrg = orgs.find(o => o.name.toLowerCase() === user.company?.toLowerCase())
         if (matchedOrg) {
-          console.log("[v0] Setting selectedOrg by company name match:", matchedOrg.id, matchedOrg.name)
           setSelectedOrg(matchedOrg.id)
         }
       }
@@ -300,7 +295,6 @@ export default function DashboardPage() {
   }
 
   if (isAdmin) {
-    console.log("[v0] Admin render - selectedOrg:", selectedOrg, "activeOrg:", activeOrg?.name, "user.company:", user?.company, "orgs count:", orgs.length)
     // For company admins, use their locked organization name (try multiple sources)
     const companyAdminOrgName = isCompanyAdmin 
       ? activeOrg?.name ?? orgs.find(o => o.name.toLowerCase() === user?.company?.toLowerCase())?.name ?? user?.company ?? "Your Organization"

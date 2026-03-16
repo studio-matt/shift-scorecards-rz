@@ -95,6 +95,17 @@ const ACCENT_PRESETS = [
   { label: "Slate", value: "#64748b" },
 ]
 
+const BACKGROUND_PRESETS = [
+  { label: "Default Dark", value: "#09090b" },
+  { label: "Charcoal", value: "#18181b" },
+  { label: "Navy", value: "#0c1222" },
+  { label: "Dark Slate", value: "#0f172a" },
+  { label: "Dark Green", value: "#052e16" },
+  { label: "Dark Purple", value: "#1e1b4b" },
+  { label: "Dark Brown", value: "#1c1917" },
+  { label: "Pure Black", value: "#000000" },
+]
+
 const KNOWN_DEPARTMENTS = [
   "Engineering", "Design", "Product", "Marketing", "Sales",
   "Operations", "HR", "Finance", "Customer Success", "IT",
@@ -153,6 +164,7 @@ export default function OrganizationPage() {
           industry: o.industry,
           memberCount: countMap.get(o.id) ?? 0,
           accentColor: o.accentColor,
+          backgroundColor: o.backgroundColor,
           logoUrl: o.logoUrl,
           reportingPreferences: o.reportingPreferences,
         })) as Organization[],
@@ -723,6 +735,7 @@ function OrgDetailView({
 
   // Branding & Settings state
   const [accentColor, setAccentColor] = useState(org.accentColor ?? "#3b82f6")
+  const [backgroundColor, setBackgroundColor] = useState(org.backgroundColor ?? "#09090b")
   const [logoUrl, setLogoUrl] = useState(org.logoUrl ?? "")
   const [logoUploading, setLogoUploading] = useState(false)
   const [anonymizeByDefault, setAnonymizeByDefault] = useState(org.reportingPreferences?.anonymizeByDefault ?? true)
@@ -941,22 +954,23 @@ function OrgDetailView({
 
   async function handleSave() {
     setSaving(true)
-    onUpdate({
-      ...org,
-      name: orgName,
-      website: website || undefined,
-      contactEmail: contactEmail || undefined,
-      industry: industry || undefined,
-      departments,
-      accentColor,
-      logoUrl: logoUrl || undefined,
-      reportingPreferences: {
-        anonymizeByDefault,
-        includeInBenchmarking,
-        scorecardCadence,
-        autoReminders,
-      },
-    })
+  onUpdate({
+    ...org,
+    name: orgName,
+    website: website || undefined,
+    contactEmail: contactEmail || undefined,
+    industry: industry || undefined,
+    departments,
+    accentColor,
+    backgroundColor,
+    logoUrl: logoUrl || undefined,
+    reportingPreferences: {
+      anonymizeByDefault,
+      includeInBenchmarking,
+      scorecardCadence,
+      autoReminders,
+    },
+  })
     setSaving(false)
   }
 
@@ -1282,6 +1296,51 @@ function OrgDetailView({
                       </div>
                       <p className="text-[11px] text-muted-foreground">
                         Used for headers, buttons, and accents in org-specific reports.
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Label>Page Background</Label>
+                      <div className="flex items-center gap-3">
+                        <div className="flex gap-1.5">
+                          {BACKGROUND_PRESETS.map((preset) => (
+                            <button
+                              key={preset.value}
+                              type="button"
+                              onClick={() => setBackgroundColor(preset.value)}
+                              className={`h-7 w-7 rounded-full border-2 transition-all ${
+                                backgroundColor === preset.value
+                                  ? "border-foreground scale-110"
+                                  : "border-transparent hover:scale-105"
+                              }`}
+                              style={{ backgroundColor: preset.value }}
+                              title={preset.label}
+                            />
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="text"
+                            value={backgroundColor}
+                            onChange={(e) => setBackgroundColor(e.target.value)}
+                            className="w-24 font-mono text-xs h-7"
+                            placeholder="#09090b"
+                          />
+                          <label className="relative h-7 w-7 cursor-pointer rounded border border-border overflow-hidden" title="Pick a custom color">
+                            <div
+                              className="absolute inset-0"
+                              style={{ backgroundColor: backgroundColor }}
+                            />
+                            <input
+                              type="color"
+                              value={backgroundColor}
+                              onChange={(e) => setBackgroundColor(e.target.value)}
+                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Sets the page background color for all users in this organization.
                       </p>
                     </div>
                     <div className="flex flex-col gap-2">

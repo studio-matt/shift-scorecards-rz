@@ -301,17 +301,19 @@ export default function ManageUsersPage() {
           </h1>
           <p className="mt-1 text-muted-foreground">
             {isCompanyAdmin
-              ? "Manage team members within your organization"
+              ? "View team members within your organization"
               : "Invite and manage team members for your organization"}
           </p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Invite User
-            </Button>
-          </DialogTrigger>
+        {/* Only super admins can invite users */}
+        {isSuperAdmin && (
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Invite User
+              </Button>
+            </DialogTrigger>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Invite Team Member</DialogTitle>
@@ -468,6 +470,7 @@ export default function ManageUsersPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
       {/* Stats */}
@@ -600,36 +603,43 @@ export default function ManageUsersPage() {
                       {user.department}
                     </Badge>
                   )}
-                  <Select
-                    value={user.role}
-                    onValueChange={(val) => handleRoleChange(user.id, val)}
-                  >
-                    <SelectTrigger className="h-7 w-32 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="user">User</SelectItem>
-                      <SelectItem value="company_admin">Company Admin</SelectItem>
-                      {isSuperAdmin && (
+                  {/* Role dropdown - super admin only */}
+                  {isSuperAdmin ? (
+                    <Select
+                      value={user.role}
+                      onValueChange={(val) => handleRoleChange(user.id, val)}
+                    >
+                      <SelectTrigger className="h-7 w-32 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="user">User</SelectItem>
+                        <SelectItem value="company_admin">Company Admin</SelectItem>
                         <SelectItem value="admin">Super Admin</SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {/* Exclude from reporting toggle */}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center">
-                        <Checkbox
-                          checked={!user.excludeFromReporting}
-                          onCheckedChange={(checked) => handleExcludeToggle(user.id, !checked)}
-                          aria-label={`Include ${user.name} in reports`}
-                        />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs">
-                      {user.excludeFromReporting ? "Excluded from reports. Check to include." : "Included in reports. Uncheck to exclude."}
-                    </TooltipContent>
-                  </Tooltip>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Badge variant="outline" className="text-xs capitalize">
+                      {user.role === "company_admin" ? "Company Admin" : user.role === "admin" ? "Super Admin" : "User"}
+                    </Badge>
+                  )}
+                  {/* Exclude from reporting toggle - super admin only */}
+                  {isSuperAdmin && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center">
+                          <Checkbox
+                            checked={!user.excludeFromReporting}
+                            onCheckedChange={(checked) => handleExcludeToggle(user.id, !checked)}
+                            aria-label={`Include ${user.name} in reports`}
+                          />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        {user.excludeFromReporting ? "Excluded from reports. Check to include." : "Included in reports. Uncheck to exclude."}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                   <span
                     className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${
                       user.status === "accepted"
@@ -639,18 +649,21 @@ export default function ManageUsersPage() {
                   >
                     {user.status}
                   </span>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Link href={`/profile/${user.id}`}>
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                      </Link>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs">
-                      Edit user profile
-                    </TooltipContent>
-                  </Tooltip>
+                  {/* Edit button - super admin only can edit */}
+                  {isSuperAdmin && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Link href={`/profile/${user.id}`}>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        </Link>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        Edit user profile
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                 </div>
               </div>
             ))}
