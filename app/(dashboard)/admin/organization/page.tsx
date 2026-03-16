@@ -596,6 +596,7 @@ export default function OrganizationPage() {
   contactEmail: updated.contactEmail ?? null,
   industry: updated.industry ?? null,
   accentColor: updated.accentColor ?? null,
+  backgroundColor: updated.backgroundColor ?? null,
   logoUrl: updated.logoUrl ?? null,
   reportingPreferences: updated.reportingPreferences ?? null,
   })
@@ -717,7 +718,7 @@ function OrgDetailView({
   scrollToMembers?: boolean
   onScrollToMembersDone?: () => void
   onBack: () => void
-  onUpdate: (updated: Organization) => void
+  onUpdate: (updated: Organization) => Promise<void> | void
   }) {
   const [orgName, setOrgName] = useState(org.name)
   const [website, setWebsite] = useState(org.website ?? "")
@@ -737,6 +738,23 @@ function OrgDetailView({
   const [accentColor, setAccentColor] = useState(org.accentColor ?? "#3b82f6")
   const [backgroundColor, setBackgroundColor] = useState(org.backgroundColor ?? "#09090b")
   const [logoUrl, setLogoUrl] = useState(org.logoUrl ?? "")
+
+  // Live preview of background color - applies to page while editing
+  useEffect(() => {
+    const originalBg = document.body.style.backgroundColor
+    const mainEl = document.querySelector("main")
+    const originalMainBg = mainEl?.style.backgroundColor || ""
+    
+    // Apply preview color
+    document.body.style.backgroundColor = backgroundColor
+    if (mainEl) mainEl.style.backgroundColor = backgroundColor
+    
+    // Restore original on unmount or when component changes
+    return () => {
+      document.body.style.backgroundColor = originalBg
+      if (mainEl) mainEl.style.backgroundColor = originalMainBg
+    }
+  }, [backgroundColor])
   const [logoUploading, setLogoUploading] = useState(false)
   const [anonymizeByDefault, setAnonymizeByDefault] = useState(org.reportingPreferences?.anonymizeByDefault ?? true)
 
@@ -954,24 +972,29 @@ function OrgDetailView({
 
   async function handleSave() {
     setSaving(true)
-  onUpdate({
-    ...org,
-    name: orgName,
-    website: website || undefined,
-    contactEmail: contactEmail || undefined,
-    industry: industry || undefined,
-    departments,
-    accentColor,
-    backgroundColor,
-    logoUrl: logoUrl || undefined,
-    reportingPreferences: {
-      anonymizeByDefault,
-      includeInBenchmarking,
-      scorecardCadence,
-      autoReminders,
-    },
-  })
-    setSaving(false)
+    try {
+      await onUpdate({
+        ...org,
+        name: orgName,
+        website: website || undefined,
+        contactEmail: contactEmail || undefined,
+        industry: industry || undefined,
+        departments,
+        accentColor,
+        backgroundColor,
+        logoUrl: logoUrl || undefined,
+        reportingPreferences: {
+          anonymizeByDefault,
+          includeInBenchmarking,
+          scorecardCadence,
+          autoReminders,
+        },
+      })
+    } catch (err) {
+      console.error("Failed to save organization settings:", err)
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleSaveMember() {
