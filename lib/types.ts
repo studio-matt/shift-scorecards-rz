@@ -1,4 +1,4 @@
-export type UserRole = "admin" | "user"
+export type UserRole = "admin" | "company_admin" | "user"
 
 export interface User {
   id: string
@@ -28,6 +28,9 @@ export interface Organization {
   memberCount?: number
   // Branding
   accentColor?: string
+  backgroundColor?: string
+  buttonColor?: string
+  buttonFontColor?: string
   logoUrl?: string
   // Reporting preferences
   reportingPreferences?: {
@@ -119,4 +122,16 @@ export interface QuestionResult {
   question: string
   score: number
   change: number
+}
+
+export interface GlobalSettings {
+  id: string // "global"
+  branding: {
+    accentColor: string
+    backgroundColor: string
+    buttonColor: string
+    buttonFontColor: string
+  }
+  updatedAt: string
+  updatedBy: string
 }

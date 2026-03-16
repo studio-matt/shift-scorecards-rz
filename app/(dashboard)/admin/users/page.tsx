@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -30,7 +31,7 @@ import {
 } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Plus, Mail, CheckCircle2, Clock, Search, Upload, FileDown, Loader2, EyeOff, Users, ShieldAlert } from "lucide-react"
+import { Plus, Mail, CheckCircle2, Clock, Search, Upload, FileDown, Loader2, EyeOff, Users, ShieldAlert, Pencil } from "lucide-react"
 import {
   getDocuments,
   getOrganizations,
@@ -38,6 +39,7 @@ import {
   updateDocument,
   COLLECTIONS,
 } from "@/lib/firestore"
+import { useAuth } from "@/lib/auth-context"
 import type { Organization } from "@/lib/types"
 
 /** Proper-case a name: "kristen abbott" → "Kristen Abbott" */
@@ -62,6 +64,8 @@ interface InvitedUser {
 }
 
 export default function ManageUsersPage() {
+  const { user: authUser, isCompanyAdmin, isSuperAdmin } = useAuth()
+  
   // ── Single invite fields ──
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState("user")
@@ -94,33 +98,43 @@ export default function ManageUsersPage() {
         memberCount: 0,
       })) as Organization[]
       const orgMap = new Map(orgList.map((o) => [o.id, o.name]))
-      setOrgs(orgList)
-      setUsers(
-        userDocs.map((d) => {
-          const data = d as Record<string, unknown>
-          const firstName = (data.firstName as string) ?? ""
-          const lastName = (data.lastName as string) ?? ""
-          const orgId = (data.organizationId as string) ?? ""
-          const rawName = `${firstName} ${lastName}`.trim()
-          return {
-            id: d.id,
-            name: rawName ? properCase(rawName) : ((data.email as string) ?? "Unknown"),
-            email: (data.email as string) ?? "",
-            department: (data.department as string) ?? "",
-            role: (data.role as string) ?? "user",
-            orgName: orgMap.get(orgId) ?? "",
-            orgId,
-            excludeFromReporting: (data.excludeFromReporting as boolean) ?? false,
-            status: data.authId ? ("accepted" as const) : ("pending" as const),
-          }
-        }),
-      )
+      // For company admins, only show their organization
+      const filteredOrgList = isCompanyAdmin && authUser?.organizationId
+        ? orgList.filter(o => o.id === authUser.organizationId)
+        : orgList
+      setOrgs(filteredOrgList)
+      
+      // Filter users by organization for company admins
+      const mappedUsers = userDocs.map((d) => {
+        const data = d as Record<string, unknown>
+        const firstName = (data.firstName as string) ?? ""
+        const lastName = (data.lastName as string) ?? ""
+        const orgId = (data.organizationId as string) ?? ""
+        const rawName = `${firstName} ${lastName}`.trim()
+        return {
+          id: d.id,
+          name: rawName ? properCase(rawName) : ((data.email as string) ?? "Unknown"),
+          email: (data.email as string) ?? "",
+          department: (data.department as string) ?? "",
+          role: (data.role as string) ?? "user",
+          orgName: orgMap.get(orgId) ?? "",
+          orgId,
+          excludeFromReporting: (data.excludeFromReporting as boolean) ?? false,
+          status: data.authId ? ("accepted" as const) : ("pending" as const),
+        }
+      })
+      
+      // Company admins only see users from their organization
+      const filteredUsers = isCompanyAdmin && authUser?.organizationId
+        ? mappedUsers.filter(u => u.orgId === authUser.organizationId)
+        : mappedUsers
+      setUsers(filteredUsers)
     } catch (err) {
       console.error("Failed to fetch data:", err)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [isCompanyAdmin, authUser?.organizationId])
 
   useEffect(() => {
     fetchData()
@@ -282,18 +296,24 @@ export default function ManageUsersPage() {
     <div>
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Manage Users</h1>
+          <h1 className="text-2xl font-bold text-foreground">
+            {isCompanyAdmin ? "CEO View: Manage Users" : "Manage Users"}
+          </h1>
           <p className="mt-1 text-muted-foreground">
-            Invite and manage team members for your organization
+            {isCompanyAdmin
+              ? "View team members within your organization"
+              : "Invite and manage team members for your organization"}
           </p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Invite User
-            </Button>
-          </DialogTrigger>
+        {/* Only super admins can invite users */}
+        {isSuperAdmin && (
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Invite User
+              </Button>
+            </DialogTrigger>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Invite Team Member</DialogTitle>
@@ -327,7 +347,10 @@ export default function ManageUsersPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="company_admin">Company Admin (CEO View)</SelectItem>
+                    {isSuperAdmin && (
+                      <SelectItem value="admin">Super Admin</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
                 {csvFile && (
@@ -447,6 +470,7 @@ export default function ManageUsersPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
       {/* Stats */}
@@ -579,33 +603,43 @@ export default function ManageUsersPage() {
                       {user.department}
                     </Badge>
                   )}
-                  <Select
-                    value={user.role}
-                    onValueChange={(val) => handleRoleChange(user.id, val)}
-                  >
-                    <SelectTrigger className="h-7 w-24 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="user">User</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {/* Exclude from reporting toggle */}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center">
-                        <Checkbox
-                          checked={!user.excludeFromReporting}
-                          onCheckedChange={(checked) => handleExcludeToggle(user.id, !checked)}
-                          aria-label={`Include ${user.name} in reports`}
-                        />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs">
-                      {user.excludeFromReporting ? "Excluded from reports. Check to include." : "Included in reports. Uncheck to exclude."}
-                    </TooltipContent>
-                  </Tooltip>
+                  {/* Role dropdown - super admin only */}
+                  {isSuperAdmin ? (
+                    <Select
+                      value={user.role}
+                      onValueChange={(val) => handleRoleChange(user.id, val)}
+                    >
+                      <SelectTrigger className="h-7 w-32 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="user">User</SelectItem>
+                        <SelectItem value="company_admin">Company Admin</SelectItem>
+                        <SelectItem value="admin">Super Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Badge variant="outline" className="text-xs capitalize">
+                      {user.role === "company_admin" ? "Company Admin" : user.role === "admin" ? "Super Admin" : "User"}
+                    </Badge>
+                  )}
+                  {/* Exclude from reporting toggle - super admin only */}
+                  {isSuperAdmin && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center">
+                          <Checkbox
+                            checked={!user.excludeFromReporting}
+                            onCheckedChange={(checked) => handleExcludeToggle(user.id, !checked)}
+                            aria-label={`Include ${user.name} in reports`}
+                          />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        {user.excludeFromReporting ? "Excluded from reports. Check to include." : "Included in reports. Uncheck to exclude."}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                   <span
                     className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${
                       user.status === "accepted"
@@ -615,6 +649,21 @@ export default function ManageUsersPage() {
                   >
                     {user.status}
                   </span>
+                  {/* Edit button - super admin only can edit */}
+                  {isSuperAdmin && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Link href={`/profile/${user.id}`}>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        </Link>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        Edit user profile
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                 </div>
               </div>
             ))}

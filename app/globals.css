@@ -122,4 +122,36 @@
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* Organization-specific branding color overrides */
+  :root {
+    --org-button-color: #3b82f6;
+    --org-button-font-color: #ffffff;
+    --org-accent-color: #3b82f6;
+  }
+}
+
+/* Apply org branding colors globally */
+@layer components {
+  /* Button color and font color */
+  .org-button-primary {
+    background-color: var(--org-button-color) !important;
+    color: var(--org-button-font-color) !important;
+  }
+  .org-button-primary:hover {
+    background-color: color-mix(in srgb, var(--org-button-color) 90%, black) !important;
+  }
+  
+  /* Toggle/Switch color - matches button color */
+  [data-state="checked"].org-toggle {
+    background-color: var(--org-button-color) !important;
+  }
+  
+  /* Badge/Pill colors - matches button color */
+  .org-badge-primary {
+    background-color: color-mix(in srgb, var(--org-button-color) 15%, transparent) !important;
+    color: var(--org-button-color) !important;
+  }
+  
+  /* Accent color for charts (via inline styles in components) */
 }

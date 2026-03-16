@@ -17,6 +17,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts"
+import { useBackground } from "@/lib/background-context"
 import type { WeeklyTrend } from "@/lib/types"
 
 interface WeeklyTrendChartProps {
@@ -26,6 +27,7 @@ interface WeeklyTrendChartProps {
 }
 
 export function WeeklyTrendChart({ data, targetScore = 7.0, fieldAverage = 6.2 }: WeeklyTrendChartProps) {
+  const { accentColor } = useBackground()
   if (data.length === 0) {
     return (
       <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
@@ -132,13 +134,13 @@ export function WeeklyTrendChart({ data, targetScore = 7.0, fieldAverage = 6.2 }
                 dot={false}
                 name="Field Average"
               />
-              {/* Actual score line */}
+              {/* Actual score line - uses org accent color */}
               <Line
                 type="monotone"
                 dataKey="score"
-                stroke="hsl(var(--primary))"
+                stroke={accentColor}
                 strokeWidth={2.5}
-                dot={{ fill: "hsl(var(--primary))", r: 4 }}
+                dot={{ fill: accentColor, r: 4 }}
                 activeDot={{ r: 6 }}
                 name="Your Score"
               />

@@ -4,6 +4,7 @@ import { useState, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { useBackground } from "@/lib/background-context"
 import {
   Bar,
   BarChart,
@@ -271,6 +272,7 @@ function generateVarianceInsight(d: DepartmentVariance, settings?: VarianceFeedb
 }
 
 export function DepartmentVarianceCard({ data, feedbackSettings }: { data: DepartmentVariance[]; feedbackSettings?: VarianceFeedbackSettings }) {
+  const { accentColor } = useBackground()
   const chartData = data.map((d) => ({ name: d.department, avg: d.avgScore, stdDev: d.stdDev }))
   const highThreshold = feedbackSettings?.highVarianceThreshold ?? 1.5
   return (
@@ -290,7 +292,7 @@ export function DepartmentVarianceCard({ data, feedbackSettings }: { data: Depar
                 <XAxis type="number" domain={[0, 3]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
                 <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
                 <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-                <Bar dataKey="stdDev" name="Std Dev" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} barSize={16} />
+                <Bar dataKey="stdDev" name="Std Dev" fill={accentColor} radius={[0, 4, 4, 0]} barSize={16} />
               </BarChart>
             </ResponsiveContainer>
             <div className="mt-3 flex flex-col gap-1.5">
@@ -377,20 +379,6 @@ export function QuestionCorrelationsCard({ data }: { data: QuestionCorrelation[]
 }
 
 // ── Dept over time ────────────────────────────────────────────────────
-const DEPT_COLORS = [
-  "hsl(var(--primary))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
-  "#8884d8",
-  "#82ca9d",
-  "#ffc658",
-  "#e45858",
-  "#36a2eb",
-  "#ff9f40",
-]
-
 function getSmartDeptSelection(data: DeptOverTime[]) {
   if (data.length === 0) return { top3: [] as string[], bottom3: [] as string[], all: [] as string[] }
   const departments = Object.keys(data[0] || {}).filter((k) => k !== "week")
@@ -405,8 +393,24 @@ function getSmartDeptSelection(data: DeptOverTime[]) {
 }
 
 export function DeptOverTimeChart({ data }: { data: DeptOverTime[] }) {
+  const { accentColor } = useBackground()
   const [showAll, setShowAll] = useState(false)
   const [toggledDepts, setToggledDepts] = useState<Set<string> | null>(null)
+
+  // Use accent color as the first color in the palette
+  const deptColors = [
+    accentColor,
+    "hsl(var(--chart-2))",
+    "hsl(var(--chart-3))",
+    "hsl(var(--chart-4))",
+    "hsl(var(--chart-5))",
+    "#8884d8",
+    "#82ca9d",
+    "#ffc658",
+    "#e45858",
+    "#36a2eb",
+    "#ff9f40",
+  ]
 
   if (data.length === 0) return null
   const departments = Object.keys(data[0] || {}).filter((k) => k !== "week")
@@ -490,7 +494,7 @@ export function DeptOverTimeChart({ data }: { data: DeptOverTime[] }) {
                 <span
                   className="h-2 w-2 rounded-full shrink-0"
                   style={{
-                    backgroundColor: isActive ? DEPT_COLORS[i % DEPT_COLORS.length] : "hsl(var(--muted-foreground))",
+                    backgroundColor: isActive ? deptColors[i % deptColors.length] : "hsl(var(--muted-foreground))",
                     opacity: isActive ? 1 : 0.3,
                   }}
                 />
@@ -518,7 +522,7 @@ export function DeptOverTimeChart({ data }: { data: DeptOverTime[] }) {
                 key={dept}
                 type="monotone"
                 dataKey={dept}
-                stroke={DEPT_COLORS[i % DEPT_COLORS.length]}
+                stroke={deptColors[i % deptColors.length]}
                 strokeWidth={activeDepts.includes(dept) ? 2.5 : 0}
                 dot={activeDepts.includes(dept) ? { r: 3 } : false}
                 hide={!activeDepts.includes(dept)}
@@ -674,7 +678,7 @@ export function FieldReportCard({ data }: { data: FieldReportData | null }) {
   )
 }
 
-// ── Alerts ─────────────────────────────────────────────────────────────
+// ── Alerts ──────────────────────────────────────────────────────��──────
 export function AlertsCard({ data }: { data: ThresholdAlert[] }) {
   return (
     <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">

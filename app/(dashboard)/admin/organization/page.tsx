@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useBackground } from "@/lib/background-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -95,6 +96,35 @@ const ACCENT_PRESETS = [
   { label: "Slate", value: "#64748b" },
 ]
 
+const BACKGROUND_PRESETS = [
+  { label: "Default Dark", value: "#09090b" },
+  { label: "Charcoal", value: "#18181b" },
+  { label: "Navy", value: "#0c1222" },
+  { label: "Dark Slate", value: "#0f172a" },
+  { label: "Dark Green", value: "#052e16" },
+  { label: "Dark Purple", value: "#1e1b4b" },
+  { label: "Dark Brown", value: "#1c1917" },
+  { label: "Pure Black", value: "#000000" },
+]
+
+const BUTTON_COLOR_PRESETS = [
+  { label: "Blue", value: "#3b82f6" },
+  { label: "Indigo", value: "#6366f1" },
+  { label: "Teal", value: "#14b8a6" },
+  { label: "Green", value: "#22c55e" },
+  { label: "Amber", value: "#f59e0b" },
+  { label: "Red", value: "#ef4444" },
+  { label: "Rose", value: "#f43f5e" },
+  { label: "Purple", value: "#a855f7" },
+]
+
+const BUTTON_FONT_COLOR_PRESETS = [
+  { label: "White", value: "#ffffff" },
+  { label: "Black", value: "#000000" },
+  { label: "Light Gray", value: "#f4f4f5" },
+  { label: "Dark Gray", value: "#18181b" },
+]
+
 const KNOWN_DEPARTMENTS = [
   "Engineering", "Design", "Product", "Marketing", "Sales",
   "Operations", "HR", "Finance", "Customer Success", "IT",
@@ -153,6 +183,9 @@ export default function OrganizationPage() {
           industry: o.industry,
           memberCount: countMap.get(o.id) ?? 0,
           accentColor: o.accentColor,
+          backgroundColor: o.backgroundColor,
+          buttonColor: o.buttonColor,
+          buttonFontColor: o.buttonFontColor,
           logoUrl: o.logoUrl,
           reportingPreferences: o.reportingPreferences,
         })) as Organization[],
@@ -584,6 +617,9 @@ export default function OrganizationPage() {
   contactEmail: updated.contactEmail ?? null,
   industry: updated.industry ?? null,
   accentColor: updated.accentColor ?? null,
+  backgroundColor: updated.backgroundColor ?? null,
+  buttonColor: updated.buttonColor ?? null,
+  buttonFontColor: updated.buttonFontColor ?? null,
   logoUrl: updated.logoUrl ?? null,
   reportingPreferences: updated.reportingPreferences ?? null,
   })
@@ -705,7 +741,7 @@ function OrgDetailView({
   scrollToMembers?: boolean
   onScrollToMembersDone?: () => void
   onBack: () => void
-  onUpdate: (updated: Organization) => void
+  onUpdate: (updated: Organization) => Promise<void> | void
   }) {
   const [orgName, setOrgName] = useState(org.name)
   const [website, setWebsite] = useState(org.website ?? "")
@@ -723,8 +759,29 @@ function OrgDetailView({
 
   // Branding & Settings state
   const [accentColor, setAccentColor] = useState(org.accentColor ?? "#3b82f6")
+  const [backgroundColor, setBackgroundColor] = useState(org.backgroundColor ?? "#09090b")
+  const [buttonColor, setButtonColor] = useState(org.buttonColor ?? "#3b82f6")
+  const [buttonFontColor, setButtonFontColor] = useState(org.buttonFontColor ?? "#ffffff")
   const [logoUrl, setLogoUrl] = useState(org.logoUrl ?? "")
   const [logoUploading, setLogoUploading] = useState(false)
+
+  // Import and use branding context for live preview
+  const { setPreviewColor, setPreviewButtonColor, setPreviewButtonFontColor, setPreviewAccentColor } = useBackground()
+
+  // Live preview of branding colors via context
+  useEffect(() => {
+    setPreviewColor(backgroundColor)
+    setPreviewButtonColor(buttonColor)
+    setPreviewButtonFontColor(buttonFontColor)
+    setPreviewAccentColor(accentColor)
+    // Clear preview when leaving the page
+    return () => {
+      setPreviewColor(null)
+      setPreviewButtonColor(null)
+      setPreviewButtonFontColor(null)
+      setPreviewAccentColor(null)
+    }
+  }, [backgroundColor, buttonColor, buttonFontColor, accentColor, setPreviewColor, setPreviewButtonColor, setPreviewButtonFontColor, setPreviewAccentColor])
   const [anonymizeByDefault, setAnonymizeByDefault] = useState(org.reportingPreferences?.anonymizeByDefault ?? true)
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -752,7 +809,7 @@ function OrgDetailView({
   const [includeInBenchmarking, setIncludeInBenchmarking] = useState(org.reportingPreferences?.includeInBenchmarking ?? true)
   const [scorecardCadence, setScorecardCadence] = useState<"weekly" | "biweekly" | "monthly">(org.reportingPreferences?.scorecardCadence ?? "monthly")
   const [autoReminders, setAutoReminders] = useState(org.reportingPreferences?.autoReminders ?? true)
-  const [settingsExpanded, setSettingsExpanded] = useState(false)
+  const [settingsExpanded, setSettingsExpanded] = useState(true)
 
   // Invite members state
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
@@ -941,23 +998,31 @@ function OrgDetailView({
 
   async function handleSave() {
     setSaving(true)
-    onUpdate({
-      ...org,
-      name: orgName,
-      website: website || undefined,
-      contactEmail: contactEmail || undefined,
-      industry: industry || undefined,
-      departments,
-      accentColor,
-      logoUrl: logoUrl || undefined,
-      reportingPreferences: {
-        anonymizeByDefault,
-        includeInBenchmarking,
-        scorecardCadence,
-        autoReminders,
-      },
-    })
-    setSaving(false)
+    try {
+      await onUpdate({
+        ...org,
+        name: orgName,
+        website: website || undefined,
+        contactEmail: contactEmail || undefined,
+        industry: industry || undefined,
+        departments,
+        accentColor,
+        backgroundColor,
+        buttonColor,
+        buttonFontColor,
+        logoUrl: logoUrl || undefined,
+        reportingPreferences: {
+          anonymizeByDefault,
+          includeInBenchmarking,
+          scorecardCadence,
+          autoReminders,
+        },
+      })
+    } catch (err) {
+      console.error("Failed to save organization settings:", err)
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleSaveMember() {
@@ -1282,6 +1347,141 @@ function OrgDetailView({
                       </div>
                       <p className="text-[11px] text-muted-foreground">
                         Used for headers, buttons, and accents in org-specific reports.
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Label>Page Background</Label>
+                      <div className="flex items-center gap-3">
+                        <div className="flex gap-1.5">
+                          {BACKGROUND_PRESETS.map((preset) => (
+                            <button
+                              key={preset.value}
+                              type="button"
+                              onClick={() => setBackgroundColor(preset.value)}
+                              className={`h-7 w-7 rounded-full border-2 transition-all ${
+                                backgroundColor === preset.value
+                                  ? "border-foreground scale-110"
+                                  : "border-transparent hover:scale-105"
+                              }`}
+                              style={{ backgroundColor: preset.value }}
+                              title={preset.label}
+                            />
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="text"
+                            value={backgroundColor}
+                            onChange={(e) => setBackgroundColor(e.target.value)}
+                            className="w-24 font-mono text-xs h-7"
+                            placeholder="#09090b"
+                          />
+                          <label className="relative h-7 w-7 cursor-pointer rounded border border-border overflow-hidden" title="Pick a custom color">
+                            <div
+                              className="absolute inset-0"
+                              style={{ backgroundColor: backgroundColor }}
+                            />
+                            <input
+                              type="color"
+                              value={backgroundColor}
+                              onChange={(e) => setBackgroundColor(e.target.value)}
+                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Sets the page background color for all users in this organization.
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Label>Button Color</Label>
+                      <div className="flex items-center gap-3">
+                        <div className="flex gap-1.5">
+                          {BUTTON_COLOR_PRESETS.map((preset) => (
+                            <button
+                              key={preset.value}
+                              type="button"
+                              onClick={() => setButtonColor(preset.value)}
+                              className={`h-7 w-7 rounded-full border-2 transition-all ${
+                                buttonColor === preset.value
+                                  ? "border-foreground scale-110"
+                                  : "border-transparent hover:scale-105"
+                              }`}
+                              style={{ backgroundColor: preset.value }}
+                              title={preset.label}
+                            />
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="text"
+                            value={buttonColor}
+                            onChange={(e) => setButtonColor(e.target.value)}
+                            className="w-24 font-mono text-xs h-7"
+                            placeholder="#3b82f6"
+                          />
+                          <label className="relative h-7 w-7 cursor-pointer rounded border border-border overflow-hidden" title="Pick a custom color">
+                            <div
+                              className="absolute inset-0"
+                              style={{ backgroundColor: buttonColor }}
+                            />
+                            <input
+                              type="color"
+                              value={buttonColor}
+                              onChange={(e) => setButtonColor(e.target.value)}
+                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Sets the primary button color for all users in this organization.
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Label>Button Font Color</Label>
+                      <div className="flex items-center gap-3">
+                        <div className="flex gap-1.5">
+                          {BUTTON_FONT_COLOR_PRESETS.map((preset) => (
+                            <button
+                              key={preset.value}
+                              type="button"
+                              onClick={() => setButtonFontColor(preset.value)}
+                              className={`h-7 w-7 rounded-full border-2 transition-all ${
+                                buttonFontColor === preset.value
+                                  ? "border-foreground scale-110"
+                                  : "border-transparent hover:scale-105"
+                              }`}
+                              style={{ backgroundColor: preset.value }}
+                              title={preset.label}
+                            />
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="text"
+                            value={buttonFontColor}
+                            onChange={(e) => setButtonFontColor(e.target.value)}
+                            className="w-24 font-mono text-xs h-7"
+                            placeholder="#ffffff"
+                          />
+                          <label className="relative h-7 w-7 cursor-pointer rounded border border-border overflow-hidden" title="Pick a custom color">
+                            <div
+                              className="absolute inset-0"
+                              style={{ backgroundColor: buttonFontColor }}
+                            />
+                            <input
+                              type="color"
+                              value={buttonFontColor}
+                              onChange={(e) => setButtonFontColor(e.target.value)}
+                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Sets the text color on buttons for all users in this organization.
                       </p>
                     </div>
                     <div className="flex flex-col gap-2">
@@ -1861,19 +2061,19 @@ function OrgDetailView({
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Anonymize</span>
-                  <Badge variant={anonymizeByDefault ? "default" : "secondary"} className="text-[10px] h-5">
+                  <Badge variant={anonymizeByDefault ? "default" : "secondary"} className={`text-[10px] h-5 ${anonymizeByDefault ? "org-button-primary" : ""}`}>
                     {anonymizeByDefault ? "On" : "Off"}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Benchmarking</span>
-                  <Badge variant={includeInBenchmarking ? "default" : "secondary"} className="text-[10px] h-5">
+                  <Badge variant={includeInBenchmarking ? "default" : "secondary"} className={`text-[10px] h-5 ${includeInBenchmarking ? "org-button-primary" : ""}`}>
                     {includeInBenchmarking ? "Included" : "Excluded"}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Reminders</span>
-                  <Badge variant={autoReminders ? "default" : "secondary"} className="text-[10px] h-5">
+                  <Badge variant={autoReminders ? "default" : "secondary"} className={`text-[10px] h-5 ${autoReminders ? "org-button-primary" : ""}`}>
                     {autoReminders ? "On" : "Off"}
                   </Badge>
                 </div>

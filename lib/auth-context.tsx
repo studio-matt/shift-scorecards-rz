@@ -33,7 +33,9 @@ interface AuthContextType {
   user: User | null
   firebaseUser: FirebaseUser | null
   isAuthenticated: boolean
-  isAdmin: boolean
+  isAdmin: boolean // true for both admin and company_admin (has admin-level access)
+  isSuperAdmin: boolean // true only for global admin
+  isCompanyAdmin: boolean // true only for company_admin (org-scoped)
   login: (email: string, password: string) => Promise<void>
   signup: (email: string, password: string, name: string, company?: string, department?: string) => Promise<void>
   loginWithProvider: (provider: "google" | "microsoft") => Promise<void>
@@ -154,13 +156,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user],
   )
 
+  // Role-based access flags
+  const isSuperAdmin = user?.role === "admin"
+  const isCompanyAdmin = user?.role === "company_admin"
+  const isAdmin = isSuperAdmin || isCompanyAdmin // Either role gets admin-level access
+
   return (
     <AuthContext.Provider
       value={{
         user,
         firebaseUser,
         isAuthenticated: !!user,
-        isAdmin: user?.role === "admin",
+        isAdmin,
+        isSuperAdmin,
+        isCompanyAdmin,
         login,
         signup,
         loginWithProvider,

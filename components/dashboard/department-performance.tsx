@@ -16,6 +16,7 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from "recharts"
+import { useBackground } from "@/lib/background-context"
 import type { DepartmentPerformance } from "@/lib/types"
 
 interface DepartmentPerformanceChartProps {
@@ -24,6 +25,7 @@ interface DepartmentPerformanceChartProps {
 }
 
 export function DepartmentPerformanceChart({ data, fieldAverage = 6.2 }: DepartmentPerformanceChartProps) {
+  const { accentColor } = useBackground()
   if (data.length === 0) {
     return (
       <Card>
@@ -93,7 +95,7 @@ export function DepartmentPerformanceChart({ data, fieldAverage = 6.2 }: Departm
               />
               <Bar
                 dataKey="avgScore"
-                fill="hsl(var(--primary))"
+                fill={accentColor}
                 radius={[4, 4, 0, 0]}
                 name="Avg Score"
               />

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { useAuth } from "@/lib/auth-context"
+import { useBackground } from "@/lib/background-context"
 import {
   Select,
   SelectContent,
@@ -106,9 +107,8 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2 } from "lucide-react"
 
 export default function DashboardPage() {
-  const { isAdmin, user } = useAuth()
-  
-  console.log("[v0] Dashboard - isAdmin:", isAdmin, "user:", user?.email, "role:", user?.role)
+  const { isAdmin, isSuperAdmin, isCompanyAdmin, user } = useAuth()
+  const { setSelectedOrgColor, setSelectedOrgButtonColor, setSelectedOrgButtonFontColor, setSelectedOrgAccentColor } = useBackground()
 
   // Admin filter state
   const [selectedOrg, setSelectedOrg] = useState("all")
@@ -237,8 +237,47 @@ export default function DashboardPage() {
     loadData()
   }, [loadData])
 
+  // Lock org selection for company admins once user data is available
+  useEffect(() => {
+    if (isCompanyAdmin && selectedOrg === "all") {
+      // Try organizationId first, then fall back to finding org by company name
+      if (user?.organizationId) {
+        setSelectedOrg(user.organizationId)
+      } else if (user?.company && orgs.length > 0) {
+        const matchedOrg = orgs.find(o => o.name.toLowerCase() === user.company?.toLowerCase())
+        if (matchedOrg) {
+          setSelectedOrg(matchedOrg.id)
+        }
+      }
+    }
+  }, [isCompanyAdmin, user?.organizationId, user?.company, selectedOrg, orgs])
+
   const activeOrg = orgs.find((o) => o.id === selectedOrg)
 
+  // Update branding colors when super admin switches companies
+  useEffect(() => {
+    if (isSuperAdmin && selectedOrg !== "all") {
+      setSelectedOrgColor(activeOrg?.backgroundColor ?? null)
+      setSelectedOrgButtonColor(activeOrg?.buttonColor ?? null)
+      setSelectedOrgButtonFontColor(activeOrg?.buttonFontColor ?? null)
+      setSelectedOrgAccentColor(activeOrg?.accentColor ?? null)
+    } else if (isSuperAdmin && selectedOrg === "all") {
+      setSelectedOrgColor(null) // Reset to user's org or default
+      setSelectedOrgButtonColor(null)
+      setSelectedOrgButtonFontColor(null)
+      setSelectedOrgAccentColor(null)
+    }
+    // Cleanup when leaving dashboard
+    return () => {
+      if (isSuperAdmin) {
+        setSelectedOrgColor(null)
+        setSelectedOrgButtonColor(null)
+        setSelectedOrgButtonFontColor(null)
+        setSelectedOrgAccentColor(null)
+      }
+    }
+  }, [isSuperAdmin, activeOrg?.backgroundColor, activeOrg?.buttonColor, activeOrg?.buttonFontColor, activeOrg?.accentColor, selectedOrg, setSelectedOrgColor, setSelectedOrgButtonColor, setSelectedOrgButtonFontColor, setSelectedOrgAccentColor])
+  
   const departments = useMemo(() => {
     if (selectedOrg === "all") {
       const allDepts = new Set<string>()
@@ -282,6 +321,11 @@ export default function DashboardPage() {
   }
 
   if (isAdmin) {
+    // For company admins, use their locked organization name (try multiple sources)
+    const companyAdminOrgName = isCompanyAdmin 
+      ? activeOrg?.name ?? orgs.find(o => o.name.toLowerCase() === user?.company?.toLowerCase())?.name ?? user?.company ?? "Your Organization"
+      : null
+
     return (
       <div>
         {/* Admin header with filters */}
@@ -289,35 +333,44 @@ export default function DashboardPage() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h1 className="text-2xl font-bold text-foreground">
-                Admin Dashboard
+                {isCompanyAdmin ? "CEO View: Dashboard" : "Admin Dashboard"}
               </h1>
               <p className="mt-1 text-muted-foreground">
-                Global performance metrics and analytics across all companies
+                {isCompanyAdmin 
+                  ? `Performance metrics and analytics for ${companyAdminOrgName}`
+                  : "Global performance metrics and analytics across all companies"}
               </p>
             </div>
           </div>
 
           {/* Filter bar */}
           <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-3">
-            <Select
-              value={selectedOrg}
-              onValueChange={(val) => {
-                setSelectedOrg(val)
-                setSelectedDept("all")
-              }}
-            >
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="All Companies" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Companies</SelectItem>
-                {orgs.map((org) => (
-                  <SelectItem key={org.id} value={org.id}>
-                    {org.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Company admin sees locked org, super admin can select */}
+            {isCompanyAdmin ? (
+              <div className="flex h-10 w-48 items-center rounded-md border border-input bg-muted px-3 text-sm">
+                {companyAdminOrgName}
+              </div>
+            ) : (
+              <Select
+                value={selectedOrg}
+                onValueChange={(val) => {
+                  setSelectedOrg(val)
+                  setSelectedDept("all")
+                }}
+              >
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="All Companies" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Companies</SelectItem>
+                  {orgs.map((org) => (
+                    <SelectItem key={org.id} value={org.id}>
+                      {org.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
 
             <Select
               value={selectedDept}

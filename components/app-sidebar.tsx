@@ -60,11 +60,12 @@ const adminNavItems = [
   { href: "/admin/users", label: "Manage Users", icon: Users },
   { href: "/admin/prompts", label: "AI Prompts", icon: Sparkles },
   { href: "/admin/organization", label: "Organization", icon: Building2 },
+  { href: "/admin/settings", label: "Admin Settings", icon: Shield, superAdminOnly: true },
 ]
 
 export function AppSidebar() {
   const pathname = usePathname()
-  const { user, isAdmin, logout, switchRole } = useAuth()
+  const { user, isAdmin, isSuperAdmin, isCompanyAdmin, logout, switchRole } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const isScorecardActive = pathname.startsWith("/scorecard")
   const [scorecardsOpen, setScorecardsOpen] = useState(isScorecardActive)
@@ -132,7 +133,7 @@ export function AppSidebar() {
           )}
         </div>
 
-        {/* Expand button when collapsed - shows in header when hovering to lock open */}
+        {/* Keep open button when hovering over collapsed sidebar */}
         {isCollapsed && isHovering && (
           <button
             type="button"
@@ -140,10 +141,10 @@ export function AppSidebar() {
               setIsCollapsed(false)
               setIsHovering(false)
             }}
-            className="absolute right-2 top-4 z-20 flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-            aria-label="Lock sidebar open"
+            className="absolute right-2 top-4 z-20 flex h-6 items-center justify-center gap-1 rounded-md bg-sidebar-accent/80 px-2 text-[11px] font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            aria-label="Keep sidebar open"
           >
-            <ChevronsRight className="h-4 w-4" />
+            Keep open
           </button>
         )}
 
@@ -254,11 +255,13 @@ export function AppSidebar() {
               <div className="my-4 border-t border-sidebar-border/50" />
               {isExpanded && (
                 <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
-                  Admin
+                  {isCompanyAdmin ? "CEO View" : "Admin"}
                 </p>
               )}
               <ul className="flex flex-col gap-1">
-                {adminNavItems.map((item) => {
+                {adminNavItems
+                  .filter((item) => !item.superAdminOnly || isSuperAdmin)
+                  .map((item) => {
                   const isActive =
                     pathname === item.href ||
                     pathname.startsWith(`${item.href}/`)
@@ -318,14 +321,17 @@ export function AppSidebar() {
                 <p className="text-xs text-muted-foreground">{user.email}</p>
                 <Badge
                   variant="secondary"
-                  className="mt-1 text-xs capitalize"
+                  className="mt-1 text-xs"
                 >
-                  {user.role}
+                  {user.role === "admin" ? "Super Admin" : user.role === "company_admin" ? "Company Admin" : "User"}
                 </Badge>
               </div>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => switchRole("admin")}>
-                Switch to Admin
+                Switch to Super Admin
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => switchRole("company_admin")}>
+                Switch to Company Admin (CEO View)
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => switchRole("user")}>
                 Switch to User
