@@ -60,6 +60,7 @@ const adminNavItems = [
   { href: "/admin/users", label: "Manage Users", icon: Users },
   { href: "/admin/prompts", label: "AI Prompts", icon: Sparkles },
   { href: "/admin/organization", label: "Organization", icon: Building2 },
+  { href: "/admin/settings", label: "Admin Settings", icon: Shield, superAdminOnly: true },
 ]
 
 export function AppSidebar() {
@@ -258,7 +259,9 @@ export function AppSidebar() {
                 </p>
               )}
               <ul className="flex flex-col gap-1">
-                {adminNavItems.map((item) => {
+                {adminNavItems
+                  .filter((item) => !item.superAdminOnly || isSuperAdmin)
+                  .map((item) => {
                   const isActive =
                     pathname === item.href ||
                     pathname.startsWith(`${item.href}/`)

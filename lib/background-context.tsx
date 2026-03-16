@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react"
 import { useAuth } from "@/lib/auth-context"
 import { getDocument, COLLECTIONS } from "@/lib/firestore"
-import type { Organization } from "@/lib/types"
+import type { Organization, GlobalSettings } from "@/lib/types"
 
 interface BrandingContextType {
   backgroundColor: string
@@ -38,6 +38,10 @@ export function useBackground() {
 
 export function BackgroundProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
+  // Global defaults (from admin settings)
+  const [globalBgColor, setGlobalBgColor] = useState<string | null>(null)
+  const [globalButtonColor, setGlobalButtonColor] = useState<string | null>(null)
+  const [globalAccentColor, setGlobalAccentColor] = useState<string | null>(null)
   // Background color state
   const [userOrgColor, setUserOrgColor] = useState<string | null>(null)
   const [previewColor, setPreviewColor] = useState<string | null>(null)
@@ -50,6 +54,23 @@ export function BackgroundProvider({ children }: { children: React.ReactNode }) 
   const [userOrgAccentColor, setUserOrgAccentColor] = useState<string | null>(null)
   const [previewAccentColor, setPreviewAccentColor] = useState<string | null>(null)
   const [selectedOrgAccentColor, setSelectedOrgAccentColor] = useState<string | null>(null)
+
+  // Fetch global defaults on mount
+  useEffect(() => {
+    async function fetchGlobalDefaults() {
+      try {
+        const settings = await getDocument<GlobalSettings>(COLLECTIONS.SETTINGS, "global")
+        if (settings?.branding) {
+          setGlobalBgColor(settings.branding.backgroundColor)
+          setGlobalButtonColor(settings.branding.buttonColor)
+          setGlobalAccentColor(settings.branding.accentColor)
+        }
+      } catch (err) {
+        console.error("Failed to fetch global branding defaults:", err)
+      }
+    }
+    fetchGlobalDefaults()
+  }, [])
 
   // Fetch user's organization branding colors
   useEffect(() => {
@@ -75,10 +96,10 @@ export function BackgroundProvider({ children }: { children: React.ReactNode }) 
     fetchUserOrgColors()
   }, [user?.organizationId])
 
-  // Priority: preview > selectedOrg > userOrg > default
-  const backgroundColor = previewColor ?? selectedOrgColor ?? userOrgColor ?? "#09090b"
-  const buttonColor = previewButtonColor ?? selectedOrgButtonColor ?? userOrgButtonColor ?? DEFAULT_BUTTON_COLOR
-  const accentColor = previewAccentColor ?? selectedOrgAccentColor ?? userOrgAccentColor ?? DEFAULT_ACCENT_COLOR
+  // Priority: preview > selectedOrg > userOrg > globalDefault > hardcoded default
+  const backgroundColor = previewColor ?? selectedOrgColor ?? userOrgColor ?? globalBgColor ?? "#09090b"
+  const buttonColor = previewButtonColor ?? selectedOrgButtonColor ?? userOrgButtonColor ?? globalButtonColor ?? DEFAULT_BUTTON_COLOR
+  const accentColor = previewAccentColor ?? selectedOrgAccentColor ?? userOrgAccentColor ?? globalAccentColor ?? DEFAULT_ACCENT_COLOR
 
   // Apply branding colors as CSS variables for global access
   useEffect(() => {

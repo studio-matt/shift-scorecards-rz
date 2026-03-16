@@ -122,3 +122,14 @@ export interface QuestionResult {
   score: number
   change: number
 }
+
+export interface GlobalSettings {
+  id: string // "global"
+  branding: {
+    accentColor: string
+    backgroundColor: string
+    buttonColor: string
+  }
+  updatedAt: string
+  updatedBy: string
+}
