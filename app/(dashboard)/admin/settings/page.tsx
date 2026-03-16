@@ -20,7 +20,7 @@ import {
 import {
   getDocument,
   setDocument,
-  getAllDocuments,
+  getDocuments,
   updateDocument,
   COLLECTIONS,
 } from "@/lib/firestore"
@@ -105,7 +105,7 @@ export default function AdminSettingsPage() {
         setButtonColor(settings.branding.buttonColor)
       }
       // Get org count for reset dialog
-      const orgs = await getAllDocuments<Organization>(COLLECTIONS.ORGANIZATIONS)
+      const orgs = await getDocuments<Organization>(COLLECTIONS.ORGANIZATIONS)
       setOrgCount(orgs.length)
     } catch (err) {
       console.error("Failed to load global settings:", err)
@@ -156,7 +156,7 @@ export default function AdminSettingsPage() {
   async function handleResetAll() {
     setResetting(true)
     try {
-      const orgs = await getAllDocuments<Organization>(COLLECTIONS.ORGANIZATIONS)
+      const orgs = await getDocuments<Organization>(COLLECTIONS.ORGANIZATIONS)
       
       // Update all organizations with global branding (but NOT logoUrl)
       await Promise.all(
