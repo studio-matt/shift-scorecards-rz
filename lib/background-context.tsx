@@ -20,9 +20,9 @@ interface BrandingContextType {
   setSelectedOrgAccentColor: (color: string | null) => void
 }
 
-const DEFAULT_BUTTON_COLOR = "#3b82f6" // Blue
-const DEFAULT_BUTTON_FONT_COLOR = "#ffffff" // White
-const DEFAULT_ACCENT_COLOR = "#3b82f6" // Blue
+const DEFAULT_BUTTON_COLOR = "#3b82f6" // Blue default
+const DEFAULT_BUTTON_FONT_COLOR = "#ffffff" // White default
+const DEFAULT_ACCENT_COLOR = "#3b82f6" // Blue default
 
 const BrandingContext = createContext<BrandingContextType>({
   backgroundColor: "#09090b",
