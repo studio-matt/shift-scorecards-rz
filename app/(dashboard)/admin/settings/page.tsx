@@ -157,6 +157,8 @@ export default function AdminSettingsPage() {
     setResetting(true)
     try {
       const orgs = await getDocuments<Organization>(COLLECTIONS.ORGANIZATIONS)
+      console.log("[v0] Resetting branding for", orgs.length, "organizations")
+      console.log("[v0] New values - accent:", accentColor, "bg:", backgroundColor, "button:", buttonColor)
       
       // Update all organizations with global branding (but NOT logoUrl)
       await Promise.all(
@@ -170,7 +172,10 @@ export default function AdminSettingsPage() {
         )
       )
       
+      console.log("[v0] Reset complete, reloading page...")
       setShowResetDialog(false)
+      // Reload the page to refresh branding context with new values
+      window.location.reload()
     } catch (err) {
       console.error("Failed to reset organization branding:", err)
     } finally {
