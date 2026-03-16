@@ -416,19 +416,21 @@ export default function AdminSettingsPage() {
               <AlertTriangle className="h-5 w-5" />
               Reset All Organization Branding
             </DialogTitle>
-            <DialogDescription className="space-y-3 pt-2">
-              <p>
-                You are about to reset branding settings for <span className="font-semibold text-foreground">{orgCount} organizations</span>.
-              </p>
-              <p>
-                This will overwrite all custom accent colors, page backgrounds, and button colors with the global defaults you have configured.
-              </p>
-              <p className="font-semibold text-destructive">
-                This action is irreversible.
-              </p>
-              <p className="text-muted-foreground">
-                Note: Organization logos will not be affected by this reset.
-              </p>
+            <DialogDescription asChild>
+              <div className="space-y-3 pt-2 text-sm text-muted-foreground">
+                <p>
+                  You are about to reset branding settings for <span className="font-semibold text-foreground">{orgCount} organizations</span>.
+                </p>
+                <p>
+                  This will overwrite all custom accent colors, page backgrounds, and button colors with the global defaults you have configured.
+                </p>
+                <p className="font-semibold text-destructive">
+                  This action is irreversible.
+                </p>
+                <p className="text-muted-foreground">
+                  Note: Organization logos will not be affected by this reset.
+                </p>
+              </div>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
