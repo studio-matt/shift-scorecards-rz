@@ -92,9 +92,9 @@ export function MostImprovedCard({ showCompany = false, data }: MostImprovedProp
               No results match the current filters
             </p>
           )}
-          {data.map((person) => (
+          {data.map((person, idx) => (
             <div
-              key={person.userId}
+              key={`${person.userId}-${idx}`}
               className="flex items-center justify-between rounded-lg border border-border p-3"
             >
               <div>
