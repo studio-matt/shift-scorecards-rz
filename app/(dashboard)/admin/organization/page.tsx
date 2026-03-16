@@ -765,7 +765,7 @@ function OrgDetailView({
   const [includeInBenchmarking, setIncludeInBenchmarking] = useState(org.reportingPreferences?.includeInBenchmarking ?? true)
   const [scorecardCadence, setScorecardCadence] = useState<"weekly" | "biweekly" | "monthly">(org.reportingPreferences?.scorecardCadence ?? "monthly")
   const [autoReminders, setAutoReminders] = useState(org.reportingPreferences?.autoReminders ?? true)
-  const [settingsExpanded, setSettingsExpanded] = useState(false)
+  const [settingsExpanded, setSettingsExpanded] = useState(true)
 
   // Invite members state
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
