@@ -29,7 +29,7 @@ import {
 import { StatCards, AdminStatCards } from "@/components/dashboard/stat-cards"
 import { TopPerformers, MVPSpotlight, HighFiveSection } from "@/components/dashboard/top-performers"
 import { DepartmentPerformanceChart } from "@/components/dashboard/department-performance"
-import { WeeklyTrendChart } from "@/components/dashboard/weekly-trend"
+import { WeeklyTrendChart, HoursTrendChart } from "@/components/dashboard/weekly-trend"
 import { QuestionResults } from "@/components/dashboard/question-results"
 import {
   GoalsCard,
@@ -55,7 +55,8 @@ import {
   HighFivesReceivedCard,
   AIActionPlanCard,
   PromptPacksCard,
-  AIJourneyHero,
+  ProductivityHero,
+  type ProductivityHeroData,
   PercentileDistribution,
 } from "@/components/dashboard/user-analytics"
 import { getOrganizations, getDocument, COLLECTIONS } from "@/lib/firestore"
@@ -81,6 +82,11 @@ import {
   computePersonalStreak,
   computePersonalTrend,
   computePersonalBenchmark,
+  findTimeSavingQuestionIds,
+  findConfidenceQuestionId,
+  computeUserHoursMetrics,
+  computeOrgHoursMetrics,
+  computeWeeklyHoursTrend,
   type AdminStats,
   type MostImprovedEntry,
   type RecentScorecard,
@@ -96,6 +102,9 @@ import {
   type UserPersonalStreak,
   type PersonalTrendPoint,
   type PersonalVsBenchmark,
+  type UserHoursMetrics,
+  type OrgHoursMetrics,
+  type WeeklyHoursTrend,
 } from "@/lib/dashboard-data"
 import type {
   Organization,
@@ -138,6 +147,9 @@ export default function DashboardPage() {
   const [personalStreak, setPersonalStreak] = useState<UserPersonalStreak | null>(null)
   const [personalTrend, setPersonalTrend] = useState<PersonalTrendPoint[]>([])
   const [personalBenchmark, setPersonalBenchmark] = useState<PersonalVsBenchmark | null>(null)
+  const [userHoursMetrics, setUserHoursMetrics] = useState<UserHoursMetrics | null>(null)
+  const [orgHoursMetrics, setOrgHoursMetrics] = useState<OrgHoursMetrics | null>(null)
+  const [weeklyHoursTrend, setWeeklyHoursTrend] = useState<WeeklyHoursTrend[]>([])
   const [targets, setTargets] = useState({
     avgScore: 7.0,
     completionRate: 85,
@@ -221,11 +233,31 @@ export default function DashboardPage() {
       setFieldReport(report)
       setAlerts(computeAlerts(responses, dept, vel))
 
+      // Compute hours metrics for admin view (all responses or filtered by org)
+      const [timeSavingIds, confidenceId] = await Promise.all([
+        findTimeSavingQuestionIds(),
+        findConfidenceQuestionId(),
+      ])
+      
+      // For admin: compute org hours based on current filter
+      const selectedOrgDoc = orgDocs.find((o) => o.id === selectedOrg) as unknown as Organization | undefined
+      const adminHourlyRate = selectedOrgDoc?.hourlyRate ?? 100
+      const adminOrgHours = computeOrgHoursMetrics(responses, timeSavingIds, confidenceId, adminHourlyRate)
+      setOrgHoursMetrics(adminOrgHours)
+      
+      // Compute weekly hours trend for chart
+      const hoursTrend = computeWeeklyHoursTrend(responses, timeSavingIds)
+      setWeeklyHoursTrend(hoursTrend)
+
       // User-specific metrics (uses full response set for anonymized comparisons)
       if (user?.id) {
         setPersonalStreak(computePersonalStreak(responses, user.id))
         setPersonalTrend(computePersonalTrend(responses, user.id))
         setPersonalBenchmark(computePersonalBenchmark(responses, user.id))
+        
+        // Compute user-specific hours metrics (reuse timeSavingIds/confidenceId from above)
+        const userHours = computeUserHoursMetrics(responses, user.id, timeSavingIds, confidenceId)
+        setUserHoursMetrics(userHours)
       }
     } catch (err) {
       console.error("Failed to load dashboard data:", err)
@@ -412,10 +444,10 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex flex-col gap-6">
-          {adminStats && <AdminStatCards data={adminStats} targets={targets} />}
+          {adminStats && <AdminStatCards data={adminStats} targets={targets} hoursMetrics={orgHoursMetrics} />}
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <WeeklyTrendChart data={weeklyTrend} targetScore={targets.avgScore} fieldAverage={targets.fieldAverage} />
+            <HoursTrendChart data={weeklyHoursTrend} />
             <DepartmentPerformanceChart data={deptPerformance} fieldAverage={targets.fieldAverage} />
           </div>
 
@@ -518,16 +550,30 @@ export default function DashboardPage() {
   )
   const highFiveCount = myPerformer ? Math.min(myPerformer.streak, 8) : 0
 
-  // Calculate hours saved and starting score for hero
-  const totalResponses = personalStreak?.totalResponses ?? 0
-  const hoursSaved = Math.round(totalResponses * 1.5 * 10) / 10
   // Use org's hourly rate if available, otherwise default to $100/hr
   const userOrg = orgs.find((o) => o.id === user?.organizationId)
-  const effectiveHourlyRate = activeOrg?.hourlyRate ?? userOrg?.hourlyRate ?? 100
-  const dollarValue = Math.round(hoursSaved * effectiveHourlyRate)
-  const startScore = personalTrend.length > 0 ? personalTrend[0].myScore : (personalBenchmark?.myAvg ?? 0)
-  const currentScore = personalBenchmark?.myAvg ?? 0
-  const percentile = personalBenchmark?.percentile ?? 50
+  const effectiveHourlyRate = activeOrg?.hourlyRate ?? (userOrg as Organization | undefined)?.hourlyRate ?? 100
+  
+  // Build ProductivityHero data from hours metrics
+  const totalResponses = personalStreak?.totalResponses ?? 0
+  const productivityHeroData: ProductivityHeroData | null = userHoursMetrics ? {
+    productivityPercent: userHoursMetrics.productivityPercent,
+    lastMonthProductivity: userHoursMetrics.lastMonthHours > 0 
+      ? ((userHoursMetrics.lastMonthHours / 4) / 40) * 100  // Weekly avg from last month
+      : 0,
+    monthlyHours: userHoursMetrics.thisMonthHours,
+    lastMonthHours: userHoursMetrics.lastMonthHours,
+    monthlyValue: Math.round(userHoursMetrics.thisMonthHours * effectiveHourlyRate),
+    lastMonthValue: Math.round(userHoursMetrics.lastMonthHours * effectiveHourlyRate),
+    hourlyRate: effectiveHourlyRate,
+    fteEquivalent: userHoursMetrics.thisMonthHours / 160,
+    annualRunRate: userHoursMetrics.thisMonthHours * 12,
+    annualValue: Math.round(userHoursMetrics.thisMonthHours * effectiveHourlyRate * 12),
+    confidenceScore: userHoursMetrics.confidenceScore,
+    lastMonthConfidence: userHoursMetrics.lastMonthConfidence,
+    thisMonthResponses: userHoursMetrics.thisMonthResponses,
+    lastMonthResponses: userHoursMetrics.lastMonthResponses,
+  } : null
 
   // Calculate months active for tier system
   const monthsActive = Math.ceil((personalStreak?.totalWeeks ?? 0) / 4)
@@ -563,18 +609,9 @@ export default function DashboardPage() {
       </div>
 
       <div className="flex flex-col gap-6">
-        {/* ── Your AI Journey Hero ──────────────────────── */}
-        {totalResponses > 0 ? (
-          <AIJourneyHero
-            hoursSaved={hoursSaved}
-            dollarValue={dollarValue}
-            startScore={startScore}
-            currentScore={currentScore}
-            fieldAverage={targets.fieldAverage}
-            percentile={percentile}
-            cohortCount={10}
-            hourlyRate={effectiveHourlyRate}
-          />
+        {/* ── Productivity Hero (Time-Saved Metrics) ──────────────────────── */}
+        {productivityHeroData && totalResponses > 0 ? (
+          <ProductivityHero data={productivityHeroData} />
         ) : (
           <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-card/80 to-card/80 backdrop-blur-sm">
             <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
@@ -607,22 +644,22 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <SkillTierCard
             monthsActive={monthsActive}
-            avgScore={currentScore}
+            avgScore={userHoursMetrics?.confidenceScore ?? 0}
             totalResponses={totalResponses}
           />
           <CohortNudgeCard
             cohort={user?.organizationId ? "your organization" : "your cohort"}
-            hoursSaved={Math.round(hoursSaved * 0.7)}
-            pointsImproved={Math.abs(currentScore - startScore)}
-            scorecardsCompleted={totalResponses + 15}
+            hoursSaved={Math.round((orgHoursMetrics?.monthlyHours ?? 0) * 0.7)}
+            pointsImproved={Math.abs(userHoursMetrics?.confidenceChange ?? 0)}
+            scorecardsCompleted={(orgHoursMetrics?.thisMonthResponses ?? 0) + 15}
           />
         </div>
 
-        {/* ── Stat Cards (contextual) ───────────────────── */}
+        {/* ── Stat Cards (contextual - hours-focused) ───────────────────── */}
         <StatCards
-          avgScore={personalBenchmark?.myAvg ?? 0}
+          avgScore={userHoursMetrics?.confidenceScore ?? 0}
           fieldAverage={targets.fieldAverage}
-          lastMonthAvg={personalBenchmark ? personalBenchmark.myAvg - (personalBenchmark.myVelocity * 4) : 0}
+          lastMonthAvg={userHoursMetrics?.lastMonthConfidence ?? 0}
           myGoal={8.0}
           streak={personalStreak?.currentStreak ?? 0}
           maxStreak={personalStreak?.maxStreak ?? 0}

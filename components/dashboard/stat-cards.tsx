@@ -1,8 +1,8 @@
 "use client"
 
 import { Card, CardContent } from "@/components/ui/card"
-import { TrendingUp, Flame, CheckCircle2, Target, Building2, Users, BarChart3, Send } from "lucide-react"
-import type { AdminStats } from "@/lib/dashboard-data"
+import { TrendingUp, Flame, CheckCircle2, Target, Building2, Users, Clock, Send, DollarSign, Gauge } from "lucide-react"
+import type { AdminStats, OrgHoursMetrics } from "@/lib/dashboard-data"
 
 interface UserStatCardsProps {
   avgScore: number
@@ -152,6 +152,7 @@ interface DashboardTargets {
 interface AdminStatCardsProps {
   data: AdminStats
   targets?: DashboardTargets
+  hoursMetrics?: OrgHoursMetrics | null
 }
 
 const adminGradients = [
@@ -170,8 +171,7 @@ const adminIconColors = [
   { bg: "bg-primary/15 ring-1 ring-primary/20", text: "text-primary" },
 ]
 
-export function AdminStatCards({ data: s, targets }: AdminStatCardsProps) {
-  const tAvgScore = targets?.avgScore ?? 7.0
+export function AdminStatCards({ data: s, targets, hoursMetrics }: AdminStatCardsProps) {
   const tCompletionRate = targets?.completionRate ?? 85
   const tActiveUsers = targets?.activeUsers ?? 100
   const tScorecardsSent = targets?.scorecardsSent ?? 50
@@ -183,19 +183,61 @@ export function AdminStatCards({ data: s, targets }: AdminStatCardsProps) {
     return { text: `${Math.abs(diff).toFixed(unit === "%" ? 0 : 1)}${unit} below target (${target}${unit})`, positive: false }
   }
 
-  const scoreVs = vsTarget(s.avgScore, tAvgScore)
   const completionVs = vsTarget(s.completionRate, tCompletionRate, "%")
   const usersVs = vsTarget(s.activeUsers, tActiveUsers)
   const sentVs = vsTarget(s.scorecardsSent, tScorecardsSent)
 
-  const adminCards = [
+  // Format helpers
+  const formatHours = (hrs: number) => hrs >= 1000 ? `${(hrs / 1000).toFixed(1)}K` : hrs.toFixed(0)
+  const formatValue = (val: number) => {
+    if (val >= 1000000) return `$${(val / 1000000).toFixed(1)}M`
+    if (val >= 1000) return `$${Math.round(val / 1000)}K`
+    return `$${Math.round(val).toLocaleString()}`
+  }
+
+  // Hours-based cards when metrics available
+  const adminCards = hoursMetrics ? [
     {
-      label: "Avg Score (Global)",
-      value: s.avgScore.toFixed(1),
-      change: scoreVs.text,
-      icon: BarChart3,
-      positive: scoreVs.positive,
+      label: "Hours Saved / Month",
+      value: formatHours(hoursMetrics.monthlyHours),
+      change: hoursMetrics.monthOverMonthChange >= 0 
+        ? `+${formatHours(hoursMetrics.monthOverMonthChange)} from last month`
+        : `${formatHours(hoursMetrics.monthOverMonthChange)} from last month`,
+      icon: Clock,
+      positive: hoursMetrics.monthOverMonthChange >= 0,
     },
+    {
+      label: "Avg Productivity",
+      value: `${hoursMetrics.avgProductivityPercent.toFixed(1)}%`,
+      change: `${hoursMetrics.fteEquivalent.toFixed(1)} FTE equivalent`,
+      icon: Gauge,
+      positive: true,
+    },
+    {
+      label: "Value Created",
+      value: formatValue(hoursMetrics.monthlyValue),
+      change: `${formatValue(hoursMetrics.annualValue)} annual run rate`,
+      icon: DollarSign,
+      positive: true,
+    },
+    {
+      label: "Avg Confidence",
+      value: hoursMetrics.avgConfidence.toFixed(1),
+      change: hoursMetrics.confidenceChange >= 0 
+        ? `+${hoursMetrics.confidenceChange.toFixed(1)} from last month`
+        : `${hoursMetrics.confidenceChange.toFixed(1)} from last month`,
+      icon: Target,
+      positive: hoursMetrics.confidenceChange >= 0,
+    },
+    {
+      label: "Active Participants",
+      value: hoursMetrics.activeParticipants.toLocaleString(),
+      change: `${hoursMetrics.thisMonthResponses} scorecards this month`,
+      icon: Users,
+      positive: true,
+    },
+  ] : [
+    // Fallback to traditional metrics if hours not available
     {
       label: "Completion Rate",
       value: `${s.completionRate}%`,
