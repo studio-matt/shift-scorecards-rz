@@ -108,7 +108,7 @@ import { Loader2 } from "lucide-react"
 
 export default function DashboardPage() {
   const { isAdmin, isSuperAdmin, isCompanyAdmin, user } = useAuth()
-  const { setSelectedOrgColor, setSelectedOrgButtonColor } = useBackground()
+  const { setSelectedOrgColor, setSelectedOrgButtonColor, setSelectedOrgAccentColor } = useBackground()
 
   // Admin filter state
   const [selectedOrg, setSelectedOrg] = useState("all")
@@ -259,18 +259,21 @@ export default function DashboardPage() {
     if (isSuperAdmin && selectedOrg !== "all") {
       setSelectedOrgColor(activeOrg?.backgroundColor ?? null)
       setSelectedOrgButtonColor(activeOrg?.buttonColor ?? null)
+      setSelectedOrgAccentColor(activeOrg?.accentColor ?? null)
     } else if (isSuperAdmin && selectedOrg === "all") {
       setSelectedOrgColor(null) // Reset to user's org or default
       setSelectedOrgButtonColor(null)
+      setSelectedOrgAccentColor(null)
     }
     // Cleanup when leaving dashboard
     return () => {
       if (isSuperAdmin) {
         setSelectedOrgColor(null)
         setSelectedOrgButtonColor(null)
+        setSelectedOrgAccentColor(null)
       }
     }
-  }, [isSuperAdmin, activeOrg?.backgroundColor, activeOrg?.buttonColor, selectedOrg, setSelectedOrgColor, setSelectedOrgButtonColor])
+  }, [isSuperAdmin, activeOrg?.backgroundColor, activeOrg?.buttonColor, activeOrg?.accentColor, selectedOrg, setSelectedOrgColor, setSelectedOrgButtonColor, setSelectedOrgAccentColor])
   
   const departments = useMemo(() => {
     if (selectedOrg === "all") {

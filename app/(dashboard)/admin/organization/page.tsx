@@ -756,18 +756,20 @@ function OrgDetailView({
   const [logoUploading, setLogoUploading] = useState(false)
 
   // Import and use branding context for live preview
-  const { setPreviewColor, setPreviewButtonColor } = useBackground()
+  const { setPreviewColor, setPreviewButtonColor, setPreviewAccentColor } = useBackground()
 
   // Live preview of branding colors via context
   useEffect(() => {
     setPreviewColor(backgroundColor)
     setPreviewButtonColor(buttonColor)
+    setPreviewAccentColor(accentColor)
     // Clear preview when leaving the page
     return () => {
       setPreviewColor(null)
       setPreviewButtonColor(null)
+      setPreviewAccentColor(null)
     }
-  }, [backgroundColor, buttonColor, setPreviewColor, setPreviewButtonColor])
+  }, [backgroundColor, buttonColor, accentColor, setPreviewColor, setPreviewButtonColor, setPreviewAccentColor])
   const [anonymizeByDefault, setAnonymizeByDefault] = useState(org.reportingPreferences?.anonymizeByDefault ?? true)
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
