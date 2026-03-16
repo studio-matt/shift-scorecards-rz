@@ -60,12 +60,20 @@ const BUTTON_COLOR_PRESETS = [
   { label: "Purple", value: "#a855f7" },
 ]
 
+const BUTTON_FONT_COLOR_PRESETS = [
+  { label: "White", value: "#ffffff" },
+  { label: "Black", value: "#000000" },
+  { label: "Light Gray", value: "#f4f4f5" },
+  { label: "Dark Gray", value: "#18181b" },
+]
+
 const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   id: "global",
   branding: {
     accentColor: "#3b82f6",
     backgroundColor: "#09090b",
     buttonColor: "#3b82f6",
+    buttonFontColor: "#ffffff",
   },
   updatedAt: new Date().toISOString(),
   updatedBy: "",
@@ -74,7 +82,7 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
 export default function AdminSettingsPage() {
   const { isSuperAdmin, user } = useAuth()
   const router = useRouter()
-  const { setPreviewColor, setPreviewButtonColor, setPreviewAccentColor } = useBackground()
+  const { setPreviewColor, setPreviewButtonColor, setPreviewButtonFontColor, setPreviewAccentColor } = useBackground()
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -86,6 +94,7 @@ export default function AdminSettingsPage() {
   const [accentColor, setAccentColor] = useState("#3b82f6")
   const [backgroundColor, setBackgroundColor] = useState("#09090b")
   const [buttonColor, setButtonColor] = useState("#3b82f6")
+  const [buttonFontColor, setButtonFontColor] = useState("#ffffff")
 
   // Redirect non-super-admins
   useEffect(() => {
@@ -103,6 +112,7 @@ export default function AdminSettingsPage() {
         setAccentColor(settings.branding.accentColor)
         setBackgroundColor(settings.branding.backgroundColor)
         setButtonColor(settings.branding.buttonColor)
+        setButtonFontColor(settings.branding.buttonFontColor ?? "#ffffff")
       }
       // Get org count for reset dialog
       const orgs = await getDocuments<Organization>(COLLECTIONS.ORGANIZATIONS)
@@ -122,13 +132,15 @@ export default function AdminSettingsPage() {
   useEffect(() => {
     setPreviewColor(backgroundColor)
     setPreviewButtonColor(buttonColor)
+    setPreviewButtonFontColor(buttonFontColor)
     setPreviewAccentColor(accentColor)
     return () => {
       setPreviewColor(null)
       setPreviewButtonColor(null)
+      setPreviewButtonFontColor(null)
       setPreviewAccentColor(null)
     }
-  }, [backgroundColor, buttonColor, accentColor, setPreviewColor, setPreviewButtonColor, setPreviewAccentColor])
+  }, [backgroundColor, buttonColor, buttonFontColor, accentColor, setPreviewColor, setPreviewButtonColor, setPreviewButtonFontColor, setPreviewAccentColor])
 
   // Save global settings
   async function handleSave() {
@@ -140,6 +152,7 @@ export default function AdminSettingsPage() {
           accentColor,
           backgroundColor,
           buttonColor,
+          buttonFontColor,
         },
         updatedAt: new Date().toISOString(),
         updatedBy: user?.id ?? "",
@@ -158,7 +171,7 @@ export default function AdminSettingsPage() {
     try {
       const orgs = await getDocuments<Organization>(COLLECTIONS.ORGANIZATIONS)
       console.log("[v0] Resetting branding for", orgs.length, "organizations")
-      console.log("[v0] New values - accent:", accentColor, "bg:", backgroundColor, "button:", buttonColor)
+      console.log("[v0] New values - accent:", accentColor, "bg:", backgroundColor, "button:", buttonColor, "buttonFont:", buttonFontColor)
       
       // Update all organizations with global branding (but NOT logoUrl)
       await Promise.all(
@@ -167,6 +180,7 @@ export default function AdminSettingsPage() {
             accentColor,
             backgroundColor,
             buttonColor,
+            buttonFontColor,
             // Note: logoUrl is NOT changed
           })
         )
@@ -344,13 +358,55 @@ export default function AdminSettingsPage() {
             </div>
           </div>
 
+          {/* Button Font Color */}
+          <div className="flex flex-col gap-2">
+            <Label>Button Font Color</Label>
+            <p className="text-xs text-muted-foreground">Text color on buttons throughout the app</p>
+            <div className="flex items-center gap-3">
+              <div className="flex gap-1.5">
+                {BUTTON_FONT_COLOR_PRESETS.map((preset) => (
+                  <button
+                    key={preset.value}
+                    type="button"
+                    onClick={() => setButtonFontColor(preset.value)}
+                    className={`h-7 w-7 rounded-full border-2 transition-all ${
+                      buttonFontColor === preset.value
+                        ? "border-foreground scale-110"
+                        : "border-transparent hover:scale-105"
+                    }`}
+                    style={{ backgroundColor: preset.value }}
+                    title={preset.label}
+                  />
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="text"
+                  value={buttonFontColor}
+                  onChange={(e) => setButtonFontColor(e.target.value)}
+                  className="w-24 font-mono text-xs h-7"
+                  placeholder="#ffffff"
+                />
+                <label className="relative h-7 w-7 cursor-pointer rounded border border-border overflow-hidden" title="Pick a custom color">
+                  <div className="absolute inset-0" style={{ backgroundColor: buttonFontColor }} />
+                  <input
+                    type="color"
+                    value={buttonFontColor}
+                    onChange={(e) => setButtonFontColor(e.target.value)}
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+
           {/* Preview */}
           <div className="rounded-lg border border-border p-4">
             <p className="text-xs font-medium text-muted-foreground mb-3">Live Preview</p>
             <div className="flex items-center gap-4">
               <div className="rounded-lg p-4" style={{ backgroundColor }}>
                 <div className="flex items-center gap-2">
-                  <Button size="sm" style={{ backgroundColor: buttonColor }}>
+                  <Button size="sm" style={{ backgroundColor: buttonColor, color: buttonFontColor }}>
                     Sample Button
                   </Button>
                   <Badge style={{ backgroundColor: `${accentColor}20`, color: accentColor }}>
@@ -421,23 +477,24 @@ export default function AdminSettingsPage() {
               <AlertTriangle className="h-5 w-5" />
               Reset All Organization Branding
             </DialogTitle>
-            <DialogDescription asChild>
-              <div className="space-y-3 pt-2 text-sm text-muted-foreground">
-                <p>
-                  You are about to reset branding settings for <span className="font-semibold text-foreground">{orgCount} organizations</span>.
-                </p>
-                <p>
-                  This will overwrite all custom accent colors, page backgrounds, and button colors with the global defaults you have configured.
-                </p>
-                <p className="font-semibold text-destructive">
-                  This action is irreversible.
-                </p>
-                <p className="text-muted-foreground">
-                  Note: Organization logos will not be affected by this reset.
-                </p>
-              </div>
+            <DialogDescription className="sr-only">
+              Confirm resetting all organization branding to global defaults
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              You are about to reset branding settings for <span className="font-semibold text-foreground">{orgCount} organizations</span>.
+            </p>
+            <p>
+              This will overwrite all custom accent colors, page backgrounds, and button colors with the global defaults you have configured.
+            </p>
+            <p className="font-semibold text-destructive">
+              This action is irreversible.
+            </p>
+            <p className="text-muted-foreground">
+              Note: Organization logos will not be affected by this reset.
+            </p>
+          </div>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setShowResetDialog(false)} disabled={resetting}>
               Cancel

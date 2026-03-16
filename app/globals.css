@@ -126,15 +126,17 @@
   /* Organization-specific branding color overrides */
   :root {
     --org-button-color: #3b82f6;
+    --org-button-font-color: #ffffff;
     --org-accent-color: #3b82f6;
   }
 }
 
 /* Apply org branding colors globally */
 @layer components {
-  /* Button color */
+  /* Button color and font color */
   .org-button-primary {
     background-color: var(--org-button-color) !important;
+    color: var(--org-button-font-color) !important;
   }
   .org-button-primary:hover {
     background-color: color-mix(in srgb, var(--org-button-color) 90%, black) !important;

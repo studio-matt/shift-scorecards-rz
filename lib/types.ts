@@ -30,6 +30,7 @@ export interface Organization {
   accentColor?: string
   backgroundColor?: string
   buttonColor?: string
+  buttonFontColor?: string
   logoUrl?: string
   // Reporting preferences
   reportingPreferences?: {
@@ -129,6 +130,7 @@ export interface GlobalSettings {
     accentColor: string
     backgroundColor: string
     buttonColor: string
+    buttonFontColor: string
   }
   updatedAt: string
   updatedBy: string

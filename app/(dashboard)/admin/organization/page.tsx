@@ -118,6 +118,13 @@ const BUTTON_COLOR_PRESETS = [
   { label: "Purple", value: "#a855f7" },
 ]
 
+const BUTTON_FONT_COLOR_PRESETS = [
+  { label: "White", value: "#ffffff" },
+  { label: "Black", value: "#000000" },
+  { label: "Light Gray", value: "#f4f4f5" },
+  { label: "Dark Gray", value: "#18181b" },
+]
+
 const KNOWN_DEPARTMENTS = [
   "Engineering", "Design", "Product", "Marketing", "Sales",
   "Operations", "HR", "Finance", "Customer Success", "IT",
@@ -178,6 +185,7 @@ export default function OrganizationPage() {
           accentColor: o.accentColor,
           backgroundColor: o.backgroundColor,
           buttonColor: o.buttonColor,
+          buttonFontColor: o.buttonFontColor,
           logoUrl: o.logoUrl,
           reportingPreferences: o.reportingPreferences,
         })) as Organization[],
@@ -611,6 +619,7 @@ export default function OrganizationPage() {
   accentColor: updated.accentColor ?? null,
   backgroundColor: updated.backgroundColor ?? null,
   buttonColor: updated.buttonColor ?? null,
+  buttonFontColor: updated.buttonFontColor ?? null,
   logoUrl: updated.logoUrl ?? null,
   reportingPreferences: updated.reportingPreferences ?? null,
   })
@@ -752,24 +761,27 @@ function OrgDetailView({
   const [accentColor, setAccentColor] = useState(org.accentColor ?? "#3b82f6")
   const [backgroundColor, setBackgroundColor] = useState(org.backgroundColor ?? "#09090b")
   const [buttonColor, setButtonColor] = useState(org.buttonColor ?? "#3b82f6")
+  const [buttonFontColor, setButtonFontColor] = useState(org.buttonFontColor ?? "#ffffff")
   const [logoUrl, setLogoUrl] = useState(org.logoUrl ?? "")
   const [logoUploading, setLogoUploading] = useState(false)
 
   // Import and use branding context for live preview
-  const { setPreviewColor, setPreviewButtonColor, setPreviewAccentColor } = useBackground()
+  const { setPreviewColor, setPreviewButtonColor, setPreviewButtonFontColor, setPreviewAccentColor } = useBackground()
 
   // Live preview of branding colors via context
   useEffect(() => {
     setPreviewColor(backgroundColor)
     setPreviewButtonColor(buttonColor)
+    setPreviewButtonFontColor(buttonFontColor)
     setPreviewAccentColor(accentColor)
     // Clear preview when leaving the page
     return () => {
       setPreviewColor(null)
       setPreviewButtonColor(null)
+      setPreviewButtonFontColor(null)
       setPreviewAccentColor(null)
     }
-  }, [backgroundColor, buttonColor, accentColor, setPreviewColor, setPreviewButtonColor, setPreviewAccentColor])
+  }, [backgroundColor, buttonColor, buttonFontColor, accentColor, setPreviewColor, setPreviewButtonColor, setPreviewButtonFontColor, setPreviewAccentColor])
   const [anonymizeByDefault, setAnonymizeByDefault] = useState(org.reportingPreferences?.anonymizeByDefault ?? true)
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -997,6 +1009,7 @@ function OrgDetailView({
         accentColor,
         backgroundColor,
         buttonColor,
+        buttonFontColor,
         logoUrl: logoUrl || undefined,
         reportingPreferences: {
           anonymizeByDefault,
@@ -1424,6 +1437,51 @@ function OrgDetailView({
                       </div>
                       <p className="text-[11px] text-muted-foreground">
                         Sets the primary button color for all users in this organization.
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Label>Button Font Color</Label>
+                      <div className="flex items-center gap-3">
+                        <div className="flex gap-1.5">
+                          {BUTTON_FONT_COLOR_PRESETS.map((preset) => (
+                            <button
+                              key={preset.value}
+                              type="button"
+                              onClick={() => setButtonFontColor(preset.value)}
+                              className={`h-7 w-7 rounded-full border-2 transition-all ${
+                                buttonFontColor === preset.value
+                                  ? "border-foreground scale-110"
+                                  : "border-transparent hover:scale-105"
+                              }`}
+                              style={{ backgroundColor: preset.value }}
+                              title={preset.label}
+                            />
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="text"
+                            value={buttonFontColor}
+                            onChange={(e) => setButtonFontColor(e.target.value)}
+                            className="w-24 font-mono text-xs h-7"
+                            placeholder="#ffffff"
+                          />
+                          <label className="relative h-7 w-7 cursor-pointer rounded border border-border overflow-hidden" title="Pick a custom color">
+                            <div
+                              className="absolute inset-0"
+                              style={{ backgroundColor: buttonFontColor }}
+                            />
+                            <input
+                              type="color"
+                              value={buttonFontColor}
+                              onChange={(e) => setButtonFontColor(e.target.value)}
+                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Sets the text color on buttons for all users in this organization.
                       </p>
                     </div>
                     <div className="flex flex-col gap-2">
