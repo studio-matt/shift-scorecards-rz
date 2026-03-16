@@ -478,7 +478,7 @@ export default function AdminSettingsPage() {
               Reset All Organization Branding
             </DialogTitle>
             <DialogDescription className="sr-only">
-              Confirm resetting all organization branding to global defaults
+              Confirm resetting all organization branding settings to global defaults
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 text-sm text-muted-foreground">
