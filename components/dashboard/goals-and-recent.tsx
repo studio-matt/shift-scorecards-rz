@@ -150,9 +150,9 @@ export function RecentScorecardsCard({ data }: RecentScorecardsCardProps) {
           </p>
         ) : (
           <div className="flex flex-col gap-2">
-            {data.map((sc) => (
+            {data.map((sc, idx) => (
               <div
-                key={sc.userId}
+                key={`${sc.userId}-${idx}`}
                 className="flex items-center justify-between rounded-md border border-border p-3"
               >
                 <div>
