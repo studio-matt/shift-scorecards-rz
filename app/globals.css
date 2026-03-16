@@ -122,4 +122,19 @@
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* Organization-specific button color override */
+  :root {
+    --org-button-color: #3b82f6;
+  }
+}
+
+/* Apply org button color to default variant buttons */
+@layer components {
+  .org-button-primary {
+    background-color: var(--org-button-color) !important;
+  }
+  .org-button-primary:hover {
+    background-color: color-mix(in srgb, var(--org-button-color) 90%, black) !important;
+  }
 }

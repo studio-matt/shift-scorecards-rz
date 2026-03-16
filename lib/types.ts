@@ -29,6 +29,7 @@ export interface Organization {
   // Branding
   accentColor?: string
   backgroundColor?: string
+  buttonColor?: string
   logoUrl?: string
   // Reporting preferences
   reportingPreferences?: {
