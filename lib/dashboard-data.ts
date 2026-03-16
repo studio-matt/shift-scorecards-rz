@@ -240,6 +240,7 @@ export async function computeTopPerformers(
 
 // ── Most improved ─────────────────────────────────────────────────────
 export interface MostImprovedEntry {
+  userId: string
   name: string
   company: string
   companyId: string
@@ -290,7 +291,7 @@ export async function computeMostImproved(
 
   const results: MostImprovedEntry[] = []
 
-  for (const [, user] of userWeeks) {
+  for (const [userId, user] of userWeeks) {
     const sorted = Array.from(user.weeks.entries())
       .map(([week, { total, count, date }]) => ({
         week,
@@ -306,6 +307,7 @@ export async function computeMostImproved(
 
     if (improvement > 0) {
       results.push({
+        userId,
         name: user.name,
         company: orgNameMap.get(user.orgId) ?? user.orgId,
         companyId: user.orgId,
@@ -360,6 +362,7 @@ export async function computeQuestionResults(
 
 // ── Recent scorecards ─────────────────────────────────────────────────
 export interface RecentScorecard {
+  userId: string
   name: string
   date: string
   score: number
@@ -384,6 +387,7 @@ export async function computeRecentScorecards(
           : 0
 
       return {
+        userId: r.userId,
         name: r.userName || r.userId,
         date: new Date(r.completedAt).toLocaleDateString("en-US", {
           month: "short",

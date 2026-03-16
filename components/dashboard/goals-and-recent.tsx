@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import {
   Card,
   CardContent,
@@ -93,13 +94,13 @@ export function MostImprovedCard({ showCompany = false, data }: MostImprovedProp
           )}
           {data.map((person) => (
             <div
-              key={person.name}
+              key={person.userId}
               className="flex items-center justify-between rounded-lg border border-border p-3"
             >
               <div>
-                <p className="text-sm font-medium text-foreground">
+                <Link href={`/dashboard?viewUser=${person.userId}`} className="text-sm font-medium text-foreground">
                   {person.name}
-                </p>
+                </Link>
                 {showCompany ? (
                   <p className="text-xs text-muted-foreground">
                     {person.company} &middot; {person.department}
@@ -149,15 +150,15 @@ export function RecentScorecardsCard({ data }: RecentScorecardsCardProps) {
           </p>
         ) : (
           <div className="flex flex-col gap-2">
-            {data.map((sc, idx) => (
+            {data.map((sc) => (
               <div
-                key={`${sc.name}-${idx}`}
+                key={sc.userId}
                 className="flex items-center justify-between rounded-md border border-border p-3"
               >
                 <div>
-                  <p className="text-sm font-medium text-foreground">
+                  <Link href={`/dashboard?viewUser=${sc.userId}`} className="text-sm font-medium text-foreground">
                     {sc.name}
-                  </p>
+                  </Link>
                   <p className="text-xs text-muted-foreground">
                     {sc.templateName} &middot; {sc.date}
                   </p>

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
+import Link from "next/link"
 import {
   Card,
   CardContent,
@@ -64,7 +65,9 @@ export function MVPSpotlight({ performer }: { performer: TopPerformer | null }) 
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
-            <p className="text-lg font-bold text-foreground">{performer.name}</p>
+            <Link href={`/dashboard?viewUser=${performer.id}`} className="text-lg font-bold text-foreground">
+              {performer.name}
+            </Link>
             <p className="text-sm text-muted-foreground">
               {performer.company} &middot; {performer.department}
             </p>
@@ -311,9 +314,9 @@ export function TopPerformers({ showCompany = false, data }: TopPerformersProps)
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground">
+                  <Link href={`/dashboard?viewUser=${performer.id}`} className="text-sm font-medium text-foreground">
                     {displayName}
-                  </p>
+                  </Link>
                   {showCompany ? (
                     <p className="truncate text-xs text-muted-foreground">
                       {performer.company} &middot; {performer.department}
