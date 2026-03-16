@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { useAuth } from "@/lib/auth-context"
+import { useBackground } from "@/lib/background-context"
 import {
   Select,
   SelectContent,
@@ -107,6 +108,7 @@ import { Loader2 } from "lucide-react"
 
 export default function DashboardPage() {
   const { isAdmin, isSuperAdmin, isCompanyAdmin, user } = useAuth()
+  const { setSelectedOrgColor } = useBackground()
 
   // Admin filter state
   const [selectedOrg, setSelectedOrg] = useState("all")
@@ -252,6 +254,21 @@ export default function DashboardPage() {
 
   const activeOrg = orgs.find((o) => o.id === selectedOrg)
 
+  // Update background color when super admin switches companies
+  useEffect(() => {
+    if (isSuperAdmin && activeOrg?.backgroundColor) {
+      setSelectedOrgColor(activeOrg.backgroundColor)
+    } else if (isSuperAdmin && selectedOrg === "all") {
+      setSelectedOrgColor(null) // Reset to user's org or default
+    }
+    // Cleanup when leaving dashboard
+    return () => {
+      if (isSuperAdmin) {
+        setSelectedOrgColor(null)
+      }
+    }
+  }, [isSuperAdmin, activeOrg?.backgroundColor, selectedOrg, setSelectedOrgColor])
+  
   const departments = useMemo(() => {
     if (selectedOrg === "all") {
       const allDepts = new Set<string>()

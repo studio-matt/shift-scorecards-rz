@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useBackground } from "@/lib/background-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -738,24 +739,19 @@ function OrgDetailView({
   const [accentColor, setAccentColor] = useState(org.accentColor ?? "#3b82f6")
   const [backgroundColor, setBackgroundColor] = useState(org.backgroundColor ?? "#09090b")
   const [logoUrl, setLogoUrl] = useState(org.logoUrl ?? "")
-
-  // Live preview of background color - applies to page while editing
-  useEffect(() => {
-    const originalBg = document.body.style.backgroundColor
-    const mainEl = document.querySelector("main")
-    const originalMainBg = mainEl?.style.backgroundColor || ""
-    
-    // Apply preview color
-    document.body.style.backgroundColor = backgroundColor
-    if (mainEl) mainEl.style.backgroundColor = backgroundColor
-    
-    // Restore original on unmount or when component changes
-    return () => {
-      document.body.style.backgroundColor = originalBg
-      if (mainEl) mainEl.style.backgroundColor = originalMainBg
-    }
-  }, [backgroundColor])
   const [logoUploading, setLogoUploading] = useState(false)
+
+  // Import and use background context for live preview
+  const { setPreviewColor } = useBackground()
+
+  // Live preview of background color via context
+  useEffect(() => {
+    setPreviewColor(backgroundColor)
+    // Clear preview when leaving the page
+    return () => {
+      setPreviewColor(null)
+    }
+  }, [backgroundColor, setPreviewColor])
   const [anonymizeByDefault, setAnonymizeByDefault] = useState(org.reportingPreferences?.anonymizeByDefault ?? true)
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
