@@ -133,7 +133,7 @@ export function AppSidebar() {
           )}
         </div>
 
-        {/* Expand button when collapsed - shows in header when hovering to lock open */}
+        {/* Keep open button when hovering over collapsed sidebar */}
         {isCollapsed && isHovering && (
           <button
             type="button"
@@ -141,10 +141,10 @@ export function AppSidebar() {
               setIsCollapsed(false)
               setIsHovering(false)
             }}
-            className="absolute right-2 top-4 z-20 flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-            aria-label="Lock sidebar open"
+            className="absolute right-2 top-4 z-20 flex h-6 items-center justify-center gap-1 rounded-md bg-sidebar-accent/80 px-2 text-[11px] font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            aria-label="Keep sidebar open"
           >
-            <ChevronsRight className="h-4 w-4" />
+            Keep open
           </button>
         )}
 
