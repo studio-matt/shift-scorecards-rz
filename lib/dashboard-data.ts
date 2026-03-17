@@ -240,6 +240,7 @@ export async function computeTopPerformers(
 
 // ── Most improved ─────────────────────────────────────────────────────
 export interface MostImprovedEntry {
+  userId: string
   name: string
   company: string
   companyId: string
@@ -290,7 +291,7 @@ export async function computeMostImproved(
 
   const results: MostImprovedEntry[] = []
 
-  for (const [, user] of userWeeks) {
+  for (const [userId, user] of userWeeks) {
     const sorted = Array.from(user.weeks.entries())
       .map(([week, { total, count, date }]) => ({
         week,
@@ -306,6 +307,7 @@ export async function computeMostImproved(
 
     if (improvement > 0) {
       results.push({
+        userId,
         name: user.name,
         company: orgNameMap.get(user.orgId) ?? user.orgId,
         companyId: user.orgId,
@@ -360,6 +362,7 @@ export async function computeQuestionResults(
 
 // ── Recent scorecards ─────────────────────────────────────────────────
 export interface RecentScorecard {
+  userId: string
   name: string
   date: string
   score: number
@@ -384,6 +387,7 @@ export async function computeRecentScorecards(
           : 0
 
       return {
+        userId: r.userId,
         name: r.userName || r.userId,
         date: new Date(r.completedAt).toLocaleDateString("en-US", {
           month: "short",
@@ -907,4 +911,388 @@ export function computePersonalBenchmark(responses: RawResponse[], userId: strin
     myVelocity: myVel?.velocity ?? 0,
     percentile,
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// HOURS SAVED & CONFIDENCE METRICS (Time-centric approach)
+// ══════════════════════════════════════════════════════════════════════
+
+export interface UserHoursMetrics {
+  totalHoursSavedAllTime: number   // All-time total hours
+  thisMonthHours: number           // Current month hours
+  lastMonthHours: number           // Previous month hours
+  monthOverMonthChange: number     // Absolute difference
+  monthOverMonthPercent: number    // % change
+  weeklyAvgHours: number           // Avg hours per week this month
+  productivityPercent: number      // (weeklyAvg / 40) * 100
+  responseCount: number            // Total scorecards submitted
+  thisMonthResponses: number       // Responses this month
+  lastMonthResponses: number       // Responses last month
+  confidenceScore: number          // Latest confidence (1-10)
+  lastMonthConfidence: number      // Last month avg confidence
+  confidenceChange: number         // MoM change in confidence
+}
+
+export interface OrgHoursMetrics {
+  totalHoursSaved: number
+  monthlyHours: number
+  lastMonthHours: number
+  monthOverMonthChange: number
+  monthOverMonthPercent: number
+  avgProductivityPercent: number
+  avgConfidence: number
+  lastMonthConfidence: number
+  confidenceChange: number
+  fteEquivalent: number           // monthlyHours / 160 (40hrs * 4 weeks)
+  annualRunRate: number           // monthlyHours * 12
+  monthlyValue: number            // monthlyHours * hourlyRate
+  annualValue: number             // monthlyValue * 12
+  perPersonValue: number          // monthlyValue / activeParticipants
+  activeParticipants: number
+  thisMonthResponses: number
+  lastMonthResponses: number
+}
+
+// ── Helper: Find time-saving question IDs from templates ──────────────
+// Questions containing "time" AND "save" are time-saving questions
+export async function findTimeSavingQuestionIds(): Promise<string[]> {
+  const templates = await fetchTemplates()
+  const ids: string[] = []
+  for (const t of templates) {
+    for (const q of t.questions || []) {
+      const text = q.text.toLowerCase()
+      if (text.includes("time") && text.includes("save")) {
+        ids.push(q.id)
+      }
+    }
+  }
+  return ids
+}
+
+// ── Helper: Find confidence question ID from templates ────────────────
+// Question containing "confidence" AND "roi"
+export async function findConfidenceQuestionId(): Promise<string | null> {
+  const templates = await fetchTemplates()
+  for (const t of templates) {
+    for (const q of t.questions || []) {
+      const text = q.text.toLowerCase()
+      if (text.includes("confidence") && text.includes("roi")) {
+        return q.id
+      }
+    }
+  }
+  return null
+}
+
+// ── Helper: Get current and previous month boundaries ─────────────────
+function getMonthBoundaries() {
+  const now = new Date()
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59)
+  return { thisMonthStart, lastMonthStart, lastMonthEnd }
+}
+
+// ── Compute hours metrics for a single user ───────────────────────────
+export function computeUserHoursMetrics(
+  responses: RawResponse[],
+  userId: string,
+  timeSavingIds: string[],
+  confidenceId: string | null,
+): UserHoursMetrics {
+  const { thisMonthStart, lastMonthStart, lastMonthEnd } = getMonthBoundaries()
+  
+  const myResponses = responses.filter((r) => r.userId === userId)
+  
+  let totalMinutes = 0
+  let thisMonthMinutes = 0
+  let lastMonthMinutes = 0
+  let thisMonthResponses = 0
+  let lastMonthResponses = 0
+  const confidenceScores: number[] = []
+  const lastMonthConfidenceScores: number[] = []
+  
+  for (const r of myResponses) {
+    const responseDate = new Date(r.completedAt)
+    const isThisMonth = responseDate >= thisMonthStart
+    const isLastMonth = responseDate >= lastMonthStart && responseDate <= lastMonthEnd
+    
+    // Sum all time-saving question answers (in minutes)
+    for (const qId of timeSavingIds) {
+      const val = r.answers[qId]
+      if (typeof val === "number" && val > 0) {
+        totalMinutes += val
+        if (isThisMonth) thisMonthMinutes += val
+        if (isLastMonth) lastMonthMinutes += val
+      }
+    }
+    
+    // Count responses per month
+    if (isThisMonth) thisMonthResponses++
+    if (isLastMonth) lastMonthResponses++
+    
+    // Track confidence scores
+    if (confidenceId) {
+      const conf = r.answers[confidenceId]
+      if (typeof conf === "number" && conf >= 1 && conf <= 10) {
+        confidenceScores.push(conf)
+        if (isLastMonth) lastMonthConfidenceScores.push(conf)
+      }
+    }
+  }
+  
+  // Convert minutes to hours
+  const totalHours = totalMinutes / 60
+  const thisMonthHours = thisMonthMinutes / 60
+  const lastMonthHours = lastMonthMinutes / 60
+  
+  // Calculate MoM change
+  const monthOverMonthChange = thisMonthHours - lastMonthHours
+  const monthOverMonthPercent = lastMonthHours > 0 
+    ? ((thisMonthHours - lastMonthHours) / lastMonthHours) * 100 
+    : thisMonthHours > 0 ? 100 : 0
+  
+  // Weekly average (assuming ~4 weeks in a month)
+  const weeksThisMonth = Math.max(1, Math.ceil((new Date().getDate()) / 7))
+  const weeklyAvgHours = thisMonthHours / weeksThisMonth
+  
+  // Productivity as % of 40-hour work week
+  const productivityPercent = (weeklyAvgHours / 40) * 100
+  
+  // Confidence - use latest if available
+  const confidenceScore = confidenceScores.length > 0 
+    ? confidenceScores[confidenceScores.length - 1] 
+    : 0
+  const lastMonthConfidence = lastMonthConfidenceScores.length > 0
+    ? lastMonthConfidenceScores.reduce((a, b) => a + b, 0) / lastMonthConfidenceScores.length
+    : 0
+  const confidenceChange = confidenceScore - lastMonthConfidence
+  
+  return {
+    totalHoursSavedAllTime: Math.round(totalHours * 10) / 10,
+    thisMonthHours: Math.round(thisMonthHours * 10) / 10,
+    lastMonthHours: Math.round(lastMonthHours * 10) / 10,
+    monthOverMonthChange: Math.round(monthOverMonthChange * 10) / 10,
+    monthOverMonthPercent: Math.round(monthOverMonthPercent * 10) / 10,
+    weeklyAvgHours: Math.round(weeklyAvgHours * 10) / 10,
+    productivityPercent: Math.round(productivityPercent * 10) / 10,
+    responseCount: myResponses.length,
+    thisMonthResponses,
+    lastMonthResponses,
+    confidenceScore: Math.round(confidenceScore * 10) / 10,
+    lastMonthConfidence: Math.round(lastMonthConfidence * 10) / 10,
+    confidenceChange: Math.round(confidenceChange * 10) / 10,
+  }
+}
+
+// ── Compute hours metrics for an organization ─────────────────────────
+export function computeOrgHoursMetrics(
+  responses: RawResponse[],
+  timeSavingIds: string[],
+  confidenceId: string | null,
+  hourlyRate: number = 100,
+): OrgHoursMetrics {
+  const { thisMonthStart, lastMonthStart, lastMonthEnd } = getMonthBoundaries()
+  
+  let totalMinutes = 0
+  let thisMonthMinutes = 0
+  let lastMonthMinutes = 0
+  let thisMonthResponses = 0
+  let lastMonthResponses = 0
+  const thisMonthUsers = new Set<string>()
+  const confidenceScores: number[] = []
+  const lastMonthConfidenceScores: number[] = []
+  
+  for (const r of responses) {
+    const responseDate = new Date(r.completedAt)
+    const isThisMonth = responseDate >= thisMonthStart
+    const isLastMonth = responseDate >= lastMonthStart && responseDate <= lastMonthEnd
+    
+    // Sum all time-saving question answers (in minutes)
+    for (const qId of timeSavingIds) {
+      const val = r.answers[qId]
+      if (typeof val === "number" && val > 0) {
+        totalMinutes += val
+        if (isThisMonth) {
+          thisMonthMinutes += val
+          thisMonthUsers.add(r.userId)
+        }
+        if (isLastMonth) lastMonthMinutes += val
+      }
+    }
+    
+    // Count responses
+    if (isThisMonth) thisMonthResponses++
+    if (isLastMonth) lastMonthResponses++
+    
+    // Track confidence scores
+    if (confidenceId) {
+      const conf = r.answers[confidenceId]
+      if (typeof conf === "number" && conf >= 1 && conf <= 10) {
+        if (isThisMonth) confidenceScores.push(conf)
+        if (isLastMonth) lastMonthConfidenceScores.push(conf)
+      }
+    }
+  }
+  
+  // Convert to hours
+  const totalHours = totalMinutes / 60
+  const monthlyHours = thisMonthMinutes / 60
+  const lastMonthHours = lastMonthMinutes / 60
+  
+  // MoM change
+  const monthOverMonthChange = monthlyHours - lastMonthHours
+  const monthOverMonthPercent = lastMonthHours > 0
+    ? ((monthlyHours - lastMonthHours) / lastMonthHours) * 100
+    : monthlyHours > 0 ? 100 : 0
+  
+  // Active participants
+  const activeParticipants = thisMonthUsers.size
+  
+  // Weekly average across all participants
+  const weeksThisMonth = Math.max(1, Math.ceil((new Date().getDate()) / 7))
+  const totalWeeklyHours = monthlyHours / weeksThisMonth
+  const avgWeeklyPerPerson = activeParticipants > 0 ? totalWeeklyHours / activeParticipants : 0
+  const avgProductivityPercent = (avgWeeklyPerPerson / 40) * 100
+  
+  // FTE equivalent (160 hours = 1 FTE per month)
+  const fteEquivalent = monthlyHours / 160
+  
+  // Annual projections
+  const annualRunRate = monthlyHours * 12
+  
+  // Dollar values
+  const monthlyValue = monthlyHours * hourlyRate
+  const annualValue = monthlyValue * 12
+  const perPersonValue = activeParticipants > 0 ? monthlyValue / activeParticipants : 0
+  
+  // Confidence averages
+  const avgConfidence = confidenceScores.length > 0
+    ? confidenceScores.reduce((a, b) => a + b, 0) / confidenceScores.length
+    : 0
+  const lastMonthConfidence = lastMonthConfidenceScores.length > 0
+    ? lastMonthConfidenceScores.reduce((a, b) => a + b, 0) / lastMonthConfidenceScores.length
+    : 0
+  const confidenceChange = avgConfidence - lastMonthConfidence
+  
+  return {
+    totalHoursSaved: Math.round(totalHours * 10) / 10,
+    monthlyHours: Math.round(monthlyHours * 10) / 10,
+    lastMonthHours: Math.round(lastMonthHours * 10) / 10,
+    monthOverMonthChange: Math.round(monthOverMonthChange * 10) / 10,
+    monthOverMonthPercent: Math.round(monthOverMonthPercent * 10) / 10,
+    avgProductivityPercent: Math.round(avgProductivityPercent * 10) / 10,
+    avgConfidence: Math.round(avgConfidence * 10) / 10,
+    lastMonthConfidence: Math.round(lastMonthConfidence * 10) / 10,
+    confidenceChange: Math.round(confidenceChange * 10) / 10,
+    fteEquivalent: Math.round(fteEquivalent * 10) / 10,
+    annualRunRate: Math.round(annualRunRate),
+    monthlyValue: Math.round(monthlyValue),
+    annualValue: Math.round(annualValue),
+    perPersonValue: Math.round(perPersonValue),
+    activeParticipants,
+    thisMonthResponses,
+    lastMonthResponses,
+  }
+}
+
+// ── Weekly hours trend (for chart) ────────────────────────────────────
+export interface WeeklyHoursTrend {
+  week: string
+  hours: number
+  responses: number
+}
+
+export function computeWeeklyHoursTrend(
+  responses: RawResponse[],
+  timeSavingIds: string[],
+): WeeklyHoursTrend[] {
+  const weekMap = new Map<string, { minutes: number; count: number; date: string }>()
+  
+  for (const r of responses) {
+    const week = r.weekOf || "Unknown"
+    const date = r.weekDate || r.completedAt
+    
+    let responseMinutes = 0
+    for (const qId of timeSavingIds) {
+      const val = r.answers[qId]
+      if (typeof val === "number" && val > 0) {
+        responseMinutes += val
+      }
+    }
+    
+    if (!weekMap.has(week)) {
+      weekMap.set(week, { minutes: 0, count: 0, date })
+    }
+    const entry = weekMap.get(week)!
+    entry.minutes += responseMinutes
+    entry.count += 1
+  }
+  
+  return Array.from(weekMap.entries())
+    .map(([week, { minutes, count, date }]) => ({
+      week,
+      hours: Math.round((minutes / 60) * 10) / 10,
+      responses: count,
+      _date: date,
+    }))
+    .sort((a, b) => a._date.localeCompare(b._date))
+    .map(({ week, hours, responses }) => ({ week, hours, responses }))
+}
+
+// ── Personal hours trend (user vs org avg) ────────────────────────────
+export interface PersonalHoursTrendPoint {
+  week: string
+  myHours: number
+  orgAvgHours: number
+}
+
+export function computePersonalHoursTrend(
+  responses: RawResponse[],
+  userId: string,
+  timeSavingIds: string[],
+): PersonalHoursTrendPoint[] {
+  const myResponses = responses.filter((r) => r.userId === userId)
+  if (myResponses.length === 0) return []
+  const myOrg = myResponses[0].organizationId
+  
+  const weekMap = new Map<string, { my: number; org: number[]; date: string }>()
+  
+  for (const r of responses) {
+    if (r.organizationId !== myOrg) continue
+    
+    const week = r.weekOf
+    const date = r.weekDate || r.completedAt
+    
+    let responseMinutes = 0
+    for (const qId of timeSavingIds) {
+      const val = r.answers[qId]
+      if (typeof val === "number" && val > 0) {
+        responseMinutes += val
+      }
+    }
+    
+    if (!weekMap.has(week)) {
+      weekMap.set(week, { my: 0, org: [], date })
+    }
+    const entry = weekMap.get(week)!
+    
+    if (r.userId === userId) {
+      entry.my = responseMinutes / 60
+    }
+    entry.org.push(responseMinutes / 60)
+  }
+  
+  return Array.from(weekMap.entries())
+    .map(([week, { my, org, date }]) => ({
+      week,
+      myHours: Math.round(my * 10) / 10,
+      orgAvgHours: org.length > 0 
+        ? Math.round((org.reduce((a, b) => a + b, 0) / org.length) * 10) / 10 
+        : 0,
+      _date: date,
+    }))
+    .filter((p) => p.myHours > 0)
+    .sort((a, b) => a._date.localeCompare(b._date))
+    .map(({ week, myHours, orgAvgHours }) => ({ week, myHours, orgAvgHours }))
 }

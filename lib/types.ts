@@ -32,6 +32,8 @@ export interface Organization {
   buttonColor?: string
   buttonFontColor?: string
   logoUrl?: string
+  // Financial settings
+  hourlyRate?: number // Default is $100/hr if not set
   // Reporting preferences
   reportingPreferences?: {
     anonymizeByDefault?: boolean

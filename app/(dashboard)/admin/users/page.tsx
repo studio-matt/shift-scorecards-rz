@@ -567,9 +567,12 @@ export default function ManageUsersPage() {
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-foreground">
+                      <Link
+                        href={`/dashboard?viewUser=${user.id}`}
+                        className="text-sm font-medium text-foreground"
+                      >
                         {user.name}
-                      </p>
+                      </Link>
                       {user.excludeFromReporting && (
                         <Badge variant="outline" className="gap-1 border-amber-200 bg-amber-50 text-amber-700 text-[10px] dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
                           <EyeOff className="h-2.5 w-2.5" />

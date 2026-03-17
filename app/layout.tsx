@@ -1,4 +1,5 @@
 import React from "react"
+// Root layout - updated to force cache refresh
 import type { Metadata, Viewport } from "next"
 import { Inter } from "next/font/google"
 import { Providers } from "@/components/providers"

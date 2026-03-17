@@ -1,5 +1,6 @@
 "use client"
 
+// Global admin settings for organization branding defaults
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"

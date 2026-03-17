@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -79,7 +80,7 @@ export function StreaksCard({ data }: { data: UserStreak[] }) {
                     <div className="flex items-center gap-2">
                       <FlameIcon streak={s.currentStreak} />
                       <div>
-                        <p className="text-sm font-medium text-foreground">{s.name}</p>
+                        <Link href={`/dashboard?viewUser=${s.userId}`} className="text-sm font-medium text-foreground">{s.name}</Link>
                         <p className="text-xs text-muted-foreground">{s.department}</p>
                       </div>
                     </div>
@@ -144,7 +145,7 @@ export function NonRespondersCard({ data }: { data: NonResponder[] }) {
                   {droppedOff.map((n) => (
                     <div key={n.userId} className="flex items-center justify-between rounded-md border border-orange-200 bg-orange-50/50 px-3 py-2 dark:border-orange-900/30 dark:bg-orange-950/10">
                       <div>
-                        <p className="text-sm font-medium text-foreground">{n.name}</p>
+                        <Link href={`/dashboard?viewUser=${n.userId}`} className="text-sm font-medium text-foreground">{n.name}</Link>
                         <p className="text-xs text-muted-foreground">{n.orgName} / {n.department}</p>
                       </div>
                       <div className="text-right">
@@ -171,7 +172,7 @@ export function NonRespondersCard({ data }: { data: NonResponder[] }) {
                   {neverStarted.map((n) => (
                     <div key={n.userId} className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2">
                       <div>
-                        <p className="text-sm font-medium text-foreground">{n.name}</p>
+                        <Link href={`/dashboard?viewUser=${n.userId}`} className="text-sm font-medium text-foreground">{n.name}</Link>
                         <p className="text-xs text-muted-foreground">{n.orgName} / {n.department}</p>
                       </div>
                       <Badge variant="outline" className="text-[10px] text-muted-foreground">Onboarding</Badge>
@@ -206,7 +207,7 @@ export function ScoreVelocityCard({ data }: { data: ScoreVelocity[] }) {
             <div className="flex flex-col gap-1.5">
               {improving.length === 0 ? <p className="text-xs text-muted-foreground">None</p> : improving.map((v) => (
                 <div key={v.userId} className="flex items-center justify-between text-xs">
-                  <span className="truncate text-foreground">{v.name}</span>
+                  <Link href={`/dashboard?viewUser=${v.userId}`} className="truncate text-foreground">{v.name}</Link>
                   <span className="ml-2 shrink-0 font-mono font-bold text-success">+{v.velocity}</span>
                 </div>
               ))}
@@ -219,7 +220,7 @@ export function ScoreVelocityCard({ data }: { data: ScoreVelocity[] }) {
             <div className="flex flex-col gap-1.5">
               {declining.length === 0 ? <p className="text-xs text-muted-foreground">None</p> : declining.map((v) => (
                 <div key={v.userId} className="flex items-center justify-between text-xs">
-                  <span className="truncate text-foreground">{v.name}</span>
+                  <Link href={`/dashboard?viewUser=${v.userId}`} className="truncate text-foreground">{v.name}</Link>
                   <span className="ml-2 shrink-0 font-mono font-bold text-destructive">{v.velocity}</span>
                 </div>
               ))}

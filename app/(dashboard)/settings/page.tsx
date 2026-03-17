@@ -29,7 +29,6 @@ import {
 } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Upload, ChevronDown, ChevronRight, Shield, Key, ZoomIn, RotateCw } from "lucide-react"
-import { useTheme } from "@/lib/theme-context"
 import { uploadAvatar } from "@/lib/storage"
 import { updateDocument, COLLECTIONS } from "@/lib/firestore"
 
@@ -318,9 +317,8 @@ export default function SettingsPage() {
   const [email] = useState(user?.email ?? "")
   const [jobTitle, setJobTitle] = useState(user?.jobTitle ?? "")
   const [department, setDepartment] = useState(user?.department ?? "")
-  const [phone, setPhone] = useState(user?.phone ?? "")
-  const { theme, setTheme } = useTheme()
-  const [emailNotifications, setEmailNotifications] = useState(true)
+const [phone, setPhone] = useState(user?.phone ?? "")
+const [emailNotifications, setEmailNotifications] = useState(true)
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
@@ -414,21 +412,6 @@ export default function SettingsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    Dark Mode
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Switch between light and dark themes
-                  </p>
-                </div>
-                <Switch
-                  checked={theme === "dark"}
-                  onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
-                  aria-label="Toggle dark mode"
-                />
-              </div>
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-foreground">

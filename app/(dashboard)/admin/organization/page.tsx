@@ -62,6 +62,7 @@ import {
   Bell,
   ChevronDown,
   ChevronRight,
+  DollarSign,
 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import type { Organization } from "@/lib/types"
@@ -187,6 +188,7 @@ export default function OrganizationPage() {
           buttonColor: o.buttonColor,
           buttonFontColor: o.buttonFontColor,
           logoUrl: o.logoUrl,
+          hourlyRate: o.hourlyRate,
           reportingPreferences: o.reportingPreferences,
         })) as Organization[],
       )
@@ -621,6 +623,7 @@ export default function OrganizationPage() {
   buttonColor: updated.buttonColor ?? null,
   buttonFontColor: updated.buttonFontColor ?? null,
   logoUrl: updated.logoUrl ?? null,
+  hourlyRate: updated.hourlyRate ?? null,
   reportingPreferences: updated.reportingPreferences ?? null,
   })
           await fetchOrgs()
@@ -764,6 +767,8 @@ function OrgDetailView({
   const [buttonFontColor, setButtonFontColor] = useState(org.buttonFontColor ?? "#ffffff")
   const [logoUrl, setLogoUrl] = useState(org.logoUrl ?? "")
   const [logoUploading, setLogoUploading] = useState(false)
+  // Financial settings
+  const [hourlyRate, setHourlyRate] = useState(org.hourlyRate ?? 100)
 
   // Import and use branding context for live preview
   const { setPreviewColor, setPreviewButtonColor, setPreviewButtonFontColor, setPreviewAccentColor } = useBackground()
@@ -1011,6 +1016,7 @@ function OrgDetailView({
         buttonColor,
         buttonFontColor,
         logoUrl: logoUrl || undefined,
+        hourlyRate,
         reportingPreferences: {
           anonymizeByDefault,
           includeInBenchmarking,
@@ -1606,6 +1612,37 @@ function OrgDetailView({
                       </Select>
                       <p className="text-[11px] text-muted-foreground">
                         Default cadence when scheduling scorecards for this organization.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Financial Settings */}
+                <div>
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <DollarSign className="h-4 w-4" />
+                    Financial Settings
+                  </h3>
+                  <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-4">
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2">
+                        <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Label className="text-sm">Average Hourly Rate</Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">$</span>
+                        <Input
+                          type="number"
+                          value={hourlyRate}
+                          onChange={(e) => setHourlyRate(Number(e.target.value) || 100)}
+                          className="max-w-[120px]"
+                          min={0}
+                          step={5}
+                        />
+                        <span className="text-sm text-muted-foreground">/ hour</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Used to calculate the dollar value of hours saved on dashboards. Default is $100/hr if not set.
                       </p>
                     </div>
                   </div>

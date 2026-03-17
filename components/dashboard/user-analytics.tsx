@@ -46,27 +46,253 @@ import type {
   PersonalVsBenchmark,
 } from "@/lib/dashboard-data"
 
-// ── "Your AI Journey" Hero Section ─────────────────────────────────────
+// ── Productivity Hero Section (3 hero cards matching reference design) ──
+export interface ProductivityHeroData {
+  // This month
+  productivityPercent: number      // (weeklyAvgHours / 40) * 100
+  lastMonthProductivity: number    // For comparison
+  monthlyHours: number             // Total hours saved this month
+  lastMonthHours: number           // For comparison
+  monthlyValue: number             // hours * hourlyRate
+  lastMonthValue: number           // For comparison
+  // Additional context
+  hourlyRate: number
+  fteEquivalent: number            // monthlyHours / 160
+  annualRunRate: number            // monthlyHours * 12
+  annualValue: number              // monthlyValue * 12
+  perPersonValue?: number          // For org view
+  activeParticipants?: number      // For org view
+  // Confidence
+  confidenceScore: number          // 1-10
+  lastMonthConfidence: number      // For comparison
+  // Response counts
+  thisMonthResponses: number
+  lastMonthResponses: number
+}
+
+export function ProductivityHero({ data }: { data: ProductivityHeroData }) {
+  // Calculate month-over-month changes
+  const productivityChange = data.productivityPercent - data.lastMonthProductivity
+  const hoursChange = data.monthlyHours - data.lastMonthHours
+  const hoursChangePercent = data.lastMonthHours > 0 
+    ? ((data.monthlyHours - data.lastMonthHours) / data.lastMonthHours) * 100 
+    : data.monthlyHours > 0 ? 100 : 0
+  const valueChange = data.monthlyValue - data.lastMonthValue
+  const confidenceChange = data.confidenceScore - data.lastMonthConfidence
+  const responseChange = data.thisMonthResponses - data.lastMonthResponses
+  const responseChangePercent = data.lastMonthResponses > 0
+    ? ((data.thisMonthResponses - data.lastMonthResponses) / data.lastMonthResponses) * 100
+    : data.thisMonthResponses > 0 ? 100 : 0
+
+  // Format large numbers
+  const formatValue = (val: number) => {
+    if (val >= 1000000) return `$${(val / 1000000).toFixed(1)}M`
+    if (val >= 1000) return `$${Math.round(val / 1000)}K`
+    return `$${Math.round(val).toLocaleString()}`
+  }
+
+  const formatHours = (hrs: number) => {
+    if (hrs >= 1000) return hrs.toLocaleString(undefined, { maximumFractionDigits: 0 })
+    return hrs.toLocaleString(undefined, { maximumFractionDigits: 1 })
+  }
+
+  // Get current month name
+  const currentMonth = new Date().toLocaleString("default", { month: "long" })
+  const lastMonth = new Date(new Date().setMonth(new Date().getMonth() - 1)).toLocaleString("default", { month: "short" })
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Hero Cards Row */}
+      <div className="grid gap-4 md:grid-cols-3">
+        {/* Card 1: Avg Productivity */}
+        <Card className="relative overflow-hidden border-indigo-500/30 bg-gradient-to-br from-indigo-600/20 via-purple-600/15 to-card">
+          <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-indigo-500/20 blur-2xl" />
+          <CardContent className="relative p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-indigo-300">
+              Avg Productivity
+            </p>
+            <div className="mt-3 flex items-baseline gap-3">
+              <span className="text-4xl font-bold tracking-tight text-white">
+                {data.productivityPercent.toFixed(1)}%
+              </span>
+              {productivityChange !== 0 && (
+                <div className="flex flex-col">
+                  <span className={`text-sm font-semibold ${productivityChange >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    {productivityChange >= 0 ? "+" : ""}{productivityChange.toFixed(1)}pp
+                  </span>
+                  <span className="text-[10px] text-indigo-300/70">from {lastMonth}</span>
+                </div>
+              )}
+            </div>
+            {/* Progress bar */}
+            <div className="mt-3">
+              <div className="h-1.5 w-full rounded-full bg-indigo-950/50">
+                <div 
+                  className="h-1.5 rounded-full bg-gradient-to-r from-indigo-400 to-purple-400 transition-all duration-500"
+                  style={{ width: `${Math.min(data.productivityPercent, 100)}%` }}
+                />
+              </div>
+              <p className="mt-1.5 text-[10px] text-indigo-300/60">of 40-hr week</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card 2: Hours Saved / Month */}
+        <Card className="relative overflow-hidden border-cyan-500/30 bg-gradient-to-br from-cyan-600/20 via-teal-600/15 to-card">
+          <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-cyan-500/20 blur-2xl" />
+          <CardContent className="relative p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-cyan-300">
+              Hours Saved / Month
+            </p>
+            <div className="mt-3 flex items-baseline gap-3">
+              <span className="text-4xl font-bold tracking-tight text-white">
+                {formatHours(data.monthlyHours)}
+              </span>
+              {hoursChange !== 0 && (
+                <div className="flex flex-col">
+                  <span className={`text-sm font-semibold ${hoursChange >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    {hoursChange >= 0 ? "+" : ""}{formatHours(hoursChange)}
+                  </span>
+                  <span className="text-[10px] text-cyan-300/70">
+                    {hoursChangePercent >= 0 ? "+" : ""}{hoursChangePercent.toFixed(1)}% from {lastMonth}
+                  </span>
+                </div>
+              )}
+            </div>
+            <p className="mt-2 text-[11px] text-cyan-300/60">
+              {data.fteEquivalent.toFixed(1)} FTE equivalent · {formatHours(data.annualRunRate)} annual run rate
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Card 3: Value Created / Month */}
+        <Card className="relative overflow-hidden border-emerald-500/30 bg-gradient-to-br from-emerald-600/20 via-green-600/15 to-card">
+          <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-emerald-500/20 blur-2xl" />
+          <CardContent className="relative p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-300">
+              Value Created / Month
+            </p>
+            <div className="mt-3 flex items-baseline gap-3">
+              <span className="text-4xl font-bold tracking-tight text-white">
+                {formatValue(data.monthlyValue)}
+              </span>
+              {valueChange !== 0 && (
+                <div className="flex flex-col">
+                  <span className={`text-sm font-semibold ${valueChange >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    {valueChange >= 0 ? "+" : ""}{formatValue(Math.abs(valueChange))}
+                  </span>
+                  <span className="text-[10px] text-emerald-300/70">at ${data.hourlyRate}/hr</span>
+                </div>
+              )}
+            </div>
+            <p className="mt-2 text-[11px] text-emerald-300/60">
+              {formatValue(data.annualValue)} annual run rate
+              {data.perPersonValue !== undefined && data.activeParticipants !== undefined && (
+                <> · {formatValue(data.perPersonValue)}/person/mo</>
+              )}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Month-over-Month Comparison Row */}
+      <Card className="border-border/50 bg-card/80">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {lastMonth} → {currentMonth}
+            </p>
+            <p className="text-[10px] text-muted-foreground">Month-over-month changes</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            {/* Scorecards */}
+            <div className="rounded-lg border border-border bg-muted/30 p-3">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Scorecards</p>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="text-xs text-muted-foreground">{data.lastMonthResponses}</span>
+                <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                <span className="text-lg font-bold text-foreground">{data.thisMonthResponses}</span>
+              </div>
+              <p className={`mt-1 text-[10px] font-medium ${responseChange >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                {responseChange >= 0 ? "+" : ""}{responseChange} {responseChangePercent !== 0 && `(${responseChangePercent >= 0 ? "+" : ""}${responseChangePercent.toFixed(1)}%)`}
+              </p>
+            </div>
+
+            {/* Hours/Month */}
+            <div className="rounded-lg border border-border bg-muted/30 p-3">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Hours/Month</p>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="text-xs text-muted-foreground">{formatHours(data.lastMonthHours)}</span>
+                <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                <span className="text-lg font-bold text-foreground">{formatHours(data.monthlyHours)}</span>
+              </div>
+              <p className={`mt-1 text-[10px] font-medium ${hoursChange >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                {hoursChange >= 0 ? "+" : ""}{formatHours(hoursChange)} {hoursChangePercent !== 0 && `(${hoursChangePercent >= 0 ? "+" : ""}${hoursChangePercent.toFixed(1)}%)`}
+              </p>
+            </div>
+
+            {/* Productivity */}
+            <div className="rounded-lg border border-border bg-muted/30 p-3">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Productivity</p>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="text-xs text-muted-foreground">{data.lastMonthProductivity.toFixed(1)}%</span>
+                <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                <span className="text-lg font-bold text-foreground">{data.productivityPercent.toFixed(1)}%</span>
+              </div>
+              <p className={`mt-1 text-[10px] font-medium ${productivityChange >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                {productivityChange >= 0 ? "+" : ""}{productivityChange.toFixed(1)}pp
+              </p>
+            </div>
+
+            {/* Confidence */}
+            <div className="rounded-lg border border-border bg-muted/30 p-3">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Confidence</p>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="text-xs text-muted-foreground">{data.lastMonthConfidence.toFixed(1)}</span>
+                <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                <span className="text-lg font-bold text-foreground">{data.confidenceScore.toFixed(1)}</span>
+              </div>
+              <p className={`mt-1 text-[10px] font-medium ${confidenceChange >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                {confidenceChange >= 0 ? "+" : ""}{confidenceChange.toFixed(1)}
+              </p>
+            </div>
+
+            {/* Monthly Value */}
+            <div className="rounded-lg border border-border bg-muted/30 p-3">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Monthly Value</p>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="text-xs text-muted-foreground">{formatValue(data.lastMonthValue)}</span>
+                <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                <span className="text-lg font-bold text-foreground">{formatValue(data.monthlyValue)}</span>
+              </div>
+              <p className={`mt-1 text-[10px] font-medium ${valueChange >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                {valueChange >= 0 ? "+" : ""}{formatValue(Math.abs(valueChange))} {hoursChangePercent !== 0 && `(${hoursChangePercent >= 0 ? "+" : ""}${hoursChangePercent.toFixed(1)}%)`}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// Keep legacy AIJourneyHero for backwards compatibility (deprecated)
+/** @deprecated Use ProductivityHero instead */
 export function AIJourneyHero({
   hoursSaved,
   dollarValue,
-  startScore,
-  currentScore,
-  fieldAverage,
-  percentile,
-  cohortCount = 10,
+  hourlyRate = 100,
 }: {
   hoursSaved: number
   dollarValue: number
-  startScore: number
-  currentScore: number
-  fieldAverage: number
-  percentile: number
+  startScore?: number
+  currentScore?: number
+  fieldAverage?: number
+  percentile?: number
   cohortCount?: number
+  hourlyRate?: number
 }) {
   const weeksEquivalent = Math.round(hoursSaved / 40 * 10) / 10
-  const scoreGrowth = currentScore - startScore
-  const vsField = currentScore - fieldAverage
 
   // Determine impact statement
   let impactStatement = ""
@@ -85,59 +311,21 @@ export function AIJourneyHero({
   return (
     <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-card/80 to-card/80 backdrop-blur-sm">
       <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-10 -left-10 h-48 w-48 rounded-full bg-cyan/10 blur-3xl" />
       <CardContent className="relative p-6 md:p-8">
-        <div className="grid gap-6 md:grid-cols-2 md:gap-8">
-          {/* Left: Hours Saved Hero */}
-          <div className="flex flex-col justify-center">
-            <p className="text-xs font-medium uppercase tracking-wider text-primary">Your AI Journey</p>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-5xl font-bold tracking-tight text-foreground md:text-6xl">{hoursSaved}</span>
-              <span className="text-xl text-muted-foreground">hours saved</span>
-            </div>
-            <p className="mt-2 text-lg text-muted-foreground">{impactStatement}</p>
-            <div className="mt-4 inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 w-fit">
+        <div className="flex flex-col justify-center">
+          <p className="text-xs font-medium uppercase tracking-wider text-primary">Your AI Journey</p>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-5xl font-bold tracking-tight text-foreground md:text-6xl">{hoursSaved}</span>
+            <span className="text-xl text-muted-foreground">hours saved</span>
+          </div>
+          <p className="mt-2 text-lg text-muted-foreground">{impactStatement}</p>
+          <div className="mt-4 flex flex-col items-start gap-1">
+            <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 w-fit">
               <DollarSign className="h-5 w-5 text-emerald-400" />
               <span className="text-2xl font-bold text-emerald-400">${dollarValue.toLocaleString()}</span>
               <span className="text-sm text-emerald-400/80">in reclaimed capacity</span>
             </div>
-          </div>
-
-          {/* Right: Score Journey + Percentile */}
-          <div className="flex flex-col gap-4 rounded-xl border border-border/50 bg-card/50 p-4">
-            {/* Score Trend Summary */}
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Your Score Journey</p>
-              <div className="mt-2 flex items-center gap-3">
-                <span className="text-2xl font-semibold text-muted-foreground">{startScore.toFixed(1)}</span>
-                <ArrowRight className="h-5 w-5 text-primary" />
-                <span className="text-3xl font-bold text-foreground">{currentScore.toFixed(1)}</span>
-                {scoreGrowth !== 0 && (
-                  <Badge className={`ml-2 ${scoreGrowth > 0 ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400"}`}>
-                    {scoreGrowth > 0 ? "+" : ""}{scoreGrowth.toFixed(1)}
-                  </Badge>
-                )}
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Field average: <span className="font-semibold text-foreground">{fieldAverage.toFixed(1)}</span>
-                {vsField !== 0 && (
-                  <span className={vsField > 0 ? "text-emerald-400" : "text-amber-400"}>
-                    {" "}({vsField > 0 ? "+" : ""}{vsField.toFixed(1)})
-                  </span>
-                )}
-              </p>
-            </div>
-
-            {/* Percentile Rank */}
-            <div className="border-t border-border/50 pt-4">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Your Ranking</p>
-              <div className="mt-2 flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-foreground">Top {100 - percentile}%</span>
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                of all participants across {cohortCount} cohorts
-              </p>
-            </div>
+            <span className="text-[10px] text-muted-foreground/60 ml-1">Based on ${hourlyRate}/hr rate</span>
           </div>
         </div>
       </CardContent>
@@ -542,7 +730,7 @@ export function PersonalBenchmarkCard({
 export function HoursSavedCard({
   totalResponses,
   hoursPerResponse = 1.5,
-  hourlyRate = 125,
+  hourlyRate = 100,
 }: {
   totalResponses: number
   hoursPerResponse?: number
