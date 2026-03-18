@@ -692,7 +692,7 @@ export default function DashboardPage() {
           </p>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <PercentileDistribution
-              percentile={percentile}
+              percentile={personalBenchmark?.percentile ?? 50}
               cohortCount={10}
               totalParticipants={850}
             />
