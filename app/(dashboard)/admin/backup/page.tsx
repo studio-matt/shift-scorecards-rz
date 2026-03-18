@@ -4,12 +4,14 @@ import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Download, Upload, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react"
+import { Download, Upload, AlertTriangle, CheckCircle2, Loader2, Trash2 } from "lucide-react"
 
 export default function BackupPage() {
   const [exporting, setExporting] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [wiping, setWiping] = useState(false)
   const [wipeFirst, setWipeFirst] = useState(false)
+  const [showWipeConfirm, setShowWipeConfirm] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -35,6 +37,49 @@ export default function BackupPage() {
       setMessage({ type: "error", text: `Export failed: ${error}` })
     } finally {
       setExporting(false)
+    }
+  }
+
+  async function handleWipeApp() {
+    setWiping(true)
+    setMessage(null)
+    
+    try {
+      // First, automatically download a backup
+      const exportResponse = await fetch("/api/export")
+      if (!exportResponse.ok) throw new Error("Failed to create backup before wipe")
+      
+      const blob = await exportResponse.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `firestore-backup-before-wipe-${new Date().toISOString().slice(0, 10)}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      
+      // Then wipe the database by importing empty data with wipe flag
+      const wipeResponse = await fetch("/api/import?wipe=true", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizations: [], users: [], templates: [], responses: [] }),
+      })
+      
+      if (!wipeResponse.ok) {
+        const result = await wipeResponse.json()
+        throw new Error(result.error || "Wipe failed")
+      }
+      
+      setMessage({
+        type: "success",
+        text: "Database wiped successfully! A backup was automatically downloaded before wiping.",
+      })
+      setShowWipeConfirm(false)
+    } catch (error) {
+      setMessage({ type: "error", text: `Wipe failed: ${error}` })
+    } finally {
+      setWiping(false)
     }
   }
 
@@ -186,6 +231,68 @@ export default function BackupPage() {
                 )}
               </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-red-200 dark:border-red-900/30">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+              <Trash2 className="h-5 w-5" />
+              Wipe Database
+            </CardTitle>
+            <CardDescription>
+              Permanently delete all data. A backup will be automatically downloaded before wiping.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!showWipeConfirm ? (
+              <Button
+                variant="destructive"
+                onClick={() => setShowWipeConfirm(true)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Wipe All Data
+              </Button>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/30 dark:bg-red-950/20 dark:text-red-300">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                  <div>
+                    <p className="font-medium">Are you absolutely sure?</p>
+                    <p className="mt-1">
+                      This will permanently delete ALL organizations, users, templates, and responses. 
+                      A backup will be downloaded automatically before the wipe.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="destructive"
+                    onClick={handleWipeApp}
+                    disabled={wiping}
+                  >
+                    {wiping ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Backing up & Wiping...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Yes, Wipe Everything
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowWipeConfirm(false)}
+                    disabled={wiping}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
