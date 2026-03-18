@@ -326,16 +326,20 @@ export function AppSidebar() {
                   {user.role === "admin" ? "Super Admin" : user.role === "company_admin" ? "Company Admin" : "User"}
                 </Badge>
               </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => switchRole("admin")}>
-                Switch to Super Admin
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => switchRole("company_admin")}>
-                Switch to Company Admin (CEO View)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => switchRole("user")}>
-                Switch to User
-              </DropdownMenuItem>
+              {isSuperAdmin && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => switchRole("admin")}>
+                    Switch to Super Admin
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => switchRole("company_admin")}>
+                    Switch to Company Admin (CEO View)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => switchRole("user")}>
+                    Switch to User
+                  </DropdownMenuItem>
+                </>
+              )}
               <DropdownMenuSeparator />
               <Link href="/settings">
                 <DropdownMenuItem>
