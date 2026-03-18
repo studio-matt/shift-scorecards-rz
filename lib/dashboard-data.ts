@@ -794,7 +794,7 @@ export function computeAlerts(responses: RawResponse[], deptPerf: DepartmentPerf
   return alerts.sort((a, b) => (a.severity === "critical" ? -1 : 1) - (b.severity === "critical" ? -1 : 1))
 }
 
-// ═══════════════════════════════════════════════════��══════════════════
+// ═══════════════════════════════════════════════════���══════════════════
 // USER-SPECIFIC METRICS (privacy-safe: only their data + anonymized avgs)
 // ══════════════════════════════════════════════════════════════════════
 
@@ -961,7 +961,9 @@ export async function findTimeSavingQuestionIds(): Promise<string[]> {
   for (const t of templates) {
     for (const q of t.questions || []) {
       const text = q.text.toLowerCase()
-      if (text.includes("time") && text.includes("save")) {
+      // Match questions about time/hours saved: "time...save", "hours...save", "save...time", "save...hours"
+      const hasTimeSave = (text.includes("time") || text.includes("hours")) && text.includes("save")
+      if (hasTimeSave) {
         ids.push(q.id)
       }
     }
@@ -970,13 +972,15 @@ export async function findTimeSavingQuestionIds(): Promise<string[]> {
 }
 
 // ── Helper: Find confidence question ID from templates ────────────────
-// Question containing "confidence" AND "roi"
+// Question containing "confidence" (with optional "roi" or "ai")
 export async function findConfidenceQuestionId(): Promise<string | null> {
   const templates = await fetchTemplates()
   for (const t of templates) {
     for (const q of t.questions || []) {
       const text = q.text.toLowerCase()
-      if (text.includes("confidence") && text.includes("roi")) {
+      // Match confidence questions: "confidence...roi", "confidence...ai", or general confidence scale
+      const isConfidence = text.includes("confidence") && (text.includes("roi") || text.includes("ai") || q.type === "scale")
+      if (isConfidence) {
         return q.id
       }
     }

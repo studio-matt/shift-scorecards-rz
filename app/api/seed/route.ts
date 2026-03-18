@@ -198,10 +198,16 @@ function generateAnswers(
 }
 
 // ── Helper: date helpers ──────────────────────────────────────────────
+// Use explicit March 2026 dates to ensure seed data shows in current month metrics
+function marchDate(day: number): Date {
+  return new Date(2026, 2, day) // March 2026 (month is 0-indexed)
+}
+
 function weeksAgo(n: number): Date {
-  const d = new Date()
-  d.setDate(d.getDate() - n * 7)
-  return d
+  // Map weeks to March 2026 dates: week 0 = March 17, week 1 = March 10, week 2 = March 3
+  const marchDays = [17, 10, 3]
+  const day = marchDays[Math.min(n, marchDays.length - 1)]
+  return marchDate(day)
 }
 
 function weekLabel(weeksBack: number): string {
