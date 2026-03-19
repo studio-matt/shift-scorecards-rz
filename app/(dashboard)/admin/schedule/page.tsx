@@ -183,6 +183,18 @@ export default function ScheduleReleasePage() {
         }
       })
 
+      // Get recipients for email notification
+      const allUsers = await getDocuments(COLLECTIONS.USERS)
+      const recipients = allUsers.filter((u: Record<string, unknown>) => {
+        // Filter by org if not "all"
+        if (selectedCompany !== "all" && u.organizationId !== selectedCompany) return false
+        // Filter by department if not "all"
+        if (selectedDepartment && selectedDepartment !== "all" && u.department !== selectedDepartment) return false
+        // Exclude admins
+        if (u.role === "admin") return false
+        return true
+      })
+
       await createDocument(COLLECTIONS.SCHEDULES, {
         templateId: selectedTemplate,
         templateName: template?.name ?? "",
@@ -194,12 +206,44 @@ export default function ScheduleReleasePage() {
         activeFrom,
         activeUntil: activeUntilDate.toISOString(),
         recurringFrequency: scheduleType === "recurring" ? recurringFrequency : null,
-        recipientCount: 0, // Will be computed when actually sent
+        recipientCount: recipients.length,
         responseCount: 0,
         reminders: reminderSchedule,
         status: scheduleType === "now" ? "active" : "scheduled",
         createdBy: user?.id ?? "",
       })
+
+      // Send email notifications if releasing now
+      if (scheduleType === "now" && recipients.length > 0) {
+        try {
+          const baseUrl = window.location.origin
+          await fetch("/api/email/notify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              templateType: "scorecard_posted",
+              recipients: recipients.map((u: Record<string, unknown>) => ({
+                email: u.email,
+                firstName: u.firstName,
+                lastName: u.lastName,
+              })),
+              data: {
+                scorecardName: template?.name ?? "Scorecard",
+                scorecardLink: `${baseUrl}/scorecard`,
+                dueDate: activeUntilDate.toLocaleDateString("en-US", {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                }),
+                organizationName: selectedCompany === "all" ? "Shift" : (org?.name ?? "Shift"),
+              },
+            }),
+          })
+        } catch (emailErr) {
+          console.error("Failed to send email notifications:", emailErr)
+          // Don't fail the release if emails fail
+        }
+      }
 
       // Reset form
       setSelectedTemplate("")

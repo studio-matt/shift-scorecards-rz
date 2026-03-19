@@ -137,3 +137,81 @@ export interface GlobalSettings {
   updatedAt: string
   updatedBy: string
 }
+
+// Email System Types
+export type EmailProvider = "resend" | "smtp"
+
+export interface EmailSettings {
+  id: string // "email_settings"
+  provider: EmailProvider
+  enabled: boolean
+  // Resend config
+  resendApiKey?: string
+  // SMTP config
+  smtpHost?: string
+  smtpPort?: number
+  smtpUser?: string
+  smtpPassword?: string
+  smtpSecure?: boolean
+  // Common
+  fromEmail: string
+  fromName: string
+  replyToEmail?: string
+  updatedAt: string
+  updatedBy: string
+}
+
+export type EmailTemplateType = 
+  | "scorecard_posted"
+  | "scorecard_reminder"
+  | "scorecard_completed"
+  | "weekly_digest"
+
+export interface EmailTemplate {
+  id: EmailTemplateType
+  name: string
+  description: string
+  subject: string
+  body: string // HTML content with placeholders like {{userName}}, {{scorecardLink}}
+  enabled: boolean
+  updatedAt: string
+  updatedBy: string
+}
+
+// Available placeholders for email templates
+export const EMAIL_PLACEHOLDERS = {
+  scorecard_posted: [
+    { key: "{{userName}}", description: "Recipient's full name" },
+    { key: "{{firstName}}", description: "Recipient's first name" },
+    { key: "{{scorecardName}}", description: "Name of the scorecard template" },
+    { key: "{{scorecardLink}}", description: "Direct link to fill out the scorecard" },
+    { key: "{{dueDate}}", description: "Scorecard due date" },
+    { key: "{{organizationName}}", description: "Organization name" },
+  ],
+  scorecard_reminder: [
+    { key: "{{userName}}", description: "Recipient's full name" },
+    { key: "{{firstName}}", description: "Recipient's first name" },
+    { key: "{{scorecardName}}", description: "Name of the scorecard template" },
+    { key: "{{scorecardLink}}", description: "Direct link to fill out the scorecard" },
+    { key: "{{dueDate}}", description: "Scorecard due date" },
+    { key: "{{hoursRemaining}}", description: "Hours until deadline" },
+    { key: "{{organizationName}}", description: "Organization name" },
+  ],
+  scorecard_completed: [
+    { key: "{{userName}}", description: "Recipient's full name" },
+    { key: "{{firstName}}", description: "Recipient's first name" },
+    { key: "{{scorecardName}}", description: "Name of the scorecard template" },
+    { key: "{{dashboardLink}}", description: "Link to their dashboard" },
+    { key: "{{score}}", description: "Their average score" },
+    { key: "{{organizationName}}", description: "Organization name" },
+  ],
+  weekly_digest: [
+    { key: "{{userName}}", description: "Recipient's full name" },
+    { key: "{{firstName}}", description: "Recipient's first name" },
+    { key: "{{dashboardLink}}", description: "Link to their dashboard" },
+    { key: "{{weeklyScore}}", description: "Their weekly average score" },
+    { key: "{{percentileRank}}", description: "Their percentile ranking" },
+    { key: "{{streak}}", description: "Current completion streak" },
+    { key: "{{organizationName}}", description: "Organization name" },
+  ],
+} as const
