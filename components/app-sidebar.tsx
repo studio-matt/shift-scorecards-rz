@@ -22,6 +22,7 @@ import {
   ChevronsRight,
   Shield,
   Sparkles,
+  Mail,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
@@ -60,6 +61,7 @@ const adminNavItems = [
   { href: "/admin/users", label: "Manage Users", icon: Users },
   { href: "/admin/prompts", label: "AI Prompts", icon: Sparkles },
   { href: "/admin/organization", label: "Organization", icon: Building2 },
+  { href: "/admin/email", label: "Email Settings", icon: Mail, superAdminOnly: true },
   { href: "/admin/settings", label: "Admin Settings", icon: Shield, superAdminOnly: true },
 ]
 
@@ -326,16 +328,20 @@ export function AppSidebar() {
                   {user.role === "admin" ? "Super Admin" : user.role === "company_admin" ? "Company Admin" : "User"}
                 </Badge>
               </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => switchRole("admin")}>
-                Switch to Super Admin
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => switchRole("company_admin")}>
-                Switch to Company Admin (CEO View)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => switchRole("user")}>
-                Switch to User
-              </DropdownMenuItem>
+              {isSuperAdmin && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => switchRole("admin")}>
+                    Switch to Super Admin
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => switchRole("company_admin")}>
+                    Switch to Company Admin (CEO View)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => switchRole("user")}>
+                    Switch to User
+                  </DropdownMenuItem>
+                </>
+              )}
               <DropdownMenuSeparator />
               <Link href="/settings">
                 <DropdownMenuItem>

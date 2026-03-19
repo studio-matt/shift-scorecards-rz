@@ -794,7 +794,7 @@ export function computeAlerts(responses: RawResponse[], deptPerf: DepartmentPerf
   return alerts.sort((a, b) => (a.severity === "critical" ? -1 : 1) - (b.severity === "critical" ? -1 : 1))
 }
 
-// ══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════���══════════════════
 // USER-SPECIFIC METRICS (privacy-safe: only their data + anonymized avgs)
 // ══════════════════════════════════════════════════════════════════════
 
@@ -961,7 +961,9 @@ export async function findTimeSavingQuestionIds(): Promise<string[]> {
   for (const t of templates) {
     for (const q of t.questions || []) {
       const text = q.text.toLowerCase()
-      if (text.includes("time") && text.includes("save")) {
+      // Match questions about time/hours saved: "time...save", "hours...save", "save...time", "save...hours"
+      const hasTimeSave = (text.includes("time") || text.includes("hours")) && text.includes("save")
+      if (hasTimeSave) {
         ids.push(q.id)
       }
     }
@@ -970,13 +972,15 @@ export async function findTimeSavingQuestionIds(): Promise<string[]> {
 }
 
 // ── Helper: Find confidence question ID from templates ────────────────
-// Question containing "confidence" AND "roi"
+// Question containing "confidence" (with optional "roi" or "ai")
 export async function findConfidenceQuestionId(): Promise<string | null> {
   const templates = await fetchTemplates()
   for (const t of templates) {
     for (const q of t.questions || []) {
       const text = q.text.toLowerCase()
-      if (text.includes("confidence") && text.includes("roi")) {
+      // Match confidence questions: "confidence...roi", "confidence...ai", or general confidence scale
+      const isConfidence = text.includes("confidence") && (text.includes("roi") || text.includes("ai") || q.type === "scale")
+      if (isConfidence) {
         return q.id
       }
     }
@@ -1137,14 +1141,20 @@ export function computeOrgHoursMetrics(
   
   // Convert to hours
   const totalHours = totalMinutes / 60
-  const monthlyHours = thisMonthMinutes / 60
-  const lastMonthHours = lastMonthMinutes / 60
+  const thisMonthHoursRaw = thisMonthMinutes / 60
+  const lastMonthHoursRaw = lastMonthMinutes / 60
   
-  // MoM change
-  const monthOverMonthChange = monthlyHours - lastMonthHours
-  const monthOverMonthPercent = lastMonthHours > 0
-    ? ((monthlyHours - lastMonthHours) / lastMonthHours) * 100
-    : monthlyHours > 0 ? 100 : 0
+  // If no data this month, use last month as "current" for display purposes
+  // This prevents showing all zeros at the start of a new month
+  const hasThisMonthData = thisMonthMinutes > 0
+  const monthlyHours = hasThisMonthData ? thisMonthHoursRaw : lastMonthHoursRaw
+  const lastMonthHours = hasThisMonthData ? lastMonthHoursRaw : 0 // No comparison if showing last month
+  
+  // MoM change (only meaningful if we have this month's data)
+  const monthOverMonthChange = hasThisMonthData ? (monthlyHours - lastMonthHoursRaw) : 0
+  const monthOverMonthPercent = hasThisMonthData && lastMonthHoursRaw > 0
+    ? ((monthlyHours - lastMonthHoursRaw) / lastMonthHoursRaw) * 100
+    : 0
   
   // Active participants
   const activeParticipants = thisMonthUsers.size
