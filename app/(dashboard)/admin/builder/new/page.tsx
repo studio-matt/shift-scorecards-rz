@@ -520,38 +520,116 @@ export default function NewScorecardBuilderPage() {
                     </div>
                   )}
                 </div>
-                <div className="mt-3 flex gap-2">
-                  <Input
-                    placeholder="Add a new question..."
-                    value={newQuestionText}
-                    onChange={(e) => setNewQuestionText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault()
-                        addQuestion()
-                      }
-                    }}
-                    className="flex-1"
-                  />
-                  <Select
-                    value={newQuestionType}
-                    onValueChange={(val) =>
-                      setNewQuestionType(val as "scale" | "number" | "text")
-                    }
-                  >
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="scale">Scale: 1-10</SelectItem>
-                      <SelectItem value="number">Number</SelectItem>
-                      <SelectItem value="text">Text</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button variant="outline" onClick={addQuestion}>
-                    <Plus className="mr-1 h-4 w-4" />
-                    Add
-                  </Button>
+                <div className="mt-3 flex flex-col gap-3">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Add a new question..."
+                      value={newQuestionText}
+                      onChange={(e) => setNewQuestionText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newQuestionType !== "multichoice") {
+                          e.preventDefault()
+                          addQuestion()
+                        }
+                      }}
+                      className="flex-1"
+                    />
+                    <Select
+                      value={newQuestionType}
+                      onValueChange={(val) => {
+                        setNewQuestionType(val as "scale" | "number" | "text" | "multichoice")
+                        if (val !== "multichoice") {
+                          setNewMultichoiceOptions([])
+                          setShowBulkOptions(false)
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-36">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="scale">Scale: 1-10</SelectItem>
+                        <SelectItem value="number">Number</SelectItem>
+                        <SelectItem value="text">Text</SelectItem>
+                        <SelectItem value="multichoice">Multi Choice</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button variant="outline" onClick={addQuestion}>
+                      <Plus className="mr-1 h-4 w-4" />
+                      Add
+                    </Button>
+                  </div>
+                  
+                  {/* Multichoice options builder */}
+                  {newQuestionType === "multichoice" && (
+                    <div className="ml-4 rounded-lg border border-border/50 bg-muted/30 p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-medium text-muted-foreground">Options (A, B, C, ...)</p>
+                        <button
+                          type="button"
+                          onClick={() => setShowBulkOptions(!showBulkOptions)}
+                          className="text-xs text-primary hover:underline"
+                        >
+                          {showBulkOptions ? "Single entry" : "Add Multiple Options"}
+                        </button>
+                      </div>
+                      
+                      {showBulkOptions ? (
+                        <div className="flex flex-col gap-2">
+                          <Textarea
+                            placeholder="Enter each option on a new line&#10;Option A&#10;Option B&#10;Option C"
+                            value={bulkOptionsText}
+                            onChange={(e) => setBulkOptionsText(e.target.value)}
+                            className="min-h-[100px] text-sm"
+                          />
+                          <Button 
+                            variant="secondary" 
+                            size="sm" 
+                            onClick={parseBulkOptions}
+                            className="self-end"
+                          >
+                            Apply Options
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-1.5">
+                          {newMultichoiceOptions.map((opt, idx) => (
+                            <div key={idx} className="flex items-center gap-2">
+                              <span className="w-6 text-xs font-semibold text-primary">
+                                {String.fromCharCode(65 + idx)}.
+                              </span>
+                              <Input
+                                value={opt}
+                                onChange={(e) => {
+                                  const updated = [...newMultichoiceOptions]
+                                  updated[idx] = e.target.value
+                                  setNewMultichoiceOptions(updated)
+                                }}
+                                placeholder={`Option ${String.fromCharCode(65 + idx)}`}
+                                className="flex-1 h-8 text-sm"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setNewMultichoiceOptions(prev => prev.filter((_, i) => i !== idx))
+                                }}
+                                className="text-muted-foreground hover:text-destructive"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => setNewMultichoiceOptions(prev => [...prev, ""])}
+                            className="flex items-center gap-1 text-xs text-primary hover:underline mt-1"
+                          >
+                            <Plus className="h-3 w-3" /> Add Option
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </CardContent>

@@ -102,7 +102,7 @@ export async function computeAdminStats(
   }
 }
 
-// ── Weekly trend (aggregate avg score by weekOf) ──────────────────────
+// ── Weekly trend (aggregate hours saved by weekOf) ──────────────────────
 export function computeWeeklyTrend(responses: RawResponse[]): WeeklyTrend[] {
   const weekMap = new Map<string, { total: number; count: number; date: string }>()
 
@@ -794,7 +794,7 @@ export function computeAlerts(responses: RawResponse[], deptPerf: DepartmentPerf
   return alerts.sort((a, b) => (a.severity === "critical" ? -1 : 1) - (b.severity === "critical" ? -1 : 1))
 }
 
-// ═══════════════════════════════════════════════════���══════════════════
+// ═══════════════════════════════════════════════════����══════════════════
 // USER-SPECIFIC METRICS (privacy-safe: only their data + anonymized avgs)
 // ══════════════════════════════════════════════════════════════════════
 
