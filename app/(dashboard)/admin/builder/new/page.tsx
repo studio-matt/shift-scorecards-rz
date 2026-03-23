@@ -301,7 +301,12 @@ export default function NewScorecardBuilderPage() {
   }
 
   async function saveTemplate(saveStatus: "active" | "draft") {
-    if (!scorecardName.trim()) return
+    console.log("[v0] saveTemplate called with status:", saveStatus)
+    console.log("[v0] scorecardName:", scorecardName, "trimmed:", scorecardName.trim())
+    if (!scorecardName.trim()) {
+      console.log("[v0] Exiting early - no scorecard name")
+      return
+    }
     setSaving(true)
     try {
       // Auto-bump version if questions changed

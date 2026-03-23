@@ -192,7 +192,31 @@ export function HoursTrendChart({ data }: HoursTrendChartProps) {
   const deltaPercent = earliestHours > 0 ? ((delta / earliestHours) * 100) : 0
 
   // Format helpers
-  const formatHours = (hrs: number) => hrs >= 1000 ? `${(hrs / 1000).toFixed(1)}K` : hrs.toFixed(0)
+  const formatHours = (hrs: number) => hrs >= 1000 ? `${(hrs / 1000).toFixed(1)}K` : Math.round(hrs).toString()
+  
+  // Format week labels consistently (e.g., "Week 10" instead of "W10" or dates)
+  const formatWeekLabel = (week: string) => {
+    // If already formatted like "W10" or "Week 10", normalize to "Week X"
+    const weekMatch = week.match(/^W?(\d+)$/i)
+    if (weekMatch) {
+      return `Week ${weekMatch[1]}`
+    }
+    // If it's a date string, try to get week number
+    if (week.includes("-") || week.includes("/")) {
+      const date = new Date(week)
+      if (!isNaN(date.getTime())) {
+        const weekNum = Math.ceil((date.getTime() - new Date(date.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))
+        return `Week ${weekNum}`
+      }
+    }
+    return week
+  }
+  
+  // Transform data to use formatted week labels
+  const chartData = data.map(d => ({
+    ...d,
+    weekLabel: formatWeekLabel(d.week),
+  }))
 
   return (
     <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
@@ -216,17 +240,18 @@ export function HoursTrendChart({ data }: HoursTrendChartProps) {
       <CardContent className="relative">
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data}>
+            <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis
-                dataKey="week"
+                dataKey="weekLabel"
                 tick={{ fontSize: 11 }}
                 className="fill-muted-foreground"
               />
               <YAxis
                 tick={{ fontSize: 12 }}
                 className="fill-muted-foreground"
-                tickFormatter={(val) => formatHours(val)}
+                tickFormatter={(val) => `${Math.round(val)}`}
+                allowDecimals={false}
               />
               <Tooltip
                 contentStyle={{
@@ -235,7 +260,8 @@ export function HoursTrendChart({ data }: HoursTrendChartProps) {
                   borderRadius: "8px",
                   color: "hsl(var(--foreground))",
                 }}
-                formatter={(value: number) => [`${formatHours(value)} hrs`, "Hours Saved"]}
+                formatter={(value: number) => [`${Math.round(value)} hrs`, "Hours Saved"]}
+                labelFormatter={(label) => label}
               />
               <Legend
                 verticalAlign="bottom"
