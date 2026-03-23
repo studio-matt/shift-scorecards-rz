@@ -670,10 +670,10 @@ export default function NewScorecardBuilderPage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base font-semibold">
-                    Score-Based Progress Markers
+                    Hours-Based Progress Markers
                   </CardTitle>
                   <p className="text-xs text-muted-foreground">
-                    Messages shown based on the user{"'"}s average score (1-10 scale). Overrides global rules for this template.
+                    Messages shown based on the user{"'"}s hours saved. Overrides global rules for this template.
                   </p>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3">
@@ -884,7 +884,7 @@ export default function NewScorecardBuilderPage() {
                 </div>
                 <div className="flex flex-col items-center gap-1 rounded-lg border border-border p-3">
                   <p className="text-2xl font-bold text-foreground">--</p>
-                  <p className="text-xs text-muted-foreground">Avg Score</p>
+                  <p className="text-xs text-muted-foreground">Hrs Saved</p>
                 </div>
                 <div className="flex flex-col items-center gap-1 rounded-lg border border-border p-3">
                   <p className="text-2xl font-bold text-foreground">--</p>

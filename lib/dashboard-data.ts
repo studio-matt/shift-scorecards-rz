@@ -799,10 +799,10 @@ export interface ThresholdAlert {
 export function computeAlerts(responses: RawResponse[], deptPerf: DepartmentPerformance[], velocities: ScoreVelocity[]): ThresholdAlert[] {
   const alerts: ThresholdAlert[] = []
   for (const d of deptPerf) {
-    if (d.avgScore < 5.0) alerts.push({ type: "low_score", severity: d.avgScore < 4.0 ? "critical" : "warning", entity: d.department, entityType: "department", message: `${d.department} avg score is ${d.avgScore}/10`, value: d.avgScore })
+    if (d.avgScore < 5.0) alerts.push({ type: "low_score", severity: d.avgScore < 4.0 ? "critical" : "warning", entity: d.department, entityType: "department", message: `${d.department} hours saved is ${d.avgScore} hrs`, value: d.avgScore })
   }
   for (const v of velocities) {
-    if (v.velocity < -0.3) alerts.push({ type: "declining", severity: v.velocity < -0.6 ? "critical" : "warning", entity: v.name, entityType: "user", message: `${v.name} scores declining at ${v.velocity}/week`, value: v.velocity })
+    if (v.velocity < -0.3) alerts.push({ type: "declining", severity: v.velocity < -0.6 ? "critical" : "warning", entity: v.name, entityType: "user", message: `${v.name} hours declining at ${v.velocity}/week`, value: v.velocity })
   }
   return alerts.sort((a, b) => (a.severity === "critical" ? -1 : 1) - (b.severity === "critical" ? -1 : 1))
 }
