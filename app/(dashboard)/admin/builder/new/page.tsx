@@ -506,13 +506,36 @@ export default function NewScorecardBuilderPage() {
                               </button>
                             </div>
                           ))}
-                          <button
-                            type="button"
-                            onClick={() => addOptionToQuestion(q.id)}
-                            className="flex items-center gap-1 text-xs text-primary hover:underline mt-1"
-                          >
-                            <Plus className="h-3 w-3" /> Add Option
-                          </button>
+                          <div className="flex items-center gap-3 mt-1">
+                            <button
+                              type="button"
+                              onClick={() => addOptionToQuestion(q.id)}
+                              className="flex items-center gap-1 text-xs text-primary hover:underline"
+                            >
+                              <Plus className="h-3 w-3" /> Add Option
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const text = prompt("Enter each option on a new line:")
+                                if (text) {
+                                  const lines = text.split("\n").filter(l => l.trim())
+                                  setQuestions(prev => prev.map(question => {
+                                    if (question.id !== q.id) return question
+                                    const currentOptions = question.options || []
+                                    const newOptions = lines.map((line, i) => ({
+                                      label: String.fromCharCode(65 + currentOptions.length + i),
+                                      value: line.trim(),
+                                    }))
+                                    return { ...question, options: [...currentOptions, ...newOptions] }
+                                  }))
+                                }
+                              }}
+                              className="flex items-center gap-1 text-xs text-primary hover:underline"
+                            >
+                              <Plus className="h-3 w-3" /> Add Multiple Options
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
