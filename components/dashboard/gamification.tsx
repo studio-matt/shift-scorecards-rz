@@ -375,14 +375,14 @@ export function CohortNudgeCard({
 
 // ── Monthly Insight Reveal ─────────────────────────────────────────────
 const INSIGHTS = [
-  "People who score high on Meeting Efficiency also save 40% more time on Document Review.",
+  "People who save the most time on emails also save 40% more time on Document Review.",
   "Users who complete scorecards consistently show 2x faster improvement than sporadic users.",
-  "The highest scorers in Communication also lead in Creative Problem Solving.",
-  "Early adopters (first 3 months) who hit 7+ average maintain that level 85% of the time.",
-  "Teams with 80%+ participation have 35% higher average scores than those below 50%.",
-  "Research & Analysis skills correlate strongly with Data & Reporting improvements.",
+  "Top performers in Meeting Prep also lead in Research & Analysis efficiency.",
+  "Early adopters (first 3 months) who save 7+ hours maintain that level 85% of the time.",
+  "Teams with 80%+ participation have 35% higher hours saved than those below 50%.",
+  "Research & Analysis efficiency correlates strongly with Document Preparation improvements.",
   "Users who engage with Prompt Packs improve 1.5x faster than those who don't.",
-  "Morning scorecard completers score 8% higher on average than evening completers.",
+  "Morning scorecard completers save 8% more hours on average than evening completers.",
 ]
 
 export function MonthlyInsightCard({ 

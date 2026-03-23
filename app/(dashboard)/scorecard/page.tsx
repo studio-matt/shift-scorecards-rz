@@ -423,6 +423,31 @@ export default function ScorecardPage() {
                               rows={3}
                             />
                           )}
+                          {q.type === "multichoice" && q.options && (
+                            <div className="flex flex-col gap-2">
+                              {q.options.map((opt) => (
+                                <button
+                                  key={opt.label}
+                                  type="button"
+                                  onClick={() => handleAnswer(q.id, opt.label)}
+                                  className={`flex items-center gap-3 rounded-lg border p-3 text-left transition-all ${
+                                    answers[q.id] === opt.label
+                                      ? "border-primary bg-primary/10 ring-1 ring-primary"
+                                      : "border-border hover:border-primary/50 hover:bg-muted/50"
+                                  }`}
+                                >
+                                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-sm font-semibold ${
+                                    answers[q.id] === opt.label
+                                      ? "border-primary bg-primary text-primary-foreground"
+                                      : "border-muted-foreground/30 text-muted-foreground"
+                                  }`}>
+                                    {opt.label}
+                                  </span>
+                                  <span className="text-sm">{opt.value || `Option ${opt.label}`}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
                           {index < totalQuestions - 1 && (
                             <Button
                               size="sm"

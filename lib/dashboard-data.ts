@@ -102,7 +102,7 @@ export async function computeAdminStats(
   }
 }
 
-// ── Weekly trend (aggregate avg score by weekOf) ──────────────────────
+// ── Weekly trend (aggregate hours saved by weekOf) ──────────────────────
 export function computeWeeklyTrend(responses: RawResponse[]): WeeklyTrend[] {
   const weekMap = new Map<string, { total: number; count: number; date: string }>()
 
@@ -707,6 +707,16 @@ export interface FieldReportData {
 export async function computeFieldReport(responses: RawResponse[]): Promise<FieldReportData> {
   const orgs = await getOrganizations()
   const allUsers = await getDocuments(COLLECTIONS.USERS)
+  const templates = await fetchTemplates()
+  
+  // Build question ID -> question text map
+  const questionTextMap = new Map<string, string>()
+  for (const t of templates) {
+    for (const q of t.questions || []) {
+      questionTextMap.set(q.id, q.text)
+    }
+  }
+  
   // Exclude non-participant accounts
   const excludedIds = new Set(allUsers.filter((u) => (u as Record<string, unknown>).excludeFromReporting === true).map((u) => u.id))
   const users = allUsers.filter((u) => !excludedIds.has(u.id))
@@ -735,9 +745,12 @@ export async function computeFieldReport(responses: RawResponse[]): Promise<Fiel
 
   const overallAvg = totalCount > 0 ? Math.round((totalScore / totalCount) * 10) / 10 : 0
 
-  // Question ranking
+  // Question ranking - look up actual question text from templates
   const ranked = Array.from(questionScores.entries())
-    .map(([q, { total, count }]) => ({ question: q, avgScore: Math.round((total / count) * 10) / 10 }))
+    .map(([q, { total, count }]) => ({
+      question: questionTextMap.get(q) || q, // Use question text, fallback to ID if not found
+      avgScore: Math.round((total / count) * 10) / 10,
+    }))
     .sort((a, b) => b.avgScore - a.avgScore)
 
   // Response rate
@@ -794,7 +807,7 @@ export function computeAlerts(responses: RawResponse[], deptPerf: DepartmentPerf
   return alerts.sort((a, b) => (a.severity === "critical" ? -1 : 1) - (b.severity === "critical" ? -1 : 1))
 }
 
-// ═══════════════════════════════════════════════════���══════════════════
+// ═══════════════════════════════════════════════════����══════════════════
 // USER-SPECIFIC METRICS (privacy-safe: only their data + anonymized avgs)
 // ══════════════════════════════════════════════════════════════════════
 

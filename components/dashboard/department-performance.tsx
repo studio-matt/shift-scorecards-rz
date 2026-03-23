@@ -97,7 +97,7 @@ export function DepartmentPerformanceChart({ data, fieldAverage = 6.2 }: Departm
                 dataKey="avgScore"
                 fill={accentColor}
                 radius={[4, 4, 0, 0]}
-                name="Avg Score"
+                name="Hrs Saved"
               />
             </BarChart>
           </ResponsiveContainer>
