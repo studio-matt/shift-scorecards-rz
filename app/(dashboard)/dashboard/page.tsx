@@ -239,19 +239,10 @@ export default function DashboardPage() {
         findConfidenceQuestionId(),
       ])
       
-      console.log("[v0] confidenceId found:", confidenceId)
-      console.log("[v0] timeSavingIds found:", timeSavingIds)
-      console.log("[v0] responses count:", responses.length)
-      if (responses.length > 0 && confidenceId) {
-        console.log("[v0] Sample response answers:", responses[0]?.answers)
-        console.log("[v0] Confidence value in first response:", responses[0]?.answers?.[confidenceId])
-      }
-      
       // For admin: compute org hours based on current filter
       const selectedOrgDoc = orgDocs.find((o) => o.id === selectedOrg) as unknown as Organization | undefined
       const adminHourlyRate = selectedOrgDoc?.hourlyRate ?? 100
       const adminOrgHours = computeOrgHoursMetrics(responses, timeSavingIds, confidenceId, adminHourlyRate)
-      console.log("[v0] adminOrgHours computed:", adminOrgHours)
       setOrgHoursMetrics(adminOrgHours)
       
       // Compute weekly hours trend for chart
