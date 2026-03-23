@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle2, Loader2, AlertTriangle } from "lucide-react"
-import { createDocument, COLLECTIONS } from "@/lib/firebase"
+import { createDocument, COLLECTIONS } from "@/lib/firestore"
 
 const SHIFT_TEMPLATE = {
   name: "SHIFT REAL SCORECARD",
