@@ -36,6 +36,7 @@ interface AuthContextType {
   isAdmin: boolean // true for both admin and company_admin (has admin-level access)
   isSuperAdmin: boolean // true only for global admin
   isCompanyAdmin: boolean // true only for company_admin (org-scoped)
+  isActuallySuperAdmin: boolean // true if the user's real DB role is admin (not affected by switchRole)
   login: (email: string, password: string) => Promise<void>
   signup: (email: string, password: string, name: string, company?: string, department?: string) => Promise<void>
   loginWithProvider: (provider: "google" | "microsoft") => Promise<void>
@@ -99,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null)
   const [ready, setReady] = useState(false)
+  const [originalRole, setOriginalRole] = useState<UserRole | null>(null) // Track the real DB role
 
   // Listen to Firebase Auth state changes
   useEffect(() => {
@@ -108,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const profile = await resolveUserProfile(fbUser)
           setUser(profile)
+          setOriginalRole(profile.role) // Store the real role from DB
         } catch (err) {
           console.error("Failed to resolve user profile:", err)
           setUser(null)
@@ -115,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setFirebaseUser(null)
         setUser(null)
+        setOriginalRole(null)
       }
       setReady(true)
     })
@@ -160,6 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isSuperAdmin = user?.role === "admin"
   const isCompanyAdmin = user?.role === "company_admin"
   const isAdmin = isSuperAdmin || isCompanyAdmin // Either role gets admin-level access
+  const isActuallySuperAdmin = originalRole === "admin" // Real DB role, unaffected by switchRole
 
   return (
     <AuthContext.Provider
@@ -170,6 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAdmin,
         isSuperAdmin,
         isCompanyAdmin,
+        isActuallySuperAdmin,
         login,
         signup,
         loginWithProvider,
