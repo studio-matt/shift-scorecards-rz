@@ -45,22 +45,22 @@ export function StatCards({
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {/* Average Score */}
+      {/* Hours Saved */}
       <Card className="relative min-h-[120px] overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent" />
         <CardContent className="relative flex h-full items-start gap-4 p-5">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 ring-1 ring-primary/20">
-            <TrendingUp className="h-5 w-5 text-primary" />
+            <Clock className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <p className="text-sm font-medium leading-snug text-muted-foreground">Average Score</p>
-            <p className="text-2xl font-bold text-foreground">{avgScore.toFixed(1)}</p>
+            <p className="text-sm font-medium leading-snug text-muted-foreground">Hours Saved</p>
+            <p className="text-2xl font-bold text-foreground">{avgScore.toFixed(1)}<span className="text-sm text-muted-foreground"> hrs</span></p>
             <div className="mt-1 flex flex-col gap-0.5">
               <p className={`text-[11px] ${scoreDiff >= 0 ? "text-emerald-400" : "text-amber-400"}`}>
                 {scoreDiff >= 0 ? "+" : ""}{scoreDiff.toFixed(1)} vs last month
               </p>
               <p className={`text-[11px] ${vsField >= 0 ? "text-emerald-400" : "text-amber-400"}`}>
-                {vsField >= 0 ? "+" : ""}{vsField.toFixed(1)} vs field ({fieldAverage.toFixed(1)})
+                {vsField >= 0 ? "+" : ""}{vsField.toFixed(1)} vs field avg ({fieldAverage.toFixed(1)})
               </p>
               <p className={`text-[11px] ${vsGoal >= 0 ? "text-emerald-400" : "text-amber-400"}`}>
                 {vsGoal >= 0 ? "+" : ""}{vsGoal.toFixed(1)} vs goal ({myGoal.toFixed(1)})

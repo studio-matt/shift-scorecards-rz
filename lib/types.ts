@@ -46,9 +46,10 @@ export interface Organization {
 export interface ScorecardQuestion {
   id: string
   text: string
-  type: "scale" | "number" | "text"
+  type: "scale" | "number" | "text" | "multichoice"
   scaleMin?: number
   scaleMax?: number
+  options?: { label: string; value: string }[] // For multichoice questions (A, B, C, etc.)
   order: number
 }
 
@@ -202,14 +203,14 @@ export const EMAIL_PLACEHOLDERS = {
     { key: "{{firstName}}", description: "Recipient's first name" },
     { key: "{{scorecardName}}", description: "Name of the scorecard template" },
     { key: "{{dashboardLink}}", description: "Link to their dashboard" },
-    { key: "{{score}}", description: "Their average score" },
+    { key: "{{score}}", description: "Their hours saved this period" },
     { key: "{{organizationName}}", description: "Organization name" },
   ],
   weekly_digest: [
     { key: "{{userName}}", description: "Recipient's full name" },
     { key: "{{firstName}}", description: "Recipient's first name" },
     { key: "{{dashboardLink}}", description: "Link to their dashboard" },
-    { key: "{{weeklyScore}}", description: "Their weekly average score" },
+    { key: "{{weeklyScore}}", description: "Their weekly hours saved" },
     { key: "{{percentileRank}}", description: "Their percentile ranking" },
     { key: "{{streak}}", description: "Current completion streak" },
     { key: "{{organizationName}}", description: "Organization name" },

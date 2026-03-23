@@ -559,7 +559,7 @@ export function OrgBenchmarkCard({ data }: { data: OrgBenchmark[] }) {
                 <div className="mt-2 flex items-end gap-3">
                   <div>
                     <p className="text-2xl font-bold text-primary">{o.avgScore}</p>
-                    <p className="text-[10px] text-muted-foreground">avg score</p>
+                    <p className="text-[10px] text-muted-foreground">hrs saved</p>
                   </div>
                   <div>
                     <p className="text-lg font-semibold text-foreground">{o.responseRate}%</p>
@@ -590,7 +590,7 @@ export function FieldReportCard({ data }: { data: FieldReportData | null }) {
       `Period: ${data.periodLabel}`,
       ``,
       `OVERVIEW`,
-      `Across ${data.totalOrganizations} organizations and ${data.totalEmployees.toLocaleString()} employees, the overall average score was ${data.overallAvgScore}/10 with a ${data.avgResponseRate}% response rate. Total responses: ${data.totalResponses.toLocaleString()}.`,
+      `Across ${data.totalOrganizations} organizations and ${data.totalEmployees.toLocaleString()} employees, the overall hours saved was ${data.overallAvgScore} with a ${data.avgResponseRate}% response rate. Total responses: ${data.totalResponses.toLocaleString()}.`,
       ``,
       `TOP SCORING CATEGORIES`,
       ...data.topCategories.map((c, i) => `  ${i + 1}. ${c.question} -- ${c.avgScore}/10`),
@@ -633,8 +633,8 @@ export function FieldReportCard({ data }: { data: FieldReportData | null }) {
           <p className="text-sm leading-relaxed text-foreground">
             Across <span className="font-bold">{data.totalOrganizations} organizations</span> and{" "}
             <span className="font-bold">{data.totalEmployees.toLocaleString()} employees</span>,
-            the overall average score was{" "}
-            <span className="font-bold text-primary">{data.overallAvgScore}/10</span> with a{" "}
+            the overall hours saved was{" "}
+            <span className="font-bold text-primary">{data.overallAvgScore} hrs</span> with a{" "}
             <span className="font-bold">{data.avgResponseRate}%</span> response rate.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">

@@ -337,7 +337,7 @@ export function TopPerformers({ showCompany = false, data }: TopPerformersProps)
                   <p className="text-sm font-bold text-foreground">
                     {performer.avgScore}
                   </p>
-                  <p className="text-xs text-muted-foreground">Avg Score</p>
+                  <p className="text-xs text-muted-foreground">Hrs Saved</p>
                 </div>
                 <Badge variant="secondary" className="shrink-0 text-xs">
                   {performer.streak} wk streak

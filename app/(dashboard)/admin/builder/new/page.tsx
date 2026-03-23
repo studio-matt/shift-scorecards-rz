@@ -53,7 +53,8 @@ import {
 interface BuilderQuestion {
   id: string
   text: string
-  type: "scale" | "number" | "text"
+  type: "scale" | "number" | "text" | "multichoice"
+  options?: { label: string; value: string }[] // For multichoice (A, B, C, etc.)
 }
 
 interface ScoreInsightRule {
@@ -108,7 +109,10 @@ export default function NewScorecardBuilderPage() {
   const [status, setStatus] = useState<"active" | "draft">("draft")
   const [questions, setQuestions] = useState<BuilderQuestion[]>([])
   const [newQuestionText, setNewQuestionText] = useState("")
-  const [newQuestionType, setNewQuestionType] = useState<"scale" | "number" | "text">("scale")
+  const [newQuestionType, setNewQuestionType] = useState<"scale" | "number" | "text" | "multichoice">("scale")
+  const [newMultichoiceOptions, setNewMultichoiceOptions] = useState<string[]>([])
+  const [bulkOptionsText, setBulkOptionsText] = useState("")
+  const [showBulkOptions, setShowBulkOptions] = useState(false)
   const [version, setVersion] = useState("V1.0")
   const [originalQuestionHash, setOriginalQuestionHash] = useState("")
 
@@ -143,6 +147,7 @@ export default function NewScorecardBuilderPage() {
             id: q.id || `bq-${i}`,
             text: q.text ?? "",
             type: q.type ?? "scale",
+            options: q.options ?? undefined,
           })),
         )
         if (d.version) setVersion(d.version as string)
@@ -165,17 +170,93 @@ export default function NewScorecardBuilderPage() {
 
   // ---------- Question helpers ----------
 
+  // Helper to generate letter labels (A, B, C, ...)
+  function getLetterLabel(index: number): string {
+    return String.fromCharCode(65 + index) // 65 is 'A'
+  }
+
   function addQuestion() {
     if (!newQuestionText.trim()) return
+    
+    // For multichoice, generate options with letter labels
+    let options: { label: string; value: string }[] | undefined
+    if (newQuestionType === "multichoice") {
+      const optionTexts = newMultichoiceOptions.filter(o => o.trim())
+      if (optionTexts.length === 0) {
+        // Default to 4 empty options if none provided
+        options = [
+          { label: "A", value: "" },
+          { label: "B", value: "" },
+          { label: "C", value: "" },
+          { label: "D", value: "" },
+        ]
+      } else {
+        options = optionTexts.map((text, i) => ({
+          label: getLetterLabel(i),
+          value: text.trim(),
+        }))
+      }
+    }
+    
     setQuestions((prev) => [
       ...prev,
       {
         id: `bq-${Date.now()}`,
         text: newQuestionText,
         type: newQuestionType,
+        options,
       },
     ])
     setNewQuestionText("")
+    setNewMultichoiceOptions([])
+    setBulkOptionsText("")
+    setShowBulkOptions(false)
+  }
+
+  function addOptionToQuestion(questionId: string) {
+    setQuestions((prev) =>
+      prev.map((q) => {
+        if (q.id !== questionId || q.type !== "multichoice") return q
+        const currentOptions = q.options || []
+        const nextLabel = getLetterLabel(currentOptions.length)
+        return {
+          ...q,
+          options: [...currentOptions, { label: nextLabel, value: "" }],
+        }
+      })
+    )
+  }
+
+  function updateOption(questionId: string, optionIndex: number, value: string) {
+    setQuestions((prev) =>
+      prev.map((q) => {
+        if (q.id !== questionId || !q.options) return q
+        const newOptions = [...q.options]
+        newOptions[optionIndex] = { ...newOptions[optionIndex], value }
+        return { ...q, options: newOptions }
+      })
+    )
+  }
+
+  function removeOption(questionId: string, optionIndex: number) {
+    setQuestions((prev) =>
+      prev.map((q) => {
+        if (q.id !== questionId || !q.options) return q
+        const newOptions = q.options.filter((_, i) => i !== optionIndex)
+        // Re-label remaining options
+        const relabeledOptions = newOptions.map((opt, i) => ({
+          ...opt,
+          label: getLetterLabel(i),
+        }))
+        return { ...q, options: relabeledOptions }
+      })
+    )
+  }
+
+  function parseBulkOptions() {
+    const lines = bulkOptionsText.split("\n").filter(l => l.trim())
+    setNewMultichoiceOptions(lines)
+    setShowBulkOptions(false)
   }
 
   function removeQuestion(id: string) {
@@ -186,8 +267,29 @@ export default function NewScorecardBuilderPage() {
     setQuestions((prev) => prev.map((q) => (q.id === id ? { ...q, text } : q)))
   }
 
-  function updateQuestionType(id: string, type: "scale" | "number" | "text") {
-    setQuestions((prev) => prev.map((q) => (q.id === id ? { ...q, type } : q)))
+  function updateQuestionType(id: string, type: "scale" | "number" | "text" | "multichoice") {
+    setQuestions((prev) => prev.map((q) => {
+      if (q.id !== id) return q
+      // If changing to multichoice, initialize options
+      if (type === "multichoice" && !q.options) {
+        return {
+          ...q,
+          type,
+          options: [
+            { label: "A", value: "" },
+            { label: "B", value: "" },
+            { label: "C", value: "" },
+            { label: "D", value: "" },
+          ],
+        }
+      }
+      // If changing away from multichoice, remove options
+      if (type !== "multichoice") {
+        const { options: _, ...rest } = q
+        return { ...rest, type }
+      }
+      return { ...q, type }
+    }))
   }
 
   // ---------- Save helpers ----------
@@ -330,7 +432,7 @@ export default function NewScorecardBuilderPage() {
                   <Label>Questions ({questions.length})</Label>
                   {questions.length > 0 && (
                     <span className="text-[11px] text-muted-foreground">
-                      {questions.filter((q) => q.type === "scale").length} scale, {questions.filter((q) => q.type === "number").length} numeric, {questions.filter((q) => q.type === "text").length} text
+                      {questions.filter((q) => q.type === "scale").length} scale, {questions.filter((q) => q.type === "number").length} numeric, {questions.filter((q) => q.type === "text").length} text, {questions.filter((q) => q.type === "multichoice").length} multi-choice
                     </span>
                   )}
                 </div>
@@ -339,40 +441,74 @@ export default function NewScorecardBuilderPage() {
                   {questions.map((q, idx) => (
                     <div
                       key={q.id}
-                      className="flex items-center gap-3 rounded-lg border border-border bg-card p-3"
+                      className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3"
                     >
-                      <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground" />
-                      <span className="w-5 shrink-0 text-xs font-medium text-muted-foreground">
-                        {idx + 1}.
-                      </span>
-                      <Input
-                        value={q.text}
-                        onChange={(e) => updateQuestionText(q.id, e.target.value)}
-                        className="flex-1 border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
-                      />
-                      <Select
-                        value={q.type}
-                        onValueChange={(val) =>
-                          updateQuestionType(q.id, val as "scale" | "number" | "text")
-                        }
-                      >
-                        <SelectTrigger className="w-32">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="scale">Scale: 1-10</SelectItem>
-                          <SelectItem value="number">Number</SelectItem>
-                          <SelectItem value="text">Text</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <button
-                        type="button"
-                        onClick={() => removeQuestion(q.id)}
-                        className="text-muted-foreground hover:text-destructive"
-                        aria-label={`Remove question: ${q.text}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground" />
+                        <span className="w-5 shrink-0 text-xs font-medium text-muted-foreground">
+                          {idx + 1}.
+                        </span>
+                        <Input
+                          value={q.text}
+                          onChange={(e) => updateQuestionText(q.id, e.target.value)}
+                          className="flex-1 border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+                        />
+                        <Select
+                          value={q.type}
+                          onValueChange={(val) =>
+                            updateQuestionType(q.id, val as "scale" | "number" | "text" | "multichoice")
+                          }
+                        >
+                          <SelectTrigger className="w-36">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="scale">Scale: 1-10</SelectItem>
+                            <SelectItem value="number">Number</SelectItem>
+                            <SelectItem value="text">Text</SelectItem>
+                            <SelectItem value="multichoice">Multi Choice</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <button
+                          type="button"
+                          onClick={() => removeQuestion(q.id)}
+                          className="text-muted-foreground hover:text-destructive"
+                          aria-label={`Remove question: ${q.text}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                      {/* Multichoice options editor */}
+                      {q.type === "multichoice" && q.options && (
+                        <div className="ml-9 flex flex-col gap-1.5 pl-3 border-l-2 border-border/50">
+                          {q.options.map((opt, optIdx) => (
+                            <div key={opt.label} className="flex items-center gap-2">
+                              <span className="w-6 text-xs font-semibold text-primary">{opt.label}.</span>
+                              <Input
+                                value={opt.value}
+                                onChange={(e) => updateOption(q.id, optIdx, e.target.value)}
+                                placeholder={`Option ${opt.label}`}
+                                className="flex-1 h-8 text-sm"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeOption(q.id, optIdx)}
+                                className="text-muted-foreground hover:text-destructive"
+                                aria-label={`Remove option ${opt.label}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => addOptionToQuestion(q.id)}
+                            className="flex items-center gap-1 text-xs text-primary hover:underline mt-1"
+                          >
+                            <Plus className="h-3 w-3" /> Add Option
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
 

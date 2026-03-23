@@ -408,10 +408,10 @@ export default function TemplatesPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-semibold">
-                Score-Based Progress Markers
+                Hours-Based Progress Markers
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                Messages shown based on average score (1-10 scale).
+                Messages shown based on hours saved.
               </p>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
@@ -715,10 +715,10 @@ export default function TemplatesPage() {
 
         <Card>
           <CardContent className="grid grid-cols-1 gap-6 p-6 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Avg Score Target */}
+            {/* Hours Saved Target */}
             <div className="flex flex-col gap-1.5">
-              <Label className="text-sm font-medium">Avg Score Target</Label>
-              <p className="text-xs text-muted-foreground">Target for the average score KPI card and trend chart reference line (1-10 scale)</p>
+              <Label className="text-sm font-medium">Hours Saved Target</Label>
+              <p className="text-xs text-muted-foreground">Target for the hours saved KPI card and trend chart reference line</p>
               <Input
                 type="number"
                 min={1}
