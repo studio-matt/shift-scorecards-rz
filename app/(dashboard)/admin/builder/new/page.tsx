@@ -78,17 +78,27 @@ function BulkOptionsEditor({
   onUpdateOption,
   onRemoveOption,
   onAddOption,
-  onAddBulkOptions,
+  onSetAllOptions,
 }: {
   questionId: string
   options: { label: string; value: string }[]
   onUpdateOption: (qId: string, idx: number, value: string) => void
   onRemoveOption: (qId: string, idx: number) => void
   onAddOption: (qId: string) => void
-  onAddBulkOptions: (qId: string, values: string[]) => void
+  onSetAllOptions: (qId: string, values: string[]) => void
 }) {
   const [showBulk, setShowBulk] = useState(false)
   const [bulkText, setBulkText] = useState("")
+
+  // When switching to bulk mode, populate textarea with existing options
+  const handleShowBulk = () => {
+    if (!showBulk) {
+      // Populate with existing options (one per line)
+      const existingText = options.map(opt => opt.value).join("\n")
+      setBulkText(existingText)
+    }
+    setShowBulk(!showBulk)
+  }
 
   return (
     <>
@@ -96,7 +106,7 @@ function BulkOptionsEditor({
         <p className="text-xs font-medium text-muted-foreground">Options (A, B, C, ...)</p>
         <button
           type="button"
-          onClick={() => setShowBulk(!showBulk)}
+          onClick={handleShowBulk}
           className="text-xs text-primary hover:underline"
         >
           {showBulk ? "Single entry" : "Add Multiple Options"}
@@ -116,11 +126,10 @@ function BulkOptionsEditor({
             size="sm"
             onClick={() => {
               const lines = bulkText.split("\n").filter(l => l.trim())
-              if (lines.length > 0) {
-                onAddBulkOptions(questionId, lines.map(l => l.trim()))
-                setBulkText("")
-                setShowBulk(false)
-              }
+              // Replace all options with the new ones
+              onSetAllOptions(questionId, lines.map(l => l.trim()))
+              setBulkText("")
+              setShowBulk(false)
             }}
             className="self-end"
           >
@@ -129,25 +138,29 @@ function BulkOptionsEditor({
         </div>
       ) : (
         <div className="flex flex-col gap-1.5">
-          {options.map((opt, optIdx) => (
-            <div key={opt.label} className="flex items-center gap-2">
-              <span className="w-6 text-xs font-semibold text-primary">{opt.label}.</span>
-              <Input
-                value={opt.value}
-                onChange={(e) => onUpdateOption(questionId, optIdx, e.target.value)}
-                placeholder={`Option ${opt.label}`}
-                className="flex-1 h-8 text-sm"
-              />
-              <button
-                type="button"
-                onClick={() => onRemoveOption(questionId, optIdx)}
-                className="text-muted-foreground hover:text-destructive"
-                aria-label={`Remove option ${opt.label}`}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
+          {options.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">No options yet</p>
+          ) : (
+            options.map((opt, optIdx) => (
+              <div key={opt.label} className="flex items-center gap-2">
+                <span className="w-6 text-xs font-semibold text-primary">{opt.label}.</span>
+                <Input
+                  value={opt.value}
+                  onChange={(e) => onUpdateOption(questionId, optIdx, e.target.value)}
+                  placeholder={`Option ${opt.label}`}
+                  className="flex-1 h-8 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => onRemoveOption(questionId, optIdx)}
+                  className="text-muted-foreground hover:text-destructive"
+                  aria-label={`Remove option ${opt.label}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))
+          )}
           <button
             type="button"
             onClick={() => onAddOption(questionId)}
@@ -268,18 +281,13 @@ export default function NewScorecardBuilderPage() {
   function addQuestion() {
     if (!newQuestionText.trim()) return
     
-    // For multichoice, generate options with letter labels
+    // For multichoice, start with empty options (user adds via Add Option or Add Multiple)
     let options: { label: string; value: string }[] | undefined
     if (newQuestionType === "multichoice") {
       const optionTexts = newMultichoiceOptions.filter(o => o.trim())
       if (optionTexts.length === 0) {
-        // Default to 4 empty options if none provided
-        options = [
-          { label: "A", value: "" },
-          { label: "B", value: "" },
-          { label: "C", value: "" },
-          { label: "D", value: "" },
-        ]
+        // Start with empty array - user adds options manually
+        options = []
       } else {
         options = optionTexts.map((text, i) => ({
           label: getLetterLabel(i),
@@ -360,17 +368,12 @@ export default function NewScorecardBuilderPage() {
   function updateQuestionType(id: string, type: "scale" | "number" | "text" | "multichoice" | "confidence") {
     setQuestions((prev) => prev.map((q) => {
       if (q.id !== id) return q
-      // If changing to multichoice, initialize options
+      // If changing to multichoice, initialize with empty options array
       if (type === "multichoice" && !q.options) {
         return {
           ...q,
           type,
-          options: [
-            { label: "A", value: "" },
-            { label: "B", value: "" },
-            { label: "C", value: "" },
-            { label: "D", value: "" },
-          ],
+          options: [],
         }
       }
       // If changing away from multichoice, remove options
@@ -575,23 +578,23 @@ export default function NewScorecardBuilderPage() {
                         </button>
                       </div>
                       {/* Multichoice options editor */}
-                      {q.type === "multichoice" && q.options && (
+                      {q.type === "multichoice" && (
                         <div className="ml-9 flex flex-col gap-1.5 pl-3 border-l-2 border-border/50">
                           <BulkOptionsEditor
                             questionId={q.id}
-                            options={q.options}
+                            options={q.options || []}
                             onUpdateOption={updateOption}
                             onRemoveOption={removeOption}
                             onAddOption={addOptionToQuestion}
-                            onAddBulkOptions={(qId, newOptions) => {
+                            onSetAllOptions={(qId, values) => {
                               setQuestions(prev => prev.map(question => {
                                 if (question.id !== qId) return question
-                                const currentOptions = question.options || []
-                                const labeledOptions = newOptions.map((value, i) => ({
-                                  label: String.fromCharCode(65 + currentOptions.length + i),
+                                // Replace all options with new ones (not additive)
+                                const labeledOptions = values.map((value, i) => ({
+                                  label: String.fromCharCode(65 + i),
                                   value,
                                 }))
-                                return { ...question, options: [...currentOptions, ...labeledOptions] }
+                                return { ...question, options: labeledOptions }
                               }))
                             }}
                           />
