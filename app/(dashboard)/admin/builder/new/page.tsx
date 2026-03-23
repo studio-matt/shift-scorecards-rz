@@ -88,14 +88,23 @@ function BulkOptionsEditor({
   onSetAllOptions: (qId: string, values: string[]) => void
 }) {
   const [showBulk, setShowBulk] = useState(false)
-  const [bulkText, setBulkText] = useState("")
+  // Derive bulkText from options - always in sync with current options
+  const currentOptionsText = options.map(opt => opt.value).join("\n")
+  const [bulkText, setBulkText] = useState(currentOptionsText)
 
-  // When switching to bulk mode, populate textarea with existing options
+  // Sync bulkText when options change externally (e.g., deleting an option in single mode)
+  useEffect(() => {
+    if (!showBulk) {
+      // Only sync when not in bulk mode (user typing shouldn't be overwritten)
+      setBulkText(options.map(opt => opt.value).join("\n"))
+    }
+  }, [options, showBulk])
+
+  // When switching to bulk mode, ensure we have latest options
   const handleShowBulk = () => {
     if (!showBulk) {
-      // Populate with existing options (one per line)
-      const existingText = options.map(opt => opt.value).join("\n")
-      setBulkText(existingText)
+      // Populate with existing options (one per line) - always fresh from props
+      setBulkText(options.map(opt => opt.value).join("\n"))
     }
     setShowBulk(!showBulk)
   }
@@ -206,6 +215,7 @@ export default function NewScorecardBuilderPage() {
 
   const [loading, setLoading] = useState(isEditing)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const [scorecardName, setScorecardName] = useState("")
   const [description, setDescription] = useState("")
@@ -394,30 +404,39 @@ export default function NewScorecardBuilderPage() {
   }
 
   async function saveTemplate(saveStatus: "active" | "draft") {
-    console.log("[v0] saveTemplate called with status:", saveStatus)
-    console.log("[v0] scorecardName:", scorecardName, "trimmed:", scorecardName.trim())
     if (!scorecardName.trim()) {
-      console.log("[v0] Exiting early - no scorecard name")
+      setError("Please enter a scorecard name")
       return
     }
     setSaving(true)
+    setError(null)
     try {
       // Auto-bump version if questions changed
       const currentHash = JSON.stringify(questions.map((q) => ({ text: q.text, type: q.type })))
       const questionsChanged = isEditing && originalQuestionHash && currentHash !== originalQuestionHash
       const saveVersion = questionsChanged ? bumpMinorVersion(version) : version
 
+      // Sanitize questions to remove undefined values (Firebase doesn't allow undefined)
+      const sanitizedQuestions = questions.map((q) => ({
+        id: q.id,
+        text: q.text || "",
+        type: q.type,
+        // Only include options if it's multichoice and has options
+        ...(q.type === "multichoice" && q.options ? { options: q.options.filter(o => o.value !== undefined) } : {}),
+      }))
+
       const payload = {
         name: scorecardName.trim(),
-        description: description.trim(),
-        questions,
-        questionCount: questions.length,
+        description: description.trim() || "",
+        questions: sanitizedQuestions,
+        questionCount: sanitizedQuestions.length,
         version: saveVersion,
         status: saveStatus,
-        useGlobalInsights,
-        scoreInsightRules: useGlobalInsights ? [] : scoreInsightRules,
-        percentileInsightRules: useGlobalInsights ? [] : percentileInsightRules,
+        useGlobalInsights: useGlobalInsights ?? false,
+        scoreInsightRules: useGlobalInsights ? [] : (scoreInsightRules || []),
+        percentileInsightRules: useGlobalInsights ? [] : (percentileInsightRules || []),
       }
+      
       if (isEditing && templateId) {
         await updateDocument(COLLECTIONS.TEMPLATES, templateId, payload)
       } else {
@@ -425,7 +444,9 @@ export default function NewScorecardBuilderPage() {
       }
       router.push("/admin/builder")
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to save template"
       console.error("Failed to save template:", err)
+      setError(errorMessage)
     } finally {
       setSaving(false)
     }
@@ -929,6 +950,13 @@ export default function NewScorecardBuilderPage() {
                 </CardContent>
               </Card>
             </>
+          )}
+
+          {/* Error display */}
+          {error && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+              {error}
+            </div>
           )}
 
           {/* Save actions */}
