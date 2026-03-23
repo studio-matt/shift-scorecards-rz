@@ -67,7 +67,7 @@ const adminNavItems = [
 
 export function AppSidebar() {
   const pathname = usePathname()
-  const { user, isAdmin, isSuperAdmin, isCompanyAdmin, logout, switchRole } = useAuth()
+  const { user, isAdmin, isSuperAdmin, isCompanyAdmin, isActuallySuperAdmin, logout, switchRole } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const isScorecardActive = pathname.startsWith("/scorecard")
   const [scorecardsOpen, setScorecardsOpen] = useState(isScorecardActive)
@@ -328,7 +328,7 @@ export function AppSidebar() {
                   {user.role === "admin" ? "Super Admin" : user.role === "company_admin" ? "Company Admin" : "User"}
                 </Badge>
               </div>
-              {isSuperAdmin && (
+              {isActuallySuperAdmin && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => switchRole("admin")}>
