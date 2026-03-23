@@ -53,7 +53,7 @@ import {
 interface BuilderQuestion {
   id: string
   text: string
-  type: "scale" | "number" | "text" | "multichoice"
+  type: "scale" | "number" | "text" | "multichoice" | "confidence"
   options?: { label: string; value: string }[] // For multichoice (A, B, C, etc.)
 }
 
@@ -109,7 +109,7 @@ export default function NewScorecardBuilderPage() {
   const [status, setStatus] = useState<"active" | "draft">("draft")
   const [questions, setQuestions] = useState<BuilderQuestion[]>([])
   const [newQuestionText, setNewQuestionText] = useState("")
-  const [newQuestionType, setNewQuestionType] = useState<"scale" | "number" | "text" | "multichoice">("scale")
+  const [newQuestionType, setNewQuestionType] = useState<"scale" | "number" | "text" | "multichoice" | "confidence">("scale")
   const [newMultichoiceOptions, setNewMultichoiceOptions] = useState<string[]>([])
   const [bulkOptionsText, setBulkOptionsText] = useState("")
   const [showBulkOptions, setShowBulkOptions] = useState(false)
@@ -267,7 +267,7 @@ export default function NewScorecardBuilderPage() {
     setQuestions((prev) => prev.map((q) => (q.id === id ? { ...q, text } : q)))
   }
 
-  function updateQuestionType(id: string, type: "scale" | "number" | "text" | "multichoice") {
+  function updateQuestionType(id: string, type: "scale" | "number" | "text" | "multichoice" | "confidence") {
     setQuestions((prev) => prev.map((q) => {
       if (q.id !== id) return q
       // If changing to multichoice, initialize options
@@ -432,7 +432,7 @@ export default function NewScorecardBuilderPage() {
                   <Label>Questions ({questions.length})</Label>
                   {questions.length > 0 && (
                     <span className="text-[11px] text-muted-foreground">
-                      {questions.filter((q) => q.type === "scale").length} scale, {questions.filter((q) => q.type === "number").length} numeric, {questions.filter((q) => q.type === "text").length} text, {questions.filter((q) => q.type === "multichoice").length} multi-choice
+                      {questions.filter((q) => q.type === "scale").length} scale, {questions.filter((q) => q.type === "number").length} numeric, {questions.filter((q) => q.type === "text").length} text, {questions.filter((q) => q.type === "multichoice").length} multi-choice, {questions.filter((q) => q.type === "confidence").length} confidence
                     </span>
                   )}
                 </div>
@@ -464,11 +464,12 @@ export default function NewScorecardBuilderPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="scale">Scale: 1-10</SelectItem>
-                            <SelectItem value="number">Number</SelectItem>
-                            <SelectItem value="text">Text</SelectItem>
-                            <SelectItem value="multichoice">Multi Choice</SelectItem>
-                          </SelectContent>
-                        </Select>
+                          <SelectItem value="number">Number</SelectItem>
+                          <SelectItem value="text">Text</SelectItem>
+                          <SelectItem value="multichoice">Multi Choice</SelectItem>
+                          <SelectItem value="confidence">Confidence (1-10)</SelectItem>
+                        </SelectContent>
+                      </Select>
                         <button
                           type="button"
                           onClick={() => removeQuestion(q.id)}
@@ -552,6 +553,7 @@ export default function NewScorecardBuilderPage() {
                         <SelectItem value="number">Number</SelectItem>
                         <SelectItem value="text">Text</SelectItem>
                         <SelectItem value="multichoice">Multi Choice</SelectItem>
+                        <SelectItem value="confidence">Confidence (1-10)</SelectItem>
                       </SelectContent>
                     </Select>
                     <Button variant="outline" onClick={addQuestion}>

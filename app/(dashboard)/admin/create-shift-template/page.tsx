@@ -25,7 +25,7 @@ const SHIFT_TEMPLATE = {
     { id: "q12", text: "How much time do you save per week using AI to summarize long documents or communication threads?", type: "scale", min: 0, max: 10, minLabel: "0 min", maxLabel: "60+ min", required: true },
     { id: "q13", text: "What's your biggest AI win this month?", type: "text", required: false },
     { id: "q14", text: "What's your next AI goal?", type: "text", required: false },
-    { id: "q15", text: "Overall confidence in your AI ROI:", type: "scale", min: 1, max: 10, minLabel: "Not confident", maxLabel: "Very confident", required: true },
+    { id: "q15", text: "Overall confidence in your AI ROI:", type: "confidence", required: true },
   ],
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),

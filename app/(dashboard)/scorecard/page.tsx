@@ -448,6 +448,37 @@ export default function ScorecardPage() {
                               ))}
                             </div>
                           )}
+                          {q.type === "confidence" && (
+                            <div className="flex flex-col gap-2">
+                              <div className="flex flex-wrap gap-2">
+                                {Array.from({ length: 10 }, (_, i) => i + 1).map((val) => (
+                                  <button
+                                    key={val}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleAnswer(q.id, val)
+                                      if (index < totalQuestions - 1) {
+                                        setTimeout(() => handleNext(), 200)
+                                      }
+                                    }}
+                                    className={cn(
+                                      "flex h-10 w-10 items-center justify-center rounded-md border text-sm font-medium transition-colors",
+                                      answers[q.id] === val
+                                        ? "border-primary bg-primary text-primary-foreground"
+                                        : "border-border bg-card text-foreground hover:bg-muted",
+                                    )}
+                                  >
+                                    {val}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                                <span>Not confident</span>
+                                <span>Very confident</span>
+                              </div>
+                            </div>
+                          )}
                           {index < totalQuestions - 1 && (
                             <Button
                               size="sm"
