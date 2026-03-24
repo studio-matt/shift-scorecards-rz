@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server"
 import { getDocuments, updateDocument, COLLECTIONS } from "@/lib/firebase"
 
+// Allow both GET (for browser URL visit) and POST
+export async function GET() {
+  return runMigration()
+}
+
 export async function POST() {
+  return runMigration()
+}
+
+async function runMigration() {
   try {
     // 1. Find the SHIFT REAL SCORECARD template
     const templates = await getDocuments(COLLECTIONS.TEMPLATES)
