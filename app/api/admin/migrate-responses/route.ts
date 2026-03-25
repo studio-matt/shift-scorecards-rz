@@ -24,11 +24,9 @@ async function runMigration() {
     }
 
     const templateId = shiftReal.id
-    console.log(`Found SHIFT REAL SCORECARD with ID: ${templateId}`)
 
     // 2. Get all responses
     const responses = await getDocuments(COLLECTIONS.RESPONSES)
-    console.log(`Found ${responses.length} total responses`)
 
     // 3. Update each response that doesn't already point to this template
     let updateCount = 0
@@ -54,7 +52,6 @@ async function runMigration() {
       errors: errors.length > 0 ? errors : undefined,
     })
   } catch (error) {
-    console.error("Migration failed:", error)
     return NextResponse.json(
       { error: "Migration failed", details: String(error) },
       { status: 500 }
