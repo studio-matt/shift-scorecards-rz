@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getDocuments, updateDocument, COLLECTIONS } from "@/lib/firestore"
 
-// Allow both GET (for browser URL visit) and POST
+// Migration API - Allow both GET (for browser URL visit) and POST
 export async function GET() {
   return runMigration()
 }
