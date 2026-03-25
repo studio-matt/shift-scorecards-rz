@@ -53,7 +53,7 @@ import {
 interface BuilderQuestion {
   id: string
   text: string
-  type: "scale" | "number" | "text" | "multichoice"
+  type: "scale" | "number" | "text" | "multichoice" | "confidence"
   options?: { label: string; value: string }[] // For multichoice (A, B, C, etc.)
 }
 
@@ -69,6 +69,118 @@ interface PercentileInsightRule {
   min: number
   max: number
   message: string
+}
+
+// ---------- Bulk Options Editor for Multichoice Questions ----------
+function BulkOptionsEditor({
+  questionId,
+  options,
+  onUpdateOption,
+  onRemoveOption,
+  onAddOption,
+  onSetAllOptions,
+}: {
+  questionId: string
+  options: { label: string; value: string }[]
+  onUpdateOption: (qId: string, idx: number, value: string) => void
+  onRemoveOption: (qId: string, idx: number) => void
+  onAddOption: (qId: string) => void
+  onSetAllOptions: (qId: string, values: string[]) => void
+}) {
+  const [showBulk, setShowBulk] = useState(false)
+  // Derive bulkText from options - always in sync with current options
+  const currentOptionsText = options.map(opt => opt.value).join("\n")
+  const [bulkText, setBulkText] = useState(currentOptionsText)
+
+  // Sync bulkText when options change externally (e.g., deleting an option in single mode)
+  useEffect(() => {
+    if (!showBulk) {
+      // Only sync when not in bulk mode (user typing shouldn't be overwritten)
+      setBulkText(options.map(opt => opt.value).join("\n"))
+    }
+  }, [options, showBulk])
+
+  // When switching to bulk mode, ensure we have latest options
+  const handleShowBulk = () => {
+    if (!showBulk) {
+      // Populate with existing options (one per line) - always fresh from props
+      setBulkText(options.map(opt => opt.value).join("\n"))
+    }
+    setShowBulk(!showBulk)
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs font-medium text-muted-foreground">Options (A, B, C, ...)</p>
+        <button
+          type="button"
+          onClick={handleShowBulk}
+          className="text-xs text-primary hover:underline"
+        >
+          {showBulk ? "Single entry" : "Add Multiple Options"}
+        </button>
+      </div>
+
+      {showBulk ? (
+        <div className="flex flex-col gap-2">
+          <Textarea
+            placeholder={"Enter each option on a new line\nOption A\nOption B\nOption C"}
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
+            className="min-h-[100px] text-sm"
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              const lines = bulkText.split("\n").filter(l => l.trim())
+              // Replace all options with the new ones
+              onSetAllOptions(questionId, lines.map(l => l.trim()))
+              setBulkText("")
+              setShowBulk(false)
+            }}
+            className="self-end"
+          >
+            Apply Options
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {options.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">No options yet</p>
+          ) : (
+            options.map((opt, optIdx) => (
+              <div key={opt.label} className="flex items-center gap-2">
+                <span className="w-6 text-xs font-semibold text-primary">{opt.label}.</span>
+                <Input
+                  value={opt.value}
+                  onChange={(e) => onUpdateOption(questionId, optIdx, e.target.value)}
+                  placeholder={`Option ${opt.label}`}
+                  className="flex-1 h-8 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => onRemoveOption(questionId, optIdx)}
+                  className="text-muted-foreground hover:text-destructive"
+                  aria-label={`Remove option ${opt.label}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))
+          )}
+          <button
+            type="button"
+            onClick={() => onAddOption(questionId)}
+            className="flex items-center gap-1 text-xs text-primary hover:underline mt-1"
+          >
+            <Plus className="h-3 w-3" /> Add Option
+          </button>
+        </div>
+      )}
+    </>
+  )
 }
 
 // ---------- Static chart data (placeholder until real responses exist) ----------
@@ -103,13 +215,14 @@ export default function NewScorecardBuilderPage() {
 
   const [loading, setLoading] = useState(isEditing)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const [scorecardName, setScorecardName] = useState("")
   const [description, setDescription] = useState("")
   const [status, setStatus] = useState<"active" | "draft">("draft")
   const [questions, setQuestions] = useState<BuilderQuestion[]>([])
   const [newQuestionText, setNewQuestionText] = useState("")
-  const [newQuestionType, setNewQuestionType] = useState<"scale" | "number" | "text" | "multichoice">("scale")
+  const [newQuestionType, setNewQuestionType] = useState<"scale" | "number" | "text" | "multichoice" | "confidence">("scale")
   const [newMultichoiceOptions, setNewMultichoiceOptions] = useState<string[]>([])
   const [bulkOptionsText, setBulkOptionsText] = useState("")
   const [showBulkOptions, setShowBulkOptions] = useState(false)
@@ -178,18 +291,13 @@ export default function NewScorecardBuilderPage() {
   function addQuestion() {
     if (!newQuestionText.trim()) return
     
-    // For multichoice, generate options with letter labels
+    // For multichoice, start with empty options (user adds via Add Option or Add Multiple)
     let options: { label: string; value: string }[] | undefined
     if (newQuestionType === "multichoice") {
       const optionTexts = newMultichoiceOptions.filter(o => o.trim())
       if (optionTexts.length === 0) {
-        // Default to 4 empty options if none provided
-        options = [
-          { label: "A", value: "" },
-          { label: "B", value: "" },
-          { label: "C", value: "" },
-          { label: "D", value: "" },
-        ]
+        // Start with empty array - user adds options manually
+        options = []
       } else {
         options = optionTexts.map((text, i) => ({
           label: getLetterLabel(i),
@@ -267,20 +375,15 @@ export default function NewScorecardBuilderPage() {
     setQuestions((prev) => prev.map((q) => (q.id === id ? { ...q, text } : q)))
   }
 
-  function updateQuestionType(id: string, type: "scale" | "number" | "text" | "multichoice") {
+  function updateQuestionType(id: string, type: "scale" | "number" | "text" | "multichoice" | "confidence") {
     setQuestions((prev) => prev.map((q) => {
       if (q.id !== id) return q
-      // If changing to multichoice, initialize options
+      // If changing to multichoice, initialize with empty options array
       if (type === "multichoice" && !q.options) {
         return {
           ...q,
           type,
-          options: [
-            { label: "A", value: "" },
-            { label: "B", value: "" },
-            { label: "C", value: "" },
-            { label: "D", value: "" },
-          ],
+          options: [],
         }
       }
       // If changing away from multichoice, remove options
@@ -301,25 +404,39 @@ export default function NewScorecardBuilderPage() {
   }
 
   async function saveTemplate(saveStatus: "active" | "draft") {
-    if (!scorecardName.trim()) return
+    if (!scorecardName.trim()) {
+      setError("Please enter a scorecard name")
+      return
+    }
     setSaving(true)
+    setError(null)
     try {
       // Auto-bump version if questions changed
       const currentHash = JSON.stringify(questions.map((q) => ({ text: q.text, type: q.type })))
       const questionsChanged = isEditing && originalQuestionHash && currentHash !== originalQuestionHash
       const saveVersion = questionsChanged ? bumpMinorVersion(version) : version
 
+      // Sanitize questions to remove undefined values (Firebase doesn't allow undefined)
+      const sanitizedQuestions = questions.map((q) => ({
+        id: q.id,
+        text: q.text || "",
+        type: q.type,
+        // Only include options if it's multichoice and has options
+        ...(q.type === "multichoice" && q.options ? { options: q.options.filter(o => o.value !== undefined) } : {}),
+      }))
+
       const payload = {
         name: scorecardName.trim(),
-        description: description.trim(),
-        questions,
-        questionCount: questions.length,
+        description: description.trim() || "",
+        questions: sanitizedQuestions,
+        questionCount: sanitizedQuestions.length,
         version: saveVersion,
         status: saveStatus,
-        useGlobalInsights,
-        scoreInsightRules: useGlobalInsights ? [] : scoreInsightRules,
-        percentileInsightRules: useGlobalInsights ? [] : percentileInsightRules,
+        useGlobalInsights: useGlobalInsights ?? false,
+        scoreInsightRules: useGlobalInsights ? [] : (scoreInsightRules || []),
+        percentileInsightRules: useGlobalInsights ? [] : (percentileInsightRules || []),
       }
+      
       if (isEditing && templateId) {
         await updateDocument(COLLECTIONS.TEMPLATES, templateId, payload)
       } else {
@@ -327,7 +444,9 @@ export default function NewScorecardBuilderPage() {
       }
       router.push("/admin/builder")
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to save template"
       console.error("Failed to save template:", err)
+      setError(errorMessage)
     } finally {
       setSaving(false)
     }
@@ -432,7 +551,7 @@ export default function NewScorecardBuilderPage() {
                   <Label>Questions ({questions.length})</Label>
                   {questions.length > 0 && (
                     <span className="text-[11px] text-muted-foreground">
-                      {questions.filter((q) => q.type === "scale").length} scale, {questions.filter((q) => q.type === "number").length} numeric, {questions.filter((q) => q.type === "text").length} text, {questions.filter((q) => q.type === "multichoice").length} multi-choice
+                      {questions.filter((q) => q.type === "scale").length} scale, {questions.filter((q) => q.type === "number").length} numeric, {questions.filter((q) => q.type === "text").length} text, {questions.filter((q) => q.type === "multichoice").length} multi-choice, {questions.filter((q) => q.type === "confidence").length} confidence
                     </span>
                   )}
                 </div>
@@ -464,11 +583,12 @@ export default function NewScorecardBuilderPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="scale">Scale: 1-10</SelectItem>
-                            <SelectItem value="number">Number</SelectItem>
-                            <SelectItem value="text">Text</SelectItem>
-                            <SelectItem value="multichoice">Multi Choice</SelectItem>
-                          </SelectContent>
-                        </Select>
+                          <SelectItem value="number">Number</SelectItem>
+                          <SelectItem value="text">Text</SelectItem>
+                          <SelectItem value="multichoice">Multi Choice</SelectItem>
+                          <SelectItem value="confidence">Confidence (1-10)</SelectItem>
+                        </SelectContent>
+                      </Select>
                         <button
                           type="button"
                           onClick={() => removeQuestion(q.id)}
@@ -479,34 +599,26 @@ export default function NewScorecardBuilderPage() {
                         </button>
                       </div>
                       {/* Multichoice options editor */}
-                      {q.type === "multichoice" && q.options && (
+                      {q.type === "multichoice" && (
                         <div className="ml-9 flex flex-col gap-1.5 pl-3 border-l-2 border-border/50">
-                          {q.options.map((opt, optIdx) => (
-                            <div key={opt.label} className="flex items-center gap-2">
-                              <span className="w-6 text-xs font-semibold text-primary">{opt.label}.</span>
-                              <Input
-                                value={opt.value}
-                                onChange={(e) => updateOption(q.id, optIdx, e.target.value)}
-                                placeholder={`Option ${opt.label}`}
-                                className="flex-1 h-8 text-sm"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => removeOption(q.id, optIdx)}
-                                className="text-muted-foreground hover:text-destructive"
-                                aria-label={`Remove option ${opt.label}`}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          ))}
-                          <button
-                            type="button"
-                            onClick={() => addOptionToQuestion(q.id)}
-                            className="flex items-center gap-1 text-xs text-primary hover:underline mt-1"
-                          >
-                            <Plus className="h-3 w-3" /> Add Option
-                          </button>
+                          <BulkOptionsEditor
+                            questionId={q.id}
+                            options={q.options || []}
+                            onUpdateOption={updateOption}
+                            onRemoveOption={removeOption}
+                            onAddOption={addOptionToQuestion}
+                            onSetAllOptions={(qId, values) => {
+                              setQuestions(prev => prev.map(question => {
+                                if (question.id !== qId) return question
+                                // Replace all options with new ones (not additive)
+                                const labeledOptions = values.map((value, i) => ({
+                                  label: String.fromCharCode(65 + i),
+                                  value,
+                                }))
+                                return { ...question, options: labeledOptions }
+                              }))
+                            }}
+                          />
                         </div>
                       )}
                     </div>
@@ -552,6 +664,7 @@ export default function NewScorecardBuilderPage() {
                         <SelectItem value="number">Number</SelectItem>
                         <SelectItem value="text">Text</SelectItem>
                         <SelectItem value="multichoice">Multi Choice</SelectItem>
+                        <SelectItem value="confidence">Confidence (1-10)</SelectItem>
                       </SelectContent>
                     </Select>
                     <Button variant="outline" onClick={addQuestion}>
@@ -670,10 +783,10 @@ export default function NewScorecardBuilderPage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base font-semibold">
-                    Score-Based Progress Markers
+                    Hours-Based Progress Markers
                   </CardTitle>
                   <p className="text-xs text-muted-foreground">
-                    Messages shown based on the user{"'"}s average score (1-10 scale). Overrides global rules for this template.
+                    Messages shown based on the user{"'"}s hours saved. Overrides global rules for this template.
                   </p>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3">
@@ -839,6 +952,13 @@ export default function NewScorecardBuilderPage() {
             </>
           )}
 
+          {/* Error display */}
+          {error && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+              {error}
+            </div>
+          )}
+
           {/* Save actions */}
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => router.push("/admin/builder")}>
@@ -884,7 +1004,7 @@ export default function NewScorecardBuilderPage() {
                 </div>
                 <div className="flex flex-col items-center gap-1 rounded-lg border border-border p-3">
                   <p className="text-2xl font-bold text-foreground">--</p>
-                  <p className="text-xs text-muted-foreground">Avg Score</p>
+                  <p className="text-xs text-muted-foreground">Hrs Saved</p>
                 </div>
                 <div className="flex flex-col items-center gap-1 rounded-lg border border-border p-3">
                   <p className="text-2xl font-bold text-foreground">--</p>

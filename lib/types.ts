@@ -46,12 +46,14 @@ export interface Organization {
 export interface ScorecardQuestion {
   id: string
   text: string
-  type: "scale" | "number" | "text" | "multichoice"
+  type: "scale" | "number" | "text" | "multichoice" | "confidence"
   scaleMin?: number
   scaleMax?: number
   options?: { label: string; value: string }[] // For multichoice questions (A, B, C, etc.)
   order: number
 }
+
+// Confidence type: Always 1-10 scale, easily identifiable by the system for metrics calculation
 
 export interface ScorecardTemplate {
   id: string

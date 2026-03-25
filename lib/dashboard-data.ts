@@ -799,10 +799,10 @@ export interface ThresholdAlert {
 export function computeAlerts(responses: RawResponse[], deptPerf: DepartmentPerformance[], velocities: ScoreVelocity[]): ThresholdAlert[] {
   const alerts: ThresholdAlert[] = []
   for (const d of deptPerf) {
-    if (d.avgScore < 5.0) alerts.push({ type: "low_score", severity: d.avgScore < 4.0 ? "critical" : "warning", entity: d.department, entityType: "department", message: `${d.department} avg score is ${d.avgScore}/10`, value: d.avgScore })
+    if (d.avgScore < 5.0) alerts.push({ type: "low_score", severity: d.avgScore < 4.0 ? "critical" : "warning", entity: d.department, entityType: "department", message: `${d.department} hours saved is ${d.avgScore} hrs`, value: d.avgScore })
   }
   for (const v of velocities) {
-    if (v.velocity < -0.3) alerts.push({ type: "declining", severity: v.velocity < -0.6 ? "critical" : "warning", entity: v.name, entityType: "user", message: `${v.name} scores declining at ${v.velocity}/week`, value: v.velocity })
+    if (v.velocity < -0.3) alerts.push({ type: "declining", severity: v.velocity < -0.6 ? "critical" : "warning", entity: v.name, entityType: "user", message: `${v.name} hours declining at ${v.velocity}/week`, value: v.velocity })
   }
   return alerts.sort((a, b) => (a.severity === "critical" ? -1 : 1) - (b.severity === "critical" ? -1 : 1))
 }
@@ -984,21 +984,25 @@ export async function findTimeSavingQuestionIds(): Promise<string[]> {
   return ids
 }
 
-// ── Helper: Find confidence question ID from templates ────────────────
-// Question containing "confidence" (with optional "roi" or "ai")
-export async function findConfidenceQuestionId(): Promise<string | null> {
+// ── Helper: Find ALL confidence question IDs from templates ────────────────
+// Simply looks for questions with type === "confidence" - no pattern matching needed
+export async function findConfidenceQuestionIds(): Promise<string[]> {
   const templates = await fetchTemplates()
+  const ids: string[] = []
   for (const t of templates) {
     for (const q of t.questions || []) {
-      const text = q.text.toLowerCase()
-      // Match confidence questions: "confidence...roi", "confidence...ai", or general confidence scale
-      const isConfidence = text.includes("confidence") && (text.includes("roi") || text.includes("ai") || q.type === "scale")
-      if (isConfidence) {
-        return q.id
+      if (q.type === "confidence") {
+        ids.push(q.id)
       }
     }
   }
-  return null
+  return ids
+}
+
+// Backwards compatibility - returns first confidence question ID
+export async function findConfidenceQuestionId(): Promise<string | null> {
+  const ids = await findConfidenceQuestionIds()
+  return ids.length > 0 ? ids[0] : null
 }
 
 // ── Helper: Get current and previous month boundaries ─────────────────
