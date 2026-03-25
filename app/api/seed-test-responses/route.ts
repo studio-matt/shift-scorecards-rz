@@ -82,7 +82,16 @@ function generateAnswers(questions: ScorecardQuestion[]) {
   return answers
 }
 
+// GET handler so you can trigger from browser URL
+export async function GET() {
+  return seedTestResponses()
+}
+
 export async function POST() {
+  return seedTestResponses()
+}
+
+async function seedTestResponses() {
   try {
     // 1. Get all templates
     const templatesSnapshot = await getDocs(collection(db, "templates"))
@@ -184,3 +193,5 @@ export async function POST() {
     )
   }
 }
+
+
