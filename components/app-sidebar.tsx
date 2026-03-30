@@ -23,6 +23,7 @@ import {
   Shield,
   Sparkles,
   Mail,
+  BookOpen,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
@@ -46,6 +47,7 @@ import {
 
 const userNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/prompt-packs", label: "Prompt Packs", icon: BookOpen },
   { href: "/faq", label: "FAQ", icon: HelpCircle },
   { href: "/settings", label: "Settings", icon: Settings },
 ]
