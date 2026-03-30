@@ -539,61 +539,68 @@ export function PersonalStreakCard({ data }: { data: UserPersonalStreak }) {
   )
 }
 
-// ── You vs. Benchmark Card (3 reference points) ────────────────────────
+// ── Monthly Progress Card (hours saved month over month) ────────────────────────
 export function PersonalBenchmarkCard({
   data,
   fieldAverage,
   monthlyGoal,
   lastMonthAvg,
+  thisMonthHours,
+  lastMonthHours,
 }: {
   data: PersonalVsBenchmark
   fieldAverage?: number
   monthlyGoal?: number
   lastMonthAvg?: number
+  thisMonthHours?: number
+  lastMonthHours?: number
 }) {
+  const currentHours = thisMonthHours ?? 0
+  const previousHours = lastMonthHours ?? 0
+  const hoursChange = currentHours - previousHours
+  const percentChange = previousHours > 0 ? ((hoursChange / previousHours) * 100) : 0
+
   const VelocityIcon =
-    data.myVelocity > 0.1 ? TrendingUp :
-    data.myVelocity < -0.1 ? TrendingDown :
+    hoursChange > 0 ? TrendingUp :
+    hoursChange < 0 ? TrendingDown :
     Minus
 
   const velocityColor =
-    data.myVelocity > 0.1 ? "text-emerald-600" :
-    data.myVelocity < -0.1 ? "text-red-500" :
+    hoursChange > 0 ? "text-emerald-500" :
+    hoursChange < 0 ? "text-red-500" :
     "text-muted-foreground"
 
   const velocityLabel =
-    data.myVelocity > 0.1 ? "Improving" :
-    data.myVelocity < -0.1 ? "Declining" :
+    hoursChange > 0 ? "Increasing" :
+    hoursChange < 0 ? "Decreasing" :
     "Steady"
 
-  const goal = monthlyGoal ?? 8.0
-  const field = fieldAverage ?? 6.2
-  const lastMonth = lastMonthAvg ?? (data.myAvg - data.myVelocity * 4)
+  const formatHours = (hrs: number) => hrs >= 1000 ? `${(hrs / 1000).toFixed(1)}K` : hrs.toFixed(1)
 
   return (
     <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
       <CardHeader className="relative pb-2">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-          <Target className="h-4 w-4 text-primary" />
-          Your Score in Context
+          <Clock className="h-4 w-4 text-primary" />
+          Your Monthly Progress in Context
         </CardTitle>
         <CardDescription className="text-[11px]">
-          How you compare across three key reference points
+          Hours saved month over month comparison
         </CardDescription>
       </CardHeader>
       <CardContent className="relative flex flex-col gap-4">
-        {/* Primary score */}
+        {/* Primary hours */}
         <div className="flex items-center gap-4">
           <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-[3px] border-primary bg-primary/10">
-            <span className="text-2xl font-bold text-primary">{data.myAvg}</span>
+            <span className="text-xl font-bold text-primary">{formatHours(currentHours)}</span>
           </div>
           <div className="flex-1">
-            <p className="text-sm font-semibold text-foreground">Your Average</p>
+            <p className="text-sm font-semibold text-foreground">This Month</p>
             <div className="mt-1 flex items-center gap-2">
               <VelocityIcon className={`h-3.5 w-3.5 ${velocityColor}`} />
               <span className={`text-xs font-medium ${velocityColor}`}>
-                {velocityLabel} ({data.myVelocity > 0 ? "+" : ""}{data.myVelocity} pts/wk)
+                {velocityLabel} ({hoursChange >= 0 ? "+" : ""}{formatHours(hoursChange)} hrs)
               </span>
             </div>
           </div>
@@ -603,35 +610,25 @@ export function PersonalBenchmarkCard({
           </div>
         </div>
 
-        {/* 3 reference bars */}
+        {/* Month over month comparison */}
         <div className="flex flex-col gap-2">
-          {[
-            { label: "vs. Field Average", ref: field, description: "Industry benchmark across all SHIFT clients" },
-            { label: "vs. Last Month", ref: Math.round(lastMonth * 10) / 10, description: "Your score last period" },
-            { label: "vs. My Goal", ref: goal, description: "Your target score" },
-          ].map((item) => {
-            const diff = data.myAvg - item.ref
-            const isAbove = diff >= 0
-            return (
-              <div key={item.label} className="rounded-md border border-border px-3 py-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-foreground">{item.label}</p>
-                    <p className="text-[10px] text-muted-foreground">{item.description}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">{item.ref}</span>
-                    <Badge
-                      variant={isAbove ? "default" : "secondary"}
-                      className={`text-[10px] h-5 ${isAbove ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400" : "bg-amber-100 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400"}`}
-                    >
-                      {isAbove ? "+" : ""}{diff.toFixed(1)}
-                    </Badge>
-                  </div>
-                </div>
+          <div className="rounded-md border border-border px-3 py-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-foreground">Last Month</p>
+                <p className="text-[10px] text-muted-foreground">Previous period hours</p>
               </div>
-            )
-          })}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{formatHours(previousHours)} hrs</span>
+                <Badge
+                  variant={hoursChange >= 0 ? "default" : "secondary"}
+                  className={`text-[10px] h-5 ${hoursChange >= 0 ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400" : "bg-amber-100 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400"}`}
+                >
+                  {hoursChange >= 0 ? "+" : ""}{percentChange.toFixed(0)}%
+                </Badge>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Dept & Org context */}

@@ -584,24 +584,20 @@ export function CustomGoalsCard({
   )
 }
 
+// ── Win Entry type from scorecard responses ───────────────────────────
+export interface WinEntry {
+  id: string
+  text: string
+  weekOf: string
+  userName?: string
+}
+
 // ── Win of the Month ───────────────────────────────────────────────────
 export function WinOfTheMonthCard({
-  onSubmit,
-  previousWins,
+  wins = [],
 }: {
-  onSubmit?: (win: string) => void
-  previousWins?: { text: string; author: string; date: string }[]
+  wins?: WinEntry[]
 }) {
-  const [win, setWin] = useState("")
-  const [submitted, setSubmitted] = useState(false)
-
-  const handleSubmit = () => {
-    if (win.trim() && onSubmit) {
-      onSubmit(win.trim())
-      setSubmitted(true)
-    }
-  }
-
   return (
     <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-500/5 via-transparent to-transparent" />
@@ -611,38 +607,22 @@ export function WinOfTheMonthCard({
           Win of the Month
         </CardTitle>
         <CardDescription className="text-[11px]">
-          Share your best AI use case. Top wins get featured!
+          Biggest wins from your scorecard responses
         </CardDescription>
       </CardHeader>
       <CardContent className="relative">
-        {!submitted ? (
-          <div className="space-y-3">
-            <textarea
-              className="w-full rounded-lg border border-border/50 bg-background/50 p-3 text-sm placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/50 resize-none"
-              rows={3}
-              placeholder="Describe your best AI win this month..."
-              value={win}
-              onChange={(e) => setWin(e.target.value)}
-            />
-            <Button size="sm" disabled={!win.trim()} onClick={handleSubmit}>
-              <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
-              Submit Win
-            </Button>
-          </div>
+        {wins.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">
+            Wins from your scorecard responses will appear here
+          </p>
         ) : (
-          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-center">
-            <p className="text-sm font-medium text-emerald-400">Thanks for sharing!</p>
-            <p className="text-xs text-muted-foreground mt-1">Your win has been submitted for review.</p>
-          </div>
-        )}
-
-        {previousWins && previousWins.length > 0 && (
-          <div className="mt-4 border-t border-border/50 pt-4">
-            <p className="text-xs font-medium text-muted-foreground mb-2">Featured Wins</p>
-            {previousWins.slice(0, 2).map((w, idx) => (
-              <div key={idx} className="rounded-lg bg-muted/30 p-3 mb-2 last:mb-0">
-                <p className="text-sm text-foreground">"{w.text}"</p>
-                <p className="text-[10px] text-muted-foreground mt-1">— {w.author}</p>
+          <div className="flex flex-col gap-2">
+            {wins.map((win) => (
+              <div key={win.id} className="rounded-lg border border-border/50 bg-muted/30 p-3">
+                <p className="text-sm text-foreground">"{win.text}"</p>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Week of {win.weekOf}
+                </p>
               </div>
             ))}
           </div>

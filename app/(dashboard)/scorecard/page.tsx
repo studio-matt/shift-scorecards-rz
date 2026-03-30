@@ -479,6 +479,48 @@ export default function ScorecardPage() {
                               </div>
                             </div>
                           )}
+                          {q.type === "win" && (
+                            <div className="flex flex-col gap-2">
+                              <Textarea
+                                placeholder="Share your biggest win or success with AI this week..."
+                                value={(answers[q.id] as string) ?? ""}
+                                onChange={(e) => handleAnswer(q.id, e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                                    e.preventDefault()
+                                    if (index < totalQuestions - 1) {
+                                      handleNext()
+                                    }
+                                  }
+                                }}
+                                rows={3}
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                This will appear in your Win of the Month section
+                              </p>
+                            </div>
+                          )}
+                          {q.type === "goals" && (
+                            <div className="flex flex-col gap-2">
+                              <Textarea
+                                placeholder="What are your goals for the upcoming week?"
+                                value={(answers[q.id] as string) ?? ""}
+                                onChange={(e) => handleAnswer(q.id, e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                                    e.preventDefault()
+                                    if (index < totalQuestions - 1) {
+                                      handleNext()
+                                    }
+                                  }
+                                }}
+                                rows={3}
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Track and complete these in your Weekly Goals section
+                              </p>
+                            </div>
+                          )}
                           {index < totalQuestions - 1 && (
                             <Button
                               size="sm"

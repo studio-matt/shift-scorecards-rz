@@ -20,11 +20,11 @@ import {
   PersonalBestsCard,
   DepartmentRivalryCard,
   CohortNudgeCard,
-  MonthlyInsightCard,
   StreakAtRiskCard,
   WinOfTheMonthCard,
   type PersonalBest,
   type DepartmentRanking,
+  type WinEntry,
 } from "@/components/dashboard/gamification"
 import { StatCards, AdminStatCards } from "@/components/dashboard/stat-cards"
 import { TopPerformers, MVPSpotlight, HighFiveSection } from "@/components/dashboard/top-performers"
@@ -35,6 +35,7 @@ import {
   GoalsCard,
   MostImprovedCard,
   RecentScorecardsCard,
+  type GoalEntry,
 } from "@/components/dashboard/goals-and-recent"
 import {
   StreaksCard,
@@ -57,7 +58,7 @@ import {
   type ProductivityHeroData,
   PercentileDistribution,
 } from "@/components/dashboard/user-analytics"
-import { getOrganizations, getDocument, COLLECTIONS } from "@/lib/firestore"
+import { getOrganizations, getDocument, getDocuments, COLLECTIONS } from "@/lib/firestore"
 import { getPromptSettings } from "@/lib/prompt-settings"
 import {
   fetchAllResponses,
@@ -156,6 +157,16 @@ export default function DashboardPage() {
     fieldAverage: 6.2,
   })
   const [varianceFeedback, setVarianceFeedback] = useState<Record<string, unknown> | undefined>(undefined)
+  const [userGoals, setUserGoals] = useState<GoalEntry[]>([])
+  const [userWins, setUserWins] = useState<WinEntry[]>([])
+
+  // Handle marking a goal as complete
+  const handleMarkGoalComplete = useCallback((goalId: string) => {
+    setUserGoals(prev => prev.map(g => 
+      g.id === goalId ? { ...g, status: "completed" as const, completedAt: new Date().toISOString() } : g
+    ))
+    // TODO: Persist to database
+  }, [])
 
   const loadData = useCallback(async () => {
     try {
@@ -250,6 +261,52 @@ export default function DashboardPage() {
         // Compute user-specific hours metrics (reuse timeSavingIds/confidenceId from above)
         const userHours = computeUserHoursMetrics(responses, user.id, timeSavingIds, confidenceId)
         setUserHoursMetrics(userHours)
+
+        // Extract goals and wins from user's responses based on question types
+        // We need to fetch templates to get question types
+        const templates = await getDocuments(COLLECTIONS.TEMPLATES)
+        const templateMap = new Map<string, { questions: Array<{ id: string; type: string }> }>()
+        for (const t of templates) {
+          const template = t as unknown as { id: string; questions: Array<{ id: string; type: string }> }
+          templateMap.set(template.id, template)
+        }
+        
+        const userResponses = responses.filter(r => r.userId === user.id)
+        const extractedGoals: GoalEntry[] = []
+        const extractedWins: WinEntry[] = []
+        
+        for (const response of userResponses) {
+          const responseId = (response as unknown as { id: string }).id || `${response.userId}-${response.completedAt}`
+          const template = templateMap.get(response.templateId)
+          if (!template?.questions) continue
+          
+          for (const question of template.questions) {
+            const answer = response.answers?.[question.id]
+            if (!answer || typeof answer !== "string" || !answer.trim()) continue
+            
+            if (question.type === "goals") {
+              extractedGoals.push({
+                id: `${responseId}-${question.id}`,
+                text: answer,
+                weekOf: response.weekOf || response.completedAt?.slice(0, 10) || "",
+                status: "in-progress",
+              })
+            } else if (question.type === "win") {
+              extractedWins.push({
+                id: `${responseId}-${question.id}`,
+                text: answer,
+                weekOf: response.weekOf || response.completedAt?.slice(0, 10) || "",
+              })
+            }
+          }
+        }
+        
+        // Sort by weekOf descending (most recent first)
+        extractedGoals.sort((a, b) => b.weekOf.localeCompare(a.weekOf))
+        extractedWins.sort((a, b) => b.weekOf.localeCompare(a.weekOf))
+        
+        setUserGoals(extractedGoals.slice(0, 10)) // Show last 10 goals
+        setUserWins(extractedWins.slice(0, 5)) // Show last 5 wins
       }
     } catch (err) {
       console.error("Failed to load dashboard data:", err)
@@ -679,14 +736,16 @@ export default function DashboardPage() {
             <PersonalBestsCard bests={personalBests} />
           </div>
           
-          {personalBenchmark && (
-            <div className="mt-4">
-              <PersonalBenchmarkCard
-                data={personalBenchmark}
-                fieldAverage={targets.fieldAverage}
-                monthlyGoal={8.0}
-              />
-            </div>
+{personalBenchmark && (
+  <div className="mt-4">
+  <PersonalBenchmarkCard
+  data={personalBenchmark}
+  fieldAverage={targets.fieldAverage}
+  monthlyGoal={8.0}
+  thisMonthHours={userHoursMetrics?.totalHoursSaved ?? 0}
+  lastMonthHours={(userHoursMetrics?.totalHoursSaved ?? 0) * 0.85} // TODO: Track actual previous month data
+  />
+  </div>
           )}
         </div>
 
@@ -707,20 +766,10 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Removed duplicate WeeklyTrendChart - keeping PersonalTrendChart above as the single trend view */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <GoalsCard />
-        </div>
-
-        {/* ── Monthly Insight + Win of the Month ─────────── */}
+        {/* ── Goals and Wins from Scorecards ─────────── */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <MonthlyInsightCard />
-          <WinOfTheMonthCard
-            previousWins={[
-              { text: "Used Claude to draft 15 client proposals in 2 hours instead of 2 days", author: "Anonymous", date: "2024-01" },
-              { text: "AI helped me analyze 500 survey responses and create a presentation in 30 minutes", author: "Anonymous", date: "2024-01" },
-            ]}
-          />
+          <GoalsCard goals={userGoals} onMarkComplete={handleMarkGoalComplete} />
+          <WinOfTheMonthCard wins={userWins} />
         </div>
 
         {/* ── Champions & Recognition ────────────────── */}

@@ -9,64 +9,105 @@ import {
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, Clock, Circle, Download } from "lucide-react"
+import { CheckCircle2, Clock, Circle, Download, Target } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { MostImprovedEntry, RecentScorecard } from "@/lib/dashboard-data"
 
-const defaultGoals = [
-  { text: "Complete weekly scorecard", status: "completed" },
-  { text: "Score 8+ on AI productivity", status: "in-progress" },
-  { text: "Explore one new AI tool", status: "in-progress" },
-  { text: "Share an AI tip with a teammate", status: "not-started" },
-]
+// Goal entry from scorecard responses
+export interface GoalEntry {
+  id: string
+  text: string
+  weekOf: string
+  completedAt?: string
+  status: "completed" | "in-progress" | "not-started"
+}
 
 function GoalIcon({ status }: { status: string }) {
   if (status === "completed")
-    return <CheckCircle2 className="h-4 w-4 text-success" />
+    return <CheckCircle2 className="h-4 w-4 text-emerald-500" />
   if (status === "in-progress")
-    return <Clock className="h-4 w-4 text-warning" />
+    return <Clock className="h-4 w-4 text-amber-500" />
   return <Circle className="h-4 w-4 text-muted-foreground" />
 }
 
-export function GoalsCard() {
+interface GoalsCardProps {
+  goals?: GoalEntry[]
+  onMarkComplete?: (goalId: string) => void
+}
+
+export function GoalsCard({ goals = [], onMarkComplete }: GoalsCardProps) {
+  // Group by status for display - show incomplete first, then completed
+  const sortedGoals = [...goals].sort((a, b) => {
+    if (a.status === "completed" && b.status !== "completed") return 1
+    if (a.status !== "completed" && b.status === "completed") return -1
+    return 0
+  })
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base font-semibold">Weekly Goals</CardTitle>
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent" />
+      <CardHeader className="relative pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+          <Target className="h-4 w-4 text-emerald-500" />
+          Weekly Goals
+        </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="flex flex-col gap-2">
-          {defaultGoals.map((goal) => (
-            <div
-              key={goal.text}
-              className="flex items-center gap-3 rounded-md p-2"
-            >
-              <GoalIcon status={goal.status} />
-              <span
+      <CardContent className="relative">
+        {sortedGoals.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">
+            Goals from your scorecard responses will appear here
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {sortedGoals.map((goal) => (
+              <div
+                key={goal.id}
                 className={cn(
-                  "flex-1 text-sm",
+                  "flex items-center gap-3 rounded-lg border px-3 py-2 transition-all",
                   goal.status === "completed"
-                    ? "text-muted-foreground line-through"
-                    : "text-foreground",
+                    ? "border-emerald-500/30 bg-emerald-500/10"
+                    : "border-border/50 bg-muted/30 hover:bg-muted/50"
                 )}
               >
-                {goal.text}
-              </span>
-              <Badge
-                variant={
-                  goal.status === "completed"
-                    ? "secondary"
-                    : goal.status === "in-progress"
-                      ? "default"
-                      : "outline"
-                }
-                className="text-xs capitalize"
-              >
-                {goal.status.replace("-", " ")}
-              </Badge>
-            </div>
-          ))}
-        </div>
+                <button
+                  type="button"
+                  onClick={() => goal.status !== "completed" && onMarkComplete?.(goal.id)}
+                  className={cn(
+                    "shrink-0 transition-transform",
+                    goal.status !== "completed" && "hover:scale-110 cursor-pointer"
+                  )}
+                  disabled={goal.status === "completed"}
+                >
+                  <GoalIcon status={goal.status} />
+                </button>
+                <div className="flex-1 min-w-0">
+                  <span
+                    className={cn(
+                      "text-sm block",
+                      goal.status === "completed"
+                        ? "text-muted-foreground line-through"
+                        : "text-foreground",
+                    )}
+                  >
+                    {goal.text}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    Week of {goal.weekOf}
+                  </span>
+                </div>
+                <Badge
+                  variant={goal.status === "completed" ? "secondary" : "outline"}
+                  className={cn(
+                    "text-[10px] shrink-0",
+                    goal.status === "completed" && "bg-emerald-500/20 text-emerald-400"
+                  )}
+                >
+                  {goal.status === "completed" ? "Done" : "Active"}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   )
