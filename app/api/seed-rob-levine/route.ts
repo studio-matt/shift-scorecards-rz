@@ -11,14 +11,16 @@ import {
 } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 
-// Super admin emails to preserve
+// Super admin emails to preserve and update
 const SUPER_ADMIN_EMAILS = [
   "joe@shiftthework.com",
   "jmechlinski@shiftthework.com",
   "kristen@shiftthework.com",
   "kabbott@shiftthework.com",
+  "kris10abbott@gmail.com",
   "matt@shiftthework.com",
   "mhampton@shiftthework.com",
+  "matt@envoydesign.com",
 ]
 
 // Rob Levine Law users from CSV data
@@ -136,6 +138,7 @@ async function seedRobLevineData() {
       responsesDeleted: 0,
       usersCreated: 0,
       responsesCreated: 0,
+      adminsUpdated: 0,
       organizationCreated: false,
       errors: [] as string[],
     }
@@ -225,7 +228,69 @@ async function seedRobLevineData() {
       (s) => (s as { status?: string }).status === "active"
     ) as { id: string } | undefined
 
-    // 7. Create users and responses
+    // 7. Update super admins to be associated with Rob Levine Law
+    const adminUsersSnapshot = await getDocs(collection(db, "users"))
+    for (const userDoc of adminUsersSnapshot.docs) {
+      const userData = userDoc.data()
+      const email = userData.email?.toLowerCase() || ""
+      const isAdmin = SUPER_ADMIN_EMAILS.some(
+        (adminEmail) => adminEmail.toLowerCase() === email
+      )
+      if (isAdmin) {
+        // Update the admin user to be associated with Rob Levine Law
+        await setDoc(doc(db, "users", userDoc.id), {
+          ...userData,
+          organizationId: robLevineOrgId,
+          updatedAt: new Date().toISOString(),
+        })
+        results.adminsUpdated++
+        
+        // Also create a scorecard response for this admin so they see individual-level data
+        const adminAnswers: Record<string, number | string> = {}
+        if (template.questions) {
+          for (const question of template.questions) {
+            const questionText = (question.text || "").toLowerCase()
+            if (question.type === "confidence" || questionText.includes("confidence")) {
+              adminAnswers[question.id] = 9 // High confidence for admins
+            } else if (questionText.includes("biggest") && questionText.includes("win")) {
+              adminAnswers[question.id] = "Successfully onboarded new team members to AI tools"
+            } else if (questionText.includes("goal") || questionText.includes("next")) {
+              adminAnswers[question.id] = "Expand AI adoption across all departments"
+            } else if (question.type === "scale" || question.type === "number") {
+              adminAnswers[question.id] = Math.floor(Math.random() * 3) + 7 // 7-9 range
+            } else if (question.type === "text") {
+              adminAnswers[question.id] = "Great progress with AI implementation"
+            } else if (question.type === "multichoice") {
+              adminAnswers[question.id] = "1-2 hours"
+            }
+          }
+        }
+        
+        // Delete any existing responses for this admin
+        const adminResponsesQuery = query(
+          collection(db, "responses"),
+          where("userId", "==", userDoc.id)
+        )
+        const adminExistingResponses = await getDocs(adminResponsesQuery)
+        for (const respDoc of adminExistingResponses.docs) {
+          await deleteDoc(doc(db, "responses", respDoc.id))
+        }
+        
+        // Create new response for admin
+        await addDoc(collection(db, "responses"), {
+          templateId: template.id,
+          releaseId: activeRelease?.id || null,
+          userId: userDoc.id,
+          organizationId: robLevineOrgId,
+          answers: adminAnswers,
+          completedAt: new Date().toISOString(),
+          weekOf: getCurrentWeekOf(),
+          createdAt: new Date().toISOString(),
+        })
+      }
+    }
+
+    // 8. Create users and responses
     const weekOf = getCurrentWeekOf()
 
     for (const userData of ROB_LEVINE_USERS) {
