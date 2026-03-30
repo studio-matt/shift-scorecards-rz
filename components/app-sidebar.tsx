@@ -24,6 +24,8 @@ import {
   Sparkles,
   Mail,
   BookOpen,
+  Menu,
+  X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
@@ -77,6 +79,14 @@ export function AppSidebar() {
   // Collapsed state - default collapsed on scorecard page
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isHovering, setIsHovering] = useState(false)
+  
+  // Mobile menu state
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false)
+  }, [pathname])
 
   // Auto-collapse on scorecard page, expand on others
   useEffect(() => {
@@ -93,12 +103,168 @@ export function AppSidebar() {
   const initials = `${user.firstName[0]}${user.lastName[0]}`
 
   return (
+    <>
+      {/* Mobile Header - fixed at top */}
+      <div className="fixed inset-x-0 top-0 z-50 flex h-14 items-center justify-between border-b border-sidebar-border bg-sidebar px-4 md:hidden">
+        <ShiftLogo size="sm" variant="white" />
+        <button
+          type="button"
+          onClick={() => setMobileMenuOpen(true)}
+          className="flex h-10 w-10 items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
+          aria-label="Open menu"
+        >
+          <Menu className="h-6 w-6" />
+        </button>
+      </div>
+
+      {/* Mobile Full-Screen Menu Overlay */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-[60] flex flex-col bg-sidebar md:hidden">
+          {/* Mobile menu header */}
+          <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
+            <ShiftLogo size="sm" variant="white" />
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex h-10 w-10 items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
+              aria-label="Close menu"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
+
+          {/* Mobile menu navigation */}
+          <nav className="flex-1 overflow-y-auto px-4 py-6">
+            <ul className="flex flex-col gap-2">
+              <li>
+                <Link
+                  href="/dashboard"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-4 py-3 text-base font-medium transition-all",
+                    pathname === "/dashboard"
+                      ? "bg-gradient-to-r from-primary/20 to-primary/5 text-primary"
+                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                  )}
+                >
+                  <LayoutDashboard className="h-5 w-5" />
+                  Dashboard
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/scorecard"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-4 py-3 text-base font-medium transition-all",
+                    pathname.startsWith("/scorecard")
+                      ? "bg-gradient-to-r from-primary/20 to-primary/5 text-primary"
+                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                  )}
+                >
+                  <ClipboardList className="h-5 w-5" />
+                  Scorecards
+                </Link>
+              </li>
+              {userNavItems
+                .filter((item) => item.href !== "/dashboard")
+                .map((item) => (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg px-4 py-3 text-base font-medium transition-all",
+                        pathname === item.href || pathname.startsWith(`${item.href}/`)
+                          ? "bg-gradient-to-r from-primary/20 to-primary/5 text-primary"
+                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                      )}
+                    >
+                      <item.icon className="h-5 w-5" />
+                      {item.label}
+                    </Link>
+                  </li>
+                ))}
+            </ul>
+
+            {isAdmin && (
+              <>
+                <div className="my-6 border-t border-sidebar-border/50" />
+                <p className="mb-3 px-4 text-xs font-semibold uppercase tracking-widest text-sidebar-foreground/40">
+                  {isCompanyAdmin ? "CEO View" : "Admin"}
+                </p>
+                <ul className="flex flex-col gap-2">
+                  {adminNavItems
+                    .filter((item) => !item.superAdminOnly || isSuperAdmin)
+                    .map((item) => (
+                      <li key={item.href}>
+                        <Link
+                          href={item.href}
+                          onClick={() => setMobileMenuOpen(false)}
+                          className={cn(
+                            "flex items-center gap-3 rounded-lg px-4 py-3 text-base font-medium transition-all",
+                            pathname === item.href || pathname.startsWith(`${item.href}/`)
+                              ? "bg-gradient-to-r from-primary/20 to-primary/5 text-primary"
+                              : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                          )}
+                        >
+                          <item.icon className="h-5 w-5" />
+                          {item.label}
+                        </Link>
+                      </li>
+                    ))}
+                </ul>
+              </>
+            )}
+          </nav>
+
+          {/* Mobile menu footer - user info */}
+          <div className="border-t border-sidebar-border p-4">
+            <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent/50 p-3">
+              <Avatar className="h-10 w-10">
+                <AvatarFallback className="bg-gradient-to-br from-primary to-cyan text-sm text-white">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-sidebar-foreground">
+                  {user.firstName} {user.lastName}
+                </p>
+                <p className="text-xs text-sidebar-foreground/50">{user.email}</p>
+              </div>
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-sidebar-accent py-3 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent/80"
+              >
+                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                {theme === "dark" ? "Light Mode" : "Dark Mode"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  logout()
+                  setMobileMenuOpen(false)
+                }}
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-destructive/10 py-3 text-sm font-medium text-destructive transition-colors hover:bg-destructive/20"
+              >
+                <LogOut className="h-4 w-4" />
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     <TooltipProvider delayDuration={0}>
+      {/* Desktop Sidebar - hidden on mobile */}
       <aside
         onMouseEnter={() => isCollapsed && setIsHovering(true)}
         onMouseLeave={() => setIsHovering(false)}
         className={cn(
-          "relative flex h-screen flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-300 ease-in-out",
+          "relative hidden h-screen flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-300 ease-in-out md:flex",
           isExpanded ? "w-64" : "w-14"
         )}
       >
@@ -363,6 +529,7 @@ export function AppSidebar() {
         </div>
       </aside>
     </TooltipProvider>
+    </>
   )
 }
 

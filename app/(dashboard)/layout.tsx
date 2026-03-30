@@ -38,11 +38,13 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     >
       <AppSidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
+        {/* Spacer for mobile header */}
+        <div className="h-14 shrink-0 md:hidden" />
         <main 
           className="flex-1 overflow-y-auto"
           style={{ backgroundColor }}
         >
-          <div className="mx-auto max-w-7xl px-6 py-8">{children}</div>
+          <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8">{children}</div>
           <AppFooter />
         </main>
       </div>
