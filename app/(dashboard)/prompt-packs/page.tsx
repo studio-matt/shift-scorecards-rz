@@ -410,8 +410,8 @@ export default function PromptPacksPage() {
                   <Image
                     src="/shift-white.png"
                     alt="SHIFT"
-                    width={40}
-                    height={40}
+                    width={24}
+                    height={24}
                     className="opacity-80"
                   />
                 </div>
@@ -428,19 +428,19 @@ export default function PromptPacksPage() {
                 </Badge>
 
                 {/* Subtitle */}
-                <p className="mb-2 text-sm font-medium text-muted-foreground">
+                <p className="mb-2 text-sm font-medium text-foreground">
                   {pack.subtitle}
                 </p>
 
                 {/* Description */}
-                <p className="mb-3 flex-1 text-xs text-muted-foreground/80 line-clamp-2">
+                <p className="mb-3 flex-1 text-xs text-foreground/90 line-clamp-2">
                   {pack.description}
                 </p>
 
                 {/* Footer */}
                 <div className="flex items-center justify-between">
                   {pack.promptCount && (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-foreground/80">
                       {pack.promptCount} prompts
                     </span>
                   )}
