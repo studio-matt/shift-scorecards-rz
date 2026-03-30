@@ -405,6 +405,16 @@ export default function PromptPacksPage() {
                     {pack.title}
                   </h3>
                 </div>
+                {/* SHIFT Logo */}
+                <div className="absolute bottom-2 right-2">
+                  <Image
+                    src="/shift-white.png"
+                    alt="SHIFT"
+                    width={40}
+                    height={40}
+                    className="opacity-80"
+                  />
+                </div>
               </div>
 
               {/* Content */}
@@ -464,6 +474,16 @@ export default function PromptPacksPage() {
                   fill
                   className="object-cover"
                 />
+                {/* SHIFT Logo */}
+                <div className="absolute bottom-3 right-3">
+                  <Image
+                    src="/shift-white.png"
+                    alt="SHIFT"
+                    width={48}
+                    height={48}
+                    className="opacity-80"
+                  />
+                </div>
                 <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/70 via-black/30 to-transparent p-6">
                   <Badge 
                     variant="outline" 
