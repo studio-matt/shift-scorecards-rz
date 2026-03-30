@@ -634,13 +634,14 @@ export default function DashboardPage() {
           daysUntilDeadline={daysUntilDeadline}
         />
 
-        {/* ── Epic Meaning: Why This Matters + Movement Counter ── */}
+        {/* ── Epic Meaning: Why This Matters + Movement Counter ── 
         <EpicMeaningSection
           totalProfessionals={adminStats?.activeUsers ?? 4200}
           totalOrganizations={orgs.length || 47}
         />
+        */}
 
-        {/* ── Skill Tier + Cohort Nudge ─────────────────── */}
+        {/* ── Skill Tier + Cohort Nudge (AI Explorer / Peer Insight) - COMMENTED OUT FOR NOW ──
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <SkillTierCard
             monthsActive={monthsActive}
@@ -654,6 +655,7 @@ export default function DashboardPage() {
             scorecardsCompleted={(orgHoursMetrics?.thisMonthResponses ?? 0) + 15}
           />
         </div>
+        */}
 
         {/* ── Stat Cards (contextual - hours-focused) ───────────────────── */}
         <StatCards
@@ -696,16 +698,20 @@ export default function DashboardPage() {
               cohortCount={10}
               totalParticipants={850}
             />
+            {/* PersonalStreakCard removed - streak already shown in StatCards above
             {personalStreak && <PersonalStreakCard data={personalStreak} />}
+            */}
           </div>
           
-          {/* Personal Bests + Department Rivalry */}
+          {/* Personal Bests - Department Rivalry COMMENTED OUT FOR FUTURE USE */}
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <PersonalBestsCard bests={personalBests} />
+            {/* Department Rankings - commented out, will bring back later
             <DepartmentRivalryCard
               rankings={departmentRankings}
               userDepartment={user?.department}
             />
+            */}
           </div>
           
           {personalBenchmark && (
@@ -736,8 +742,8 @@ export default function DashboardPage() {
           )}
         </div>
 
+        {/* Removed duplicate WeeklyTrendChart - keeping PersonalTrendChart above as the single trend view */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <WeeklyTrendChart data={weeklyTrend} />
           <GoalsCard />
         </div>
 
@@ -759,19 +765,24 @@ export default function DashboardPage() {
             Top performers and peer recognition (names shown by opt-in only)
           </p>
 
-          {/* High Fives Received + MVP */}
+          {/* MVP Spotlight + High Fives - consolidated to single recognition area */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {topPerformers.length > 0 && <MVPSpotlight performer={topPerformers[0]} />}
+            <HighFiveSection performers={topPerformers} currentUserName={myName || "User"} />
+          </div>
+
+          {/* Leaderboard, MostImproved, HighFivesReceived - COMMENTED OUT to reduce clutter
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 mb-6">
             <HighFivesReceivedCard count={highFiveCount} />
-            {topPerformers.length > 0 && <MVPSpotlight performer={topPerformers[0]} />}
           </div>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <TopPerformers data={topPerformers} />
             <div className="flex flex-col gap-6">
               <MostImprovedCard data={mostImproved} />
-              <HighFiveSection performers={topPerformers} currentUserName={myName || "User"} />
             </div>
           </div>
+          */}
         </div>
 
         <QuestionResults data={questionResults} />
