@@ -53,14 +53,12 @@ import {
   PersonalTrendChart,
   HoursSavedCard,
   HighFivesReceivedCard,
-  AIActionPlanCard,
-  PromptPacksCard,
   ProductivityHero,
   type ProductivityHeroData,
   PercentileDistribution,
 } from "@/components/dashboard/user-analytics"
 import { getOrganizations, getDocument, COLLECTIONS } from "@/lib/firestore"
-import { getPromptSettings, type ActionPrompt, type PromptPack } from "@/lib/prompt-settings"
+import { getPromptSettings } from "@/lib/prompt-settings"
 import {
   fetchAllResponses,
   computeAdminStats,
@@ -158,8 +156,6 @@ export default function DashboardPage() {
     fieldAverage: 6.2,
   })
   const [varianceFeedback, setVarianceFeedback] = useState<Record<string, unknown> | undefined>(undefined)
-  const [actionPrompts, setActionPrompts] = useState<ActionPrompt[]>([])
-  const [promptPacks, setPromptPacks] = useState<PromptPack[]>([])
 
   const loadData = useCallback(async () => {
     try {
@@ -184,10 +180,6 @@ export default function DashboardPage() {
       if (feedbackDoc) {
         const f = feedbackDoc as Record<string, unknown>
         if (f.varianceFeedback) setVarianceFeedback(f.varianceFeedback as Record<string, unknown>)
-      }
-      if (promptSettings) {
-        setActionPrompts(promptSettings.actionPrompts)
-        setPromptPacks(promptSettings.promptPacks)
       }
       setOrgs(orgDocs as unknown as Organization[])
 
@@ -668,25 +660,11 @@ export default function DashboardPage() {
           completedSections={personalStreak?.totalResponses ?? 0}
           totalSections={Math.max(personalStreak?.totalWeeks ?? 1, 1)}
           percentile={personalBenchmark?.percentile ?? 0}
+          hoursMetrics={userHoursMetrics}
+          hourlyRate={effectiveHourlyRate}
         />
 
-        {/* ── AI Action Plan & Prompt Packs (THE BIG UNLOCK) ── */}
-        <div className="border-t border-border/50 pt-4">
-          <h2 className="text-lg font-semibold text-foreground">AI Growth Plan</h2>
-          <p className="mb-4 text-sm text-muted-foreground">
-            Specific next actions with ready-to-use prompt templates based on your results
-          </p>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-<AIActionPlanCard
-  weakCategories={weakCategories}
-  score={personalBenchmark?.myAvg ?? 0}
-  actionPrompts={actionPrompts}
-  />
-  <PromptPacksCard weakCategories={weakCategories} promptPacks={promptPacks} />
-          </div>
-        </div>
-
-        {/* ── Percentile Distribution + Performance ─────── */}
+        {/* ── Percentile Ranking + Personal Bests ─────── */}
         <div className="border-t border-border/50 pt-4">
           <h2 className="text-lg font-semibold text-foreground">Your Performance</h2>
           <p className="mb-4 text-sm text-muted-foreground">
@@ -698,20 +676,7 @@ export default function DashboardPage() {
               cohortCount={10}
               totalParticipants={850}
             />
-            {/* PersonalStreakCard removed - streak already shown in StatCards above
-            {personalStreak && <PersonalStreakCard data={personalStreak} />}
-            */}
-          </div>
-          
-          {/* Personal Bests - Department Rivalry COMMENTED OUT FOR FUTURE USE */}
-          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <PersonalBestsCard bests={personalBests} />
-            {/* Department Rankings - commented out, will bring back later
-            <DepartmentRivalryCard
-              rankings={departmentRankings}
-              userDepartment={user?.department}
-            />
-            */}
           </div>
           
           {personalBenchmark && (
