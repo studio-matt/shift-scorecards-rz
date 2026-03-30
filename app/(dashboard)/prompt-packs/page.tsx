@@ -57,7 +57,7 @@ const promptPacks: PromptPack[] = [
     promptCount: 25,
     icon: Brain,
     color: "from-purple-500 to-pink-500",
-    image: "/images/prompt-packs/you-are-the-product.jpg",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/you%20are%20the%20product-Pq0VsCopzX2obmFSZmcUEb593nITxR.png",
     prompts: [
       { title: "Confirmation Bias Check", prompt: "I'm working on [describe decision/project]. Help me identify where I might be seeking information that confirms what I already believe. What contradictory evidence should I be looking for?" },
       { title: "Blind Spot Scanner", prompt: "Analyze my approach to [situation] and identify potential blind spots I may have due to my role, experience, or perspective. What am I likely missing?" },
@@ -74,7 +74,7 @@ const promptPacks: PromptPack[] = [
     category: "tools",
     icon: Wrench,
     color: "from-blue-500 to-cyan-500",
-    image: "/images/prompt-packs/master-prompt-builder.jpg",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/master%20prompt%20builder-yFl5O0aWN4MxN3Rk4sY5NMYKWrah6G.png",
     prompts: [
       { title: "Section 1: Your Role & Context", prompt: "Let's define your professional context. Describe your role, responsibilities, industry, and the types of decisions you make regularly. What does a typical week look like?" },
       { title: "Section 2: Communication Style", prompt: "How do you prefer to communicate? Are you direct or diplomatic? Do you prefer bullet points or narratives? Formal or casual? Give examples of how you write emails or present ideas." },
@@ -92,7 +92,7 @@ const promptPacks: PromptPack[] = [
     promptCount: 5,
     icon: Calendar,
     color: "from-green-500 to-emerald-500",
-    image: "/images/prompt-packs/2026-planning.jpg",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/ultimate%202026%20planning%20pack-D8q50PR7UXMXGWcqs1IRsBrMAOoaZC.png",
     prompts: [
       { title: "Vision Crystallization", prompt: "It's December 31, 2026. You're reflecting on the year. What happened that made it your best year ever? Describe in vivid detail — professionally, personally, financially, and relationally." },
       { title: "Reverse Engineering", prompt: "Based on my 2026 vision, help me reverse-engineer the key milestones. What needs to be true by Q1, Q2, Q3, and Q4 for this vision to become reality?" },
@@ -109,7 +109,7 @@ const promptPacks: PromptPack[] = [
     category: "leadership",
     icon: Users,
     color: "from-amber-500 to-orange-500",
-    image: "/images/prompt-packs/meeting-mastery.jpg",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/meeting-mastery-header_a78582a2-59TPyRNWAM8jqsa6nEAOcplHk8yyxr.png",
     prompts: [
       { title: "Pre-Meeting Prep", prompt: "I have a [meeting type] in [timeframe] with [attendees]. Help me create an agenda that maximizes engagement and outcomes. What's the one thing this meeting must accomplish?" },
       { title: "Leadership Team Meeting", prompt: "Design a 60-minute leadership team meeting agenda focused on [topic]. Include check-in, strategic discussion, decision-making, and clear next steps with owners." },
@@ -127,7 +127,7 @@ const promptPacks: PromptPack[] = [
     promptCount: 14,
     icon: Rocket,
     color: "from-violet-500 to-purple-500",
-    image: "/images/prompt-packs/high-performance.jpg",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/header-high-performance_cc6133d2-QQ6UKPDNSpvI0Ao7fU2OyWCE5RN7O9.png",
     prompts: [
       { title: "Morning Ritual Design", prompt: "Design a morning ritual for me that takes [X minutes] and optimizes for [energy/focus/creativity]. Consider my context: [work schedule, family situation, etc.]" },
       { title: "Weekly Review Template", prompt: "Create a weekly review template I can complete in 20 minutes that captures wins, lessons, and sets up next week for success." },
@@ -145,7 +145,7 @@ const promptPacks: PromptPack[] = [
     promptCount: 5,
     icon: Zap,
     color: "from-blue-500 to-indigo-500",
-    image: "/images/prompt-packs/building-agents.jpg",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/agents-guide-header_1b689c01-haehxWJYjsiTXTOcobjI83vOKCD7CT.png",
     prompts: [
       { title: "Meeting Prep Agent", prompt: "You are a Meeting Prep Assistant. When given a meeting topic and attendees, you: 1) Research attendee backgrounds, 2) Suggest agenda items, 3) Prepare talking points, 4) Identify potential questions to anticipate." },
       { title: "Email Composer Agent", prompt: "You are an Email Composer. Given the context, recipient, and desired outcome, you draft professional emails matching the user's voice. Always offer 3 versions: concise, standard, and detailed." },
@@ -163,7 +163,7 @@ const promptPacks: PromptPack[] = [
     promptCount: 50,
     icon: Target,
     color: "from-rose-500 to-pink-500",
-    image: "/images/prompt-packs/leader-manager.jpg",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/leader-manager-header_8048d214-JWT91cOgiCBvSA3JB1zec722eDTsDc.png",
     prompts: [
       { title: "Coaching Conversation", prompt: "I need to have a coaching conversation with [team member] about [topic]. They are [context]. Help me structure a conversation that's supportive but drives accountability." },
       { title: "Performance Review Prep", prompt: "Help me prepare a performance review for [team member]. Their key accomplishments: [list]. Areas for growth: [list]. Create a balanced review that motivates continued excellence." },
@@ -181,7 +181,7 @@ const promptPacks: PromptPack[] = [
     promptCount: 30,
     icon: TrendingUp,
     color: "from-emerald-500 to-teal-500",
-    image: "/images/prompt-packs/sales-business-dev.jpg",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/shift-sales-header_309151e5-7meEgD9OCRLGuXfPcX2lpGLVtdYxz5.png",
     prompts: [
       { title: "Prospect Research Deep Dive", prompt: "Research [company name] for an upcoming sales conversation. What are their recent news, challenges, competitors, and likely priorities? What questions should I ask?" },
       { title: "LinkedIn Outreach Sequence", prompt: "Create a 3-touch LinkedIn outreach sequence for [target persona] at [company type]. Focus on providing value, not pitching. Make it feel personal, not templated." },
@@ -199,7 +199,7 @@ const promptPacks: PromptPack[] = [
     promptCount: 18,
     icon: Lightbulb,
     color: "from-yellow-500 to-amber-500",
-    image: "/images/prompt-packs/getting-unstuck.jpg",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/getting-unstuck-header_82f594d3-oJZeKLhGx5vblTpEqiTxm4pBVeRGFF.png",
     prompts: [
       { title: "Name the Resistance", prompt: "I'm procrastinating on [task/project]. Help me identify what form Resistance is taking. Is it fear of failure? Fear of success? Perfectionism? Something else?" },
       { title: "Fear as Compass", prompt: "What am I most afraid of doing right now professionally? Help me explore why that fear might be pointing toward exactly what I should be doing." },
@@ -217,7 +217,7 @@ const promptPacks: PromptPack[] = [
     promptCount: 20,
     icon: MessageSquare,
     color: "from-blue-600 to-blue-400",
-    image: "/images/prompt-packs/microsoft-365.jpg",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/copilot-header-v2_2656e6ee-UOWpCWYw97uDsG7nNnUDpVKemmUMfM.png",
     prompts: [
       { title: "Outlook: Email Summary", prompt: "Summarize this email thread and highlight any action items assigned to me. What decisions need to be made?" },
       { title: "Outlook: Draft Reply", prompt: "Draft a professional reply to this email that [accepts/declines/requests more info]. Keep it concise and maintain a [formal/friendly] tone." },
@@ -234,7 +234,7 @@ const promptPacks: PromptPack[] = [
     category: "sales",
     icon: TrendingUp,
     color: "from-green-600 to-emerald-400",
-    image: "/images/prompt-packs/ai-sales-boost.jpg",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/ai-sales-boost-header_e28f4a40-7eKsZqlrI7xihCYShfiB3uvLcXFWdS.png",
     prompts: [
       { title: "Ideal Customer Profile Refinement", prompt: "Based on my best customers [describe them], help me refine my ideal customer profile. What patterns do you see? What characteristics predict success?" },
       { title: "Objection Handler", prompt: "The most common objection I hear is [objection]. Help me understand the real concern behind it and give me 3 ways to address it that build trust rather than overcome resistance." },
@@ -251,7 +251,7 @@ const promptPacks: PromptPack[] = [
     category: "tools",
     icon: Clock,
     color: "from-indigo-500 to-violet-500",
-    image: "/images/prompt-packs/capacity-map.jpg",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/dSVQCZOAxMVWejqm-rXFMZsz1UpJ7EeWImZVm81MNlk0tip.png",
     prompts: [
       { title: "Time Audit", prompt: "Help me audit how I spend my time in a typical week. Ask me about my recurring meetings, admin tasks, creative work, and reactive vs. proactive time." },
       { title: "AI Opportunity Scanner", prompt: "Based on my time audit, identify tasks that AI could handle or accelerate. Categorize them by: fully automatable, AI-assisted, and still requires human judgment." },
@@ -268,7 +268,7 @@ const promptPacks: PromptPack[] = [
     category: "productivity",
     icon: Clock,
     color: "from-teal-500 to-cyan-500",
-    image: "/images/prompt-packs/building-capacity.jpg",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/dSVQCZOAxMVWejqm-rXFMZsz1UpJ7EeWImZVm81MNlk0tip.png",
     prompts: [
       { title: "Role Evolution Map", prompt: "Help me map how my role could evolve with AI. What parts of my job are most susceptible to AI? What uniquely human skills should I double down on?" },
       { title: "Delegation to AI", prompt: "I want to delegate [task] to AI. Help me create a system: What inputs does the AI need? What's the quality check process? How do I handle exceptions?" },
@@ -285,7 +285,7 @@ const promptPacks: PromptPack[] = [
     category: "productivity",
     icon: RefreshCcw,
     color: "from-orange-500 to-red-500",
-    image: "/images/prompt-packs/annual-reset.jpg",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/annual-reset-header_a5e550d4-Ck62j7ctAS190yu0uCMGZvifbw6woO.png",
     prompts: [
       { title: "Year in Review", prompt: "Guide me through a comprehensive year in review. What were my biggest wins? Biggest disappointments? What surprised me? What patterns do I see?" },
       { title: "Regret Mining", prompt: "Help me mine my regrets from this year productively. What do they reveal about my values? What would I do differently? What lessons must I carry forward?" },
