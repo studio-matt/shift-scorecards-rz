@@ -217,9 +217,9 @@ export default function DashboardPage() {
       // New analytics
       const [streakData, nonResp, vel, variance, corr, dot, benchmarks, report] =
         await Promise.all([
-          Promise.resolve(computeStreaks(responses)),
+          computeStreaks(responses),
           computeNonResponders(responses),
-          Promise.resolve(computeScoreVelocity(responses)),
+          computeScoreVelocity(responses),
           Promise.resolve(computeDepartmentVariance(responses)),
           computeQuestionCorrelations(responses),
           Promise.resolve(computeDeptOverTime(responses)),

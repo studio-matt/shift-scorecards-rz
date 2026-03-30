@@ -173,13 +173,25 @@ export async function computeTopPerformers(
   const orgs = await getOrganizations()
   const orgNameMap = new Map(orgs.map((o) => [o.id, (o as Record<string, unknown>).name as string]))
 
-  // Build set of excluded user IDs (admins / non-participants)
+  // Build set of excluded user IDs (admins / non-participants) and user name map
   const allUsers = await getDocuments(COLLECTIONS.USERS)
   const excludedUserIds = new Set(
     allUsers
       .filter((u) => (u as Record<string, unknown>).excludeFromReporting === true)
       .map((u) => u.id),
   )
+  
+  // Build a map of userId -> full name (firstName + lastName)
+  const userNameMap = new Map<string, string>()
+  for (const u of allUsers) {
+    const userData = u as Record<string, unknown>
+    const firstName = (userData.firstName as string) || ""
+    const lastName = (userData.lastName as string) || ""
+    const fullName = `${firstName} ${lastName}`.trim()
+    if (fullName) {
+      userNameMap.set(u.id, fullName)
+    }
+  }
 
   const userMap = new Map<
     string,
@@ -189,8 +201,10 @@ export async function computeTopPerformers(
   for (const r of responses) {
     if (excludedUserIds.has(r.userId)) continue
     if (!userMap.has(r.userId)) {
+      // Prefer firstName/lastName from users collection, fallback to userName or userId
+      const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
       userMap.set(r.userId, {
-        name: r.userName || r.userId,
+        name: resolvedName,
         orgId: r.organizationId,
         dept: r.department,
         total: 0,
@@ -257,6 +271,19 @@ export async function computeMostImproved(
   const orgs = await getOrganizations()
   const orgNameMap = new Map(orgs.map((o) => [o.id, (o as Record<string, unknown>).name as string]))
 
+  // Build a map of userId -> full name (firstName + lastName)
+  const allUsers = await getDocuments(COLLECTIONS.USERS)
+  const userNameMap = new Map<string, string>()
+  for (const u of allUsers) {
+    const userData = u as Record<string, unknown>
+    const firstName = (userData.firstName as string) || ""
+    const lastName = (userData.lastName as string) || ""
+    const fullName = `${firstName} ${lastName}`.trim()
+    if (fullName) {
+      userNameMap.set(u.id, fullName)
+    }
+  }
+
   // Group by user, then by weekOf
   const userWeeks = new Map<
     string,
@@ -265,8 +292,9 @@ export async function computeMostImproved(
 
   for (const r of responses) {
     if (!userWeeks.has(r.userId)) {
+      const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
       userWeeks.set(r.userId, {
-        name: r.userName || r.userId,
+        name: resolvedName,
         orgId: r.organizationId,
         dept: r.department,
         weeks: new Map(),
@@ -376,6 +404,19 @@ export async function computeRecentScorecards(
   const templates = await fetchTemplates()
   const tmplNameMap = new Map(templates.map((t) => [t.id, (t as unknown as Record<string, unknown>).name as string]))
 
+  // Build a map of userId -> full name (firstName + lastName)
+  const allUsers = await getDocuments(COLLECTIONS.USERS)
+  const userNameMap = new Map<string, string>()
+  for (const u of allUsers) {
+    const userData = u as Record<string, unknown>
+    const firstName = (userData.firstName as string) || ""
+    const lastName = (userData.lastName as string) || ""
+    const fullName = `${firstName} ${lastName}`.trim()
+    if (fullName) {
+      userNameMap.set(u.id, fullName)
+    }
+  }
+
   return responses
     .map((r) => {
       const scaleVals = Object.values(r.answers).filter(
@@ -386,9 +427,10 @@ export async function computeRecentScorecards(
           ? Math.round((scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length) * 10) / 10
           : 0
 
+      const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
       return {
         userId: r.userId,
-        name: r.userName || r.userId,
+        name: resolvedName,
         date: new Date(r.completedAt).toLocaleDateString("en-US", {
           month: "short",
           day: "numeric",
@@ -414,10 +456,28 @@ export interface UserStreak {
   totalResponses: number
 }
 
-export function computeStreaks(responses: RawResponse[]): UserStreak[] {
+export async function computeStreaks(responses: RawResponse[], userNameMap?: Map<string, string>): Promise<UserStreak[]> {
+  // Build a map of userId -> full name if not provided
+  if (!userNameMap) {
+    userNameMap = new Map<string, string>()
+    const allUsers = await getDocuments(COLLECTIONS.USERS)
+    for (const u of allUsers) {
+      const userData = u as Record<string, unknown>
+      const firstName = (userData.firstName as string) || ""
+      const lastName = (userData.lastName as string) || ""
+      const fullName = `${firstName} ${lastName}`.trim()
+      if (fullName) {
+        userNameMap.set(u.id, fullName)
+      }
+    }
+  }
+
   const userMap = new Map<string, { name: string; dept: string; weeks: Set<string>; total: number }>()
   for (const r of responses) {
-    if (!userMap.has(r.userId)) userMap.set(r.userId, { name: r.userName || r.userId, dept: r.department, weeks: new Set(), total: 0 })
+    if (!userMap.has(r.userId)) {
+      const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
+      userMap.set(r.userId, { name: resolvedName, dept: r.department, weeks: new Set(), total: 0 })
+    }
     const entry = userMap.get(r.userId)!
     entry.weeks.add(r.weekOf)
     entry.total += 1
@@ -531,10 +591,26 @@ export interface ScoreVelocity {
   currentAvg: number
 }
 
-export function computeScoreVelocity(responses: RawResponse[]): ScoreVelocity[] {
+export async function computeScoreVelocity(responses: RawResponse[]): Promise<ScoreVelocity[]> {
+  // Build a map of userId -> full name (firstName + lastName)
+  const allUsers = await getDocuments(COLLECTIONS.USERS)
+  const userNameMap = new Map<string, string>()
+  for (const u of allUsers) {
+    const userData = u as Record<string, unknown>
+    const firstName = (userData.firstName as string) || ""
+    const lastName = (userData.lastName as string) || ""
+    const fullName = `${firstName} ${lastName}`.trim()
+    if (fullName) {
+      userNameMap.set(u.id, fullName)
+    }
+  }
+
   const userWeeks = new Map<string, { name: string; dept: string; weeks: Map<string, { total: number; count: number; date: string }> }>()
   for (const r of responses) {
-    if (!userWeeks.has(r.userId)) userWeeks.set(r.userId, { name: r.userName, dept: r.department, weeks: new Map() })
+    if (!userWeeks.has(r.userId)) {
+      const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
+      userWeeks.set(r.userId, { name: resolvedName, dept: r.department, weeks: new Map() })
+    }
     const entry = userWeeks.get(r.userId)!
     const scaleVals = Object.values(r.answers).filter((v) => typeof v === "number" && v >= 1 && v <= 10) as number[]
     if (scaleVals.length === 0) continue
