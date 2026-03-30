@@ -510,10 +510,10 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* ── Trend & Sentiment ─────────────────────── */}
+          {/* ── Hours Saved Trends ─────────────────────── */}
           <div className="border-t border-border pt-4">
-            <h2 className="text-lg font-semibold text-foreground">Trend & Sentiment</h2>
-            <p className="mb-4 text-sm text-muted-foreground">Score velocity, variance, and question correlations</p>
+            <h2 className="text-lg font-semibold text-foreground">Hours Saved Trends</h2>
+            <p className="mb-4 text-sm text-muted-foreground">Hours saved velocity, variance, and question correlations</p>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <ScoreVelocityCard data={velocities} />
               <DepartmentVarianceCard data={deptVariance} feedbackSettings={varianceFeedback as Record<string, unknown> | undefined} />

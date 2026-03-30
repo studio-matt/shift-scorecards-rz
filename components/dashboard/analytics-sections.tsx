@@ -188,40 +188,41 @@ export function NonRespondersCard({ data }: { data: NonResponder[] }) {
   )
 }
 
-// ── Score velocity ────────────────────────────────────────────────────
+// ── Hours Saved Velocity ────────────────────────────────────────────────────
 export function ScoreVelocityCard({ data }: { data: ScoreVelocity[] }) {
   const improving = data.filter((d) => d.velocity > 0).slice(0, 5)
   const declining = data.filter((d) => d.velocity < 0).slice(0, 5)
   return (
     <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-transparent to-transparent" />
       <CardHeader className="relative pb-3">
-        <CardTitle className="text-sm font-semibold">Score Velocity</CardTitle>
+        <CardTitle className="text-sm font-semibold">Hours Saved Velocity</CardTitle>
+        <p className="text-xs text-muted-foreground">Week-over-week change in hours saved</p>
       </CardHeader>
       <CardContent className="relative">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <p className="mb-2 flex items-center gap-1 text-xs font-medium text-success">
-              <TrendingUp className="h-3 w-3" /> Improving
+            <p className="mb-2 flex items-center gap-1 text-xs font-medium text-emerald-500">
+              <TrendingUp className="h-3 w-3" /> Increasing
             </p>
             <div className="flex flex-col gap-1.5">
               {improving.length === 0 ? <p className="text-xs text-muted-foreground">None</p> : improving.map((v) => (
                 <div key={v.userId} className="flex items-center justify-between text-xs">
                   <Link href={`/dashboard?viewUser=${v.userId}`} className="truncate text-foreground">{v.name}</Link>
-                  <span className="ml-2 shrink-0 font-mono font-bold text-success">+{v.velocity}</span>
+                  <span className="ml-2 shrink-0 font-mono font-bold text-emerald-500">+{v.velocity} hrs</span>
                 </div>
               ))}
             </div>
           </div>
           <div>
-            <p className="mb-2 flex items-center gap-1 text-xs font-medium text-destructive">
-              <TrendingDown className="h-3 w-3" /> Declining
+            <p className="mb-2 flex items-center gap-1 text-xs font-medium text-red-500">
+              <TrendingDown className="h-3 w-3" /> Decreasing
             </p>
             <div className="flex flex-col gap-1.5">
               {declining.length === 0 ? <p className="text-xs text-muted-foreground">None</p> : declining.map((v) => (
                 <div key={v.userId} className="flex items-center justify-between text-xs">
                   <Link href={`/dashboard?viewUser=${v.userId}`} className="truncate text-foreground">{v.name}</Link>
-                  <span className="ml-2 shrink-0 font-mono font-bold text-destructive">{v.velocity}</span>
+                  <span className="ml-2 shrink-0 font-mono font-bold text-red-500">{v.velocity} hrs</span>
                 </div>
               ))}
             </div>
@@ -278,9 +279,10 @@ export function DepartmentVarianceCard({ data, feedbackSettings }: { data: Depar
   const highThreshold = feedbackSettings?.highVarianceThreshold ?? 1.5
   return (
     <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-transparent to-transparent" />
       <CardHeader className="relative pb-3">
-        <CardTitle className="text-sm font-semibold">Department Score Variance</CardTitle>
+        <CardTitle className="text-sm font-semibold">Department Hours Variance</CardTitle>
+        <p className="text-xs text-muted-foreground">Hours saved distribution across departments</p>
       </CardHeader>
       <CardContent className="relative">
         {chartData.length === 0 ? (
