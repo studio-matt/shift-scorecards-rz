@@ -1,9 +1,3 @@
-/**
- * ⚠️ TEST/DEMO ONLY - DO NOT USE IN PRODUCTION
- * This endpoint seeds the database with Rob Levine Law test data.
- * It will DELETE users and responses (except super admins).
- */
-
 import { NextResponse } from "next/server"
 import {
   collection,
