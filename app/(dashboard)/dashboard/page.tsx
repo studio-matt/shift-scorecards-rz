@@ -550,10 +550,10 @@ export default function DashboardPage() {
             <h2 className="text-lg font-semibold text-foreground">Champions</h2>
             <p className="mb-4 text-sm text-muted-foreground">Top performers, most improved, and peer recognition</p>
 
-            {/* MVP Spotlight */}
+            {/* MVP Spotlight - Top 5 */}
             {topPerformers.length > 0 && (
               <div className="mb-6">
-                <MVPSpotlight performer={topPerformers[0]} />
+                <MVPSpotlight performer={topPerformers[0]} topPerformers={topPerformers} />
               </div>
             )}
 
@@ -781,7 +781,7 @@ export default function DashboardPage() {
 
           {/* MVP Spotlight + High Fives - consolidated to single recognition area */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {topPerformers.length > 0 && <MVPSpotlight performer={topPerformers[0]} />}
+            {topPerformers.length > 0 && <MVPSpotlight performer={topPerformers[0]} topPerformers={topPerformers} />}
             <HighFiveSection performers={topPerformers} currentUserName={myName || "User"} />
           </div>
 

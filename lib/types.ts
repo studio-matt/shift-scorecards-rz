@@ -119,6 +119,7 @@ export interface TopPerformer {
   avgScore: number
   streak: number
   winNarrative?: string
+  goalNarrative?: string
 }
 
 export interface WeeklyTrend {

@@ -193,9 +193,17 @@ export async function computeTopPerformers(
     }
   }
 
+  // Fetch templates to identify win and goal question types
+  const templates = await fetchTemplates()
+  const templateMap = new Map<string, { questions: Array<{ id: string; type: string }> }>()
+  for (const t of templates) {
+    const template = t as unknown as { id: string; questions: Array<{ id: string; type: string }> }
+    templateMap.set(template.id, template)
+  }
+
   const userMap = new Map<
     string,
-    { name: string; orgId: string; dept: string; total: number; count: number; weeks: Set<string>; textAnswers: string[] }
+    { name: string; orgId: string; dept: string; total: number; count: number; weeks: Set<string>; winAnswers: string[]; goalAnswers: string[] }
   >()
 
   for (const r of responses) {
@@ -210,18 +218,30 @@ export async function computeTopPerformers(
         total: 0,
         count: 0,
         weeks: new Set(),
-        textAnswers: [],
+        winAnswers: [],
+        goalAnswers: [],
       })
     }
     const entry = userMap.get(r.userId)!
     const scaleVals = Object.values(r.answers).filter(
       (v) => typeof v === "number" && v >= 1 && v <= 10,
     ) as number[]
-    // Collect text answers as potential win narratives
-    const textVals = Object.values(r.answers).filter(
-      (v) => typeof v === "string" && v.length > 15,
-    ) as string[]
-    entry.textAnswers.push(...textVals)
+    
+    // Extract win and goal answers based on question type
+    const template = templateMap.get(r.templateId)
+    if (template?.questions) {
+      for (const q of template.questions) {
+        const answer = r.answers[q.id]
+        if (typeof answer === "string" && answer.trim().length > 10) {
+          if (q.type === "win") {
+            entry.winAnswers.push(answer)
+          } else if (q.type === "goals") {
+            entry.goalAnswers.push(answer)
+          }
+        }
+      }
+    }
+    
     if (scaleVals.length === 0) continue
     const avg = scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length
     entry.total += avg
@@ -237,7 +257,7 @@ export async function computeTopPerformers(
   } catch { /* ignore */ }
 
   return Array.from(userMap.entries())
-    .map(([userId, { name, orgId, dept, total, count, weeks, textAnswers }]) => ({
+    .map(([userId, { name, orgId, dept, total, count, weeks, winAnswers, goalAnswers }]) => ({
       id: userId,
       name,
       company: orgNameMap.get(orgId) ?? orgId,
@@ -245,8 +265,9 @@ export async function computeTopPerformers(
       department: dept,
       avgScore: Math.round((total / count) * 10) / 10,
       streak: weeks.size,
-      // Prefer admin-set narrative, then most recent text answer
-      winNarrative: adminNarratives[userId] || textAnswers[textAnswers.length - 1] || undefined,
+      // Prefer admin-set narrative, then most recent win answer
+      winNarrative: adminNarratives[userId] || winAnswers[winAnswers.length - 1] || undefined,
+      goalNarrative: goalAnswers[goalAnswers.length - 1] || undefined,
     }))
     .sort((a, b) => b.avgScore - a.avgScore)
     .slice(0, limit)
@@ -395,6 +416,7 @@ export interface RecentScorecard {
   date: string
   score: number
   templateName: string
+  delta?: number
 }
 
 export async function computeRecentScorecards(
@@ -417,6 +439,26 @@ export async function computeRecentScorecards(
     }
   }
 
+  // Group responses by user to calculate deltas
+  const userScores = new Map<string, { score: number; date: string }[]>()
+  for (const r of responses) {
+    if (!userScores.has(r.userId)) {
+      userScores.set(r.userId, [])
+    }
+    const scaleVals = Object.values(r.answers).filter(
+      (v) => typeof v === "number" && v >= 1 && v <= 10,
+    ) as number[]
+    if (scaleVals.length > 0) {
+      const avg = Math.round((scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length) * 10) / 10
+      userScores.get(r.userId)!.push({ score: avg, date: r.completedAt })
+    }
+  }
+  
+  // Sort each user's scores by date
+  for (const scores of userScores.values()) {
+    scores.sort((a, b) => b.date.localeCompare(a.date))
+  }
+
   return responses
     .map((r) => {
       const scaleVals = Object.values(r.answers).filter(
@@ -426,6 +468,14 @@ export async function computeRecentScorecards(
         scaleVals.length > 0
           ? Math.round((scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length) * 10) / 10
           : 0
+
+      // Calculate delta from previous scorecard
+      const userHistory = userScores.get(r.userId) || []
+      const currentIdx = userHistory.findIndex(h => h.date === r.completedAt)
+      const previousScore = currentIdx >= 0 && currentIdx < userHistory.length - 1 
+        ? userHistory[currentIdx + 1].score 
+        : null
+      const delta = previousScore !== null ? Math.round((avg - previousScore) * 10) / 10 : 0
 
       const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
       return {
@@ -438,6 +488,7 @@ export async function computeRecentScorecards(
         }),
         score: avg,
         templateName: tmplNameMap.get(r.templateId) ?? r.templateId,
+        delta,
         _completedAt: r.completedAt,
       }
     })

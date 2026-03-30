@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, Clock, Circle, Download, Target } from "lucide-react"
+import { CheckCircle2, Clock, Circle, Download, Target, TrendingUp, TrendingDown, Minus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { MostImprovedEntry, RecentScorecard } from "@/lib/dashboard-data"
 
@@ -169,7 +169,7 @@ export function MostImprovedCard({ showCompany = false, data }: MostImprovedProp
 }
 
 interface RecentScorecardsCardProps {
-  data: RecentScorecard[]
+  data: (RecentScorecard & { delta?: number })[]
 }
 
 export function RecentScorecardsCard({ data }: RecentScorecardsCardProps) {
@@ -191,27 +191,35 @@ export function RecentScorecardsCard({ data }: RecentScorecardsCardProps) {
           </p>
         ) : (
           <div className="flex flex-col gap-2">
-            {data.map((sc, idx) => (
-              <div
-                key={`${sc.userId}-${idx}`}
-                className="flex items-center justify-between rounded-md border border-border p-3"
-              >
-                <div>
-                  <Link href={`/dashboard?viewUser=${sc.userId}`} className="text-sm font-medium text-foreground">
-                    {sc.name}
-                  </Link>
-                  <p className="text-xs text-muted-foreground">
-                    {sc.templateName} &middot; {sc.date}
-                  </p>
+            {data.map((sc, idx) => {
+              const delta = sc.delta ?? 0
+              const isUp = delta > 0
+              const isDown = delta < 0
+              const DeltaIcon = isUp ? TrendingUp : isDown ? TrendingDown : Minus
+              const deltaColor = isUp ? "text-emerald-500" : isDown ? "text-red-500" : "text-muted-foreground"
+              
+              return (
+                <div
+                  key={`${sc.userId}-${idx}`}
+                  className="flex items-center justify-between rounded-md border border-border p-3"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      {sc.date}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {sc.templateName}
+                    </p>
+                  </div>
+                  <div className={`flex items-center gap-1.5 ${deltaColor}`}>
+                    <DeltaIcon className="h-4 w-4" />
+                    <span className="text-sm font-semibold">
+                      {isUp ? "+" : ""}{delta !== 0 ? delta.toFixed(1) : "—"}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-lg font-bold text-foreground">
-                    {sc.score}
-                  </span>
-                  <span className="text-xs text-muted-foreground">avg</span>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </CardContent>
