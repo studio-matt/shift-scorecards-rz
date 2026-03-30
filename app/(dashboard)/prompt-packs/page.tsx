@@ -385,36 +385,25 @@ export default function PromptPacksPage() {
       {/* Prompt Pack Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {filteredPacks.map((pack) => {
-          const Icon = pack.icon
           return (
             <button
               key={pack.id}
               onClick={() => setSelectedPack(pack)}
               className="group relative flex flex-col overflow-hidden rounded-xl border border-border bg-card text-left transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5"
             >
-              {/* Header Image or Gradient */}
-              <div className={cn(
-                "relative h-32 w-full bg-gradient-to-br",
-                pack.color
-              )}>
-                {pack.image ? (
-                  <Image
-                    src={pack.image}
-                    alt={pack.title}
-                    fill
-                    className="object-cover"
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Icon className="h-16 w-16 text-white/30" />
-                  </div>
-                )}
-                {/* Icon overlay */}
-                <div className={cn(
-                  "absolute bottom-3 left-4 flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br shadow-lg",
-                  pack.color
-                )}>
-                  <Icon className="h-5 w-5 text-white" />
+              {/* Header Image with Title Overlay */}
+              <div className="relative h-36 w-full">
+                <Image
+                  src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Building%20the%20Limitless%20Org-cgbiPsyabIOZ6ganlKUuPo5caB4Zg1.png"
+                  alt={pack.title}
+                  fill
+                  className="object-cover"
+                />
+                {/* Title overlay on image */}
+                <div className="absolute inset-0 flex items-center justify-start bg-gradient-to-r from-black/40 to-transparent p-4">
+                  <h3 className="text-lg font-extrabold uppercase tracking-wide text-white drop-shadow-lg" style={{ fontFamily: 'system-ui, sans-serif' }}>
+                    {pack.title}
+                  </h3>
                 </div>
               </div>
 
@@ -428,13 +417,8 @@ export default function PromptPacksPage() {
                   {pack.category}
                 </Badge>
 
-                {/* Title */}
-                <h3 className="mb-1 text-base font-semibold text-foreground group-hover:text-primary transition-colors">
-                  {pack.title}
-                </h3>
-
                 {/* Subtitle */}
-                <p className="mb-2 text-xs font-medium text-muted-foreground">
+                <p className="mb-2 text-sm font-medium text-muted-foreground">
                   {pack.subtitle}
                 </p>
 
@@ -469,33 +453,35 @@ export default function PromptPacksPage() {
 
       {/* Pack Detail Dialog */}
       <Dialog open={!!selectedPack} onOpenChange={() => setSelectedPack(null)}>
-        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto p-0">
           {selectedPack && (
             <>
-              <DialogHeader>
-                <div className="flex items-start gap-4">
-                  <div className={cn(
-                    "flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br",
-                    selectedPack.color
-                  )}>
-                    <selectedPack.icon className="h-7 w-7 text-white" />
-                  </div>
-                  <div>
-                    <Badge 
-                      variant="outline" 
-                      className={cn("mb-2 capitalize", getCategoryColor(selectedPack.category))}
-                    >
-                      {selectedPack.category}
-                    </Badge>
-                    <DialogTitle className="text-xl">{selectedPack.title}</DialogTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">{selectedPack.subtitle}</p>
-                  </div>
+              {/* Header with background image and title overlay */}
+              <div className="relative h-40 w-full">
+                <Image
+                  src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Building%20the%20Limitless%20Org-cgbiPsyabIOZ6ganlKUuPo5caB4Zg1.png"
+                  alt={selectedPack.title}
+                  fill
+                  className="object-cover"
+                />
+                <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/70 via-black/30 to-transparent p-6">
+                  <Badge 
+                    variant="outline" 
+                    className={cn("mb-2 w-fit capitalize border-white/30 text-white", getCategoryColor(selectedPack.category))}
+                  >
+                    {selectedPack.category}
+                  </Badge>
+                  <DialogHeader className="space-y-1">
+                    <DialogTitle className="text-2xl font-extrabold uppercase tracking-wide text-white drop-shadow-lg">
+                      {selectedPack.title}
+                    </DialogTitle>
+                    <p className="text-sm font-medium text-white/80">{selectedPack.subtitle}</p>
+                  </DialogHeader>
                 </div>
-              </DialogHeader>
-
-              <div className="mt-4">
-                <p className="text-sm text-muted-foreground">{selectedPack.description}</p>
               </div>
+
+              <div className="p-6">
+                <p className="text-sm text-muted-foreground">{selectedPack.description}</p>
 
               {selectedPack.prompts && selectedPack.prompts.length > 0 && (
                 <div className="mt-6 space-y-4">
@@ -526,6 +512,7 @@ export default function PromptPacksPage() {
                 <Button variant="outline" onClick={() => setSelectedPack(null)}>
                   Close
                 </Button>
+              </div>
               </div>
             </>
           )}
