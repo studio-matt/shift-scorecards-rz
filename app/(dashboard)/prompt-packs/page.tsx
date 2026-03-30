@@ -348,31 +348,31 @@ export default function PromptPacksPage() {
         </p>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap gap-2">
-          {categories.map((cat) => (
-            <button
-              key={cat.value}
-              onClick={() => setSelectedCategory(cat.value)}
-              className={cn(
-                "rounded-full px-4 py-1.5 text-sm font-medium transition-all",
-                selectedCategory === cat.value
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
-              )}
-            >
-              {cat.label}
-            </button>
-          ))}
-        </div>
-        <Input
-          placeholder="Search prompt packs..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="max-w-xs"
-        />
+      {/* Category Filters */}
+      <div className="flex flex-wrap gap-2">
+        {categories.map((cat) => (
+          <button
+            key={cat.value}
+            onClick={() => setSelectedCategory(cat.value)}
+            className={cn(
+              "rounded-full px-4 py-1.5 text-sm font-medium transition-all",
+              selectedCategory === cat.value
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/80"
+            )}
+          >
+            {cat.label}
+          </button>
+        ))}
       </div>
+
+      {/* Search */}
+      <Input
+        placeholder="Search prompt packs..."
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        className="max-w-sm"
+      />
 
       {/* Info Banner */}
       <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
