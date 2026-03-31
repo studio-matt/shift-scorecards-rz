@@ -6,7 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { TrendingUp } from "lucide-react"
+import { TrendingUp, TrendingDown, Minus } from "lucide-react"
 import type { QuestionResult } from "@/lib/types"
 
 interface QuestionResultsProps {
@@ -40,24 +40,30 @@ export function QuestionResults({ data }: QuestionResultsProps) {
       </CardHeader>
       <CardContent>
         <div className="flex flex-col gap-3">
-          {data.map((result) => (
-            <div
-              key={result.question}
-              className="flex items-center justify-between rounded-lg border border-border p-3"
-            >
-              <p className="flex-1 text-sm font-medium text-foreground">
-                {result.question}
-              </p>
-              <div className="flex items-center gap-3">
-                <span className="text-lg font-bold text-foreground">
-                  {result.score}
-                </span>
-                <span className="flex items-center gap-1 text-xs font-medium text-success">
-                  <TrendingUp className="h-3 w-3" />+{result.change}
-                </span>
+          {data.map((result) => {
+            const change = result.change ?? 0
+            const isUp = change > 0
+            const isDown = change < 0
+            const TrendIcon = isUp ? TrendingUp : isDown ? TrendingDown : Minus
+            const trendColor = isUp ? "text-emerald-500" : isDown ? "text-red-500" : "text-muted-foreground"
+            
+            return (
+              <div
+                key={result.question}
+                className="flex items-center justify-between rounded-lg border border-border p-3"
+              >
+                <p className="flex-1 text-sm font-medium text-foreground">
+                  {result.question}
+                </p>
+                <div className={`flex items-center gap-1.5 ${trendColor}`}>
+                  <TrendIcon className="h-4 w-4" />
+                  <span className="text-sm font-semibold">
+                    {isUp ? "+" : ""}{change !== 0 ? change : "—"}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </CardContent>
     </Card>
