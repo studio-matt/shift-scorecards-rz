@@ -446,43 +446,51 @@ export async function computeRecentScorecards(
     }
   }
 
-  // Group responses by user to calculate deltas
-  const userScores = new Map<string, { score: number; date: string }[]>()
+  // Helper to calculate hours saved from a response
+  const calculateHoursSaved = (answers: Record<string, unknown>, templateId: string): number => {
+    const questions = tmplQuestionsMap.get(templateId) ?? []
+    let totalMinutes = 0
+    for (const q of questions) {
+      // Check if this is a time-saving question
+      const isTimeSaving = q.type === "time_saving" || 
+        (q.text && (q.text.toLowerCase().includes("time") || q.text.toLowerCase().includes("hour") || q.text.toLowerCase().includes("minute")) && 
+         q.text.toLowerCase().includes("save"))
+      if (isTimeSaving) {
+        const val = answers[q.id]
+        if (typeof val === "number" && val > 0) {
+          totalMinutes += val
+        }
+      }
+    }
+    return Math.round((totalMinutes / 60) * 10) / 10
+  }
+
+  // Group responses by user to calculate deltas based on hours saved
+  const userHours = new Map<string, { hours: number; date: string }[]>()
   for (const r of responses) {
-    if (!userScores.has(r.userId)) {
-      userScores.set(r.userId, [])
+    if (!userHours.has(r.userId)) {
+      userHours.set(r.userId, [])
     }
-    const scaleVals = Object.values(r.answers).filter(
-      (v) => typeof v === "number" && v >= 1 && v <= 10,
-    ) as number[]
-    if (scaleVals.length > 0) {
-      const avg = Math.round((scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length) * 10) / 10
-      userScores.get(r.userId)!.push({ score: avg, date: r.completedAt })
-    }
+    const hours = calculateHoursSaved(r.answers, r.templateId)
+    userHours.get(r.userId)!.push({ hours, date: r.completedAt })
   }
   
-  // Sort each user's scores by date
-  for (const scores of userScores.values()) {
-    scores.sort((a, b) => b.date.localeCompare(a.date))
+  // Sort each user's hours by date (newest first)
+  for (const hours of userHours.values()) {
+    hours.sort((a, b) => b.date.localeCompare(a.date))
   }
 
   return responses
     .map((r) => {
-      const scaleVals = Object.values(r.answers).filter(
-        (v) => typeof v === "number" && v >= 1 && v <= 10,
-      ) as number[]
-      const avg =
-        scaleVals.length > 0
-          ? Math.round((scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length) * 10) / 10
-          : 0
+      const hoursSaved = calculateHoursSaved(r.answers, r.templateId)
 
-      // Calculate delta from previous scorecard
-      const userHistory = userScores.get(r.userId) || []
+      // Calculate delta from previous scorecard (hours saved comparison)
+      const userHistory = userHours.get(r.userId) || []
       const currentIdx = userHistory.findIndex(h => h.date === r.completedAt)
-      const previousScore = currentIdx >= 0 && currentIdx < userHistory.length - 1 
-        ? userHistory[currentIdx + 1].score 
+      const previousHours = currentIdx >= 0 && currentIdx < userHistory.length - 1 
+        ? userHistory[currentIdx + 1].hours 
         : null
-      const delta = previousScore !== null ? Math.round((avg - previousScore) * 10) / 10 : 0
+      const delta = previousHours !== null ? Math.round((hoursSaved - previousHours) * 10) / 10 : 0
 
       const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
       return {
@@ -493,7 +501,7 @@ export async function computeRecentScorecards(
           day: "numeric",
           year: "numeric",
         }),
-        score: avg,
+        score: hoursSaved, // Now represents hours saved, not avg score
         templateName: tmplNameMap.get(r.templateId) ?? r.templateId,
         delta,
         answers: r.answers,

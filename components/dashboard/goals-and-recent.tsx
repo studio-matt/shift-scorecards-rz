@@ -252,7 +252,7 @@ export function RecentScorecardsCard({ data }: RecentScorecardsCardProps) {
             </DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-4 pt-4">
-            {selectedScorecard?.questions && selectedScorecard?.answers ? (
+            {selectedScorecard?.questions && selectedScorecard.questions.length > 0 && selectedScorecard?.answers ? (
               selectedScorecard.questions.map((q, idx) => {
                 const answer = selectedScorecard.answers?.[q.id]
                 const displayAnswer = answer !== undefined && answer !== null
@@ -277,6 +277,26 @@ export function RecentScorecardsCard({ data }: RecentScorecardsCardProps) {
                           displayAnswer
                         )}
                       </p>
+                    </div>
+                  </div>
+                )
+              })
+            ) : selectedScorecard?.answers && Object.keys(selectedScorecard.answers).length > 0 ? (
+              // Fallback: show answers even if questions aren't available
+              Object.entries(selectedScorecard.answers).map(([questionId, answer], idx) => {
+                const displayAnswer = answer !== undefined && answer !== null
+                  ? typeof answer === "number"
+                    ? answer.toString()
+                    : typeof answer === "string"
+                    ? answer
+                    : JSON.stringify(answer)
+                  : "No response"
+                
+                return (
+                  <div key={questionId} className="rounded-lg border border-border/50 bg-muted/30 p-4">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Response {idx + 1}</p>
+                    <div className="rounded-md bg-background/50 px-3 py-2">
+                      <p className="text-sm text-foreground font-semibold">{displayAnswer}</p>
                     </div>
                   </div>
                 )
