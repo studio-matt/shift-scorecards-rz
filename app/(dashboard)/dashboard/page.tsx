@@ -494,7 +494,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex flex-col gap-6">
-          {adminStats && <AdminStatCards data={adminStats} targets={targets} hoursMetrics={orgHoursMetrics} />}
+          {adminStats && <AdminStatCards data={adminStats} targets={targets} hoursMetrics={orgHoursMetrics} hourlyRate={activeOrg?.hourlyRate ?? 100} />}
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <HoursTrendChart data={weeklyHoursTrend} />

@@ -56,13 +56,13 @@ const METRIC_EXPLANATIONS = {
       </ul>
     </div>
   ),
-  valueCreated: (
+  valueCreated: (hourlyRate: number) => (
     <div className="space-y-1">
       <p className="font-semibold">Value Created</p>
       <p>Estimated dollar value of time saved.</p>
       <ul className="list-disc pl-4 space-y-0.5">
         <li>Formula: Hours Saved x Hourly Rate</li>
-        <li>Default rate: $75/hour (configurable)</li>
+        <li>Your company rate: ${hourlyRate}/hour</li>
       </ul>
     </div>
   ),
@@ -251,6 +251,7 @@ interface AdminStatCardsProps {
   data: AdminStats
   targets?: DashboardTargets
   hoursMetrics?: OrgHoursMetrics | null
+  hourlyRate?: number
 }
 
 const adminGradients = [
@@ -269,7 +270,7 @@ const adminIconColors = [
   { bg: "bg-primary/15 ring-1 ring-primary/20", text: "text-primary" },
 ]
 
-export function AdminStatCards({ data: s, targets, hoursMetrics }: AdminStatCardsProps) {
+export function AdminStatCards({ data: s, targets, hoursMetrics, hourlyRate = 75 }: AdminStatCardsProps) {
   const tCompletionRate = targets?.completionRate ?? 85
   const tActiveUsers = targets?.activeUsers ?? 100
   const tScorecardsSent = targets?.scorecardsSent ?? 50
@@ -319,7 +320,7 @@ export function AdminStatCards({ data: s, targets, hoursMetrics }: AdminStatCard
       change: `${formatValue(hoursMetrics.annualValue)} annual run rate`,
       icon: DollarSign,
       positive: true,
-      explanation: METRIC_EXPLANATIONS.valueCreated,
+      explanation: METRIC_EXPLANATIONS.valueCreated(hourlyRate),
     },
     {
       label: "Avg Confidence",
