@@ -162,7 +162,7 @@ export function StatCards({
                     <Info className="h-4 w-4 text-muted-foreground" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[280px] text-xs">
+                <TooltipContent side="top" className="max-w-[280px] text-xs z-50">
                   {METRIC_EXPLANATIONS.completed}
                 </TooltipContent>
               </Tooltip>
@@ -191,7 +191,7 @@ export function StatCards({
                     <Info className="h-4 w-4 text-muted-foreground" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[280px] text-xs">
+                <TooltipContent side="top" className="max-w-[280px] text-xs z-50">
                   {METRIC_EXPLANATIONS.confidence}
                 </TooltipContent>
               </Tooltip>
@@ -220,7 +220,7 @@ export function StatCards({
                     <Info className="h-4 w-4 text-muted-foreground" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[280px] text-xs">
+                <TooltipContent side="top" className="max-w-[280px] text-xs z-50">
                   {METRIC_EXPLANATIONS.rank}
                 </TooltipContent>
               </Tooltip>
@@ -392,7 +392,7 @@ export function AdminStatCards({ data: s, targets, hoursMetrics }: AdminStatCard
                       <Info className="h-4 w-4 text-muted-foreground" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[280px] text-xs">
+                  <TooltipContent side="top" className="max-w-[280px] text-xs z-50">
                     {stat.explanation}
                   </TooltipContent>
                 </Tooltip>

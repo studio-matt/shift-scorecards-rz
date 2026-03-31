@@ -57,6 +57,7 @@ import {
   ProductivityHero,
   type ProductivityHeroData,
   PercentileDistribution,
+  PromptPacksCard,
 } from "@/components/dashboard/user-analytics"
 import { getOrganizations, getDocument, getDocuments, COLLECTIONS } from "@/lib/firestore"
 import { getPromptSettings } from "@/lib/prompt-settings"
@@ -800,6 +801,15 @@ export default function DashboardPage() {
         </div>
 
         <QuestionResults data={questionResults} />
+
+        {/* ── Prompt Packs ────────────────────────────── */}
+        <div className="border-t border-border/50 pt-4">
+          <h2 className="text-lg font-semibold text-foreground">Prompt Packs</h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Ready-to-use AI prompt collections to boost your productivity
+          </p>
+          <PromptPacksCard />
+        </div>
 
         <RecentScorecardsCard data={recentScorecards} />
       </div>

@@ -334,6 +334,13 @@ export default function ScorecardPage() {
       <div className="flex flex-col gap-6 lg:flex-row">
         {/* Questions list */}
         <div className="flex-1">
+          {questions.length === 0 && !loading && (
+            <div className="rounded-lg border border-dashed border-amber-500/50 bg-amber-500/10 p-6 text-center">
+              <p className="text-sm font-medium text-amber-400">No questions found in this scorecard template.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Template ID: {release?.templateId ?? "unknown"}</p>
+              <p className="text-xs text-muted-foreground">Please contact your admin to configure the scorecard questions.</p>
+            </div>
+          )}
           <div className="flex flex-col gap-4">
             {questions.map((q, index) => {
               const isActive = index === currentQuestion
