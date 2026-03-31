@@ -879,12 +879,12 @@ export function AIActionPlanCard({
 // ── Prompt Packs - Links to Real Packs ───────────────────────────────
 import Image from "next/image"
 
-// Featured prompt packs from the main prompt packs page
+// Featured prompt packs from the main prompt packs page - exact data from /prompt-packs
 const FEATURED_PROMPT_PACKS = [
   {
     id: "you-are-the-product",
-    title: "You Are The Product",
-    subtitle: "Biases, Blind Spots & Bottlenecks",
+    title: "You Are The Product Prompt Pack",
+    subtitle: "Biases, Blind Spots, Binds, and Bottlenecks",
     promptCount: 25,
     icon: Brain,
     color: "from-purple-500 to-pink-500",
@@ -892,29 +892,29 @@ const FEATURED_PROMPT_PACKS = [
   },
   {
     id: "master-prompt-builder",
-    title: "Master Prompt Builder",
+    title: "The Master Prompt Builder",
     subtitle: "Design Your AI Operating System",
     icon: Wrench,
     color: "from-blue-500 to-cyan-500",
     image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/master%20prompt%20builder-yFl5O0aWN4MxN3Rk4sY5NMYKWrah6G.png",
   },
   {
-    id: "high-performance-flow",
-    title: "High Performance & Flow",
-    subtitle: "Rhythms, Rituals & Routines",
-    promptCount: 14,
-    icon: Rocket,
-    color: "from-violet-500 to-purple-500",
-    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/header-high-performance_cc6133d2-QQ6UKPDNSpvI0Ao7fU2OyWCE5RN7O9.png",
-  },
-  {
     id: "leader-manager",
-    title: "Leader & Manager Pack",
-    subtitle: "50 Prompts for 10 Responsibilities",
+    title: "Leader & Manager Prompt Pack",
+    subtitle: "50 AI Prompts Across 10 Leadership Responsibilities",
     promptCount: 50,
     icon: Target,
     color: "from-rose-500 to-pink-500",
     image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/leader-manager-header_8048d214-JWT91cOgiCBvSA3JB1zec722eDTsDc.png",
+  },
+  {
+    id: "high-performance-flow",
+    title: "The High Performance & Flow Prompt Pack",
+    subtitle: "Rhythms, Rituals & Routines for Peak Performance",
+    promptCount: 14,
+    icon: Rocket,
+    color: "from-violet-500 to-purple-500",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/header-high-performance_cc6133d2-QQ6UKPDNSpvI0Ao7fU2OyWCE5RN7O9.png",
   },
 ]
 
