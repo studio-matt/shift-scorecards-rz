@@ -198,9 +198,10 @@ export function RecentScorecardsCard({ data }: RecentScorecardsCardProps) {
           ) : (
             <div className="flex flex-col gap-2">
               {data.map((sc, idx) => {
-                const delta = sc.delta ?? 0
-                const isUp = delta > 0
-                const isDown = delta < 0
+                const delta = sc.delta
+                const hasDelta = delta !== undefined && delta !== null
+                const isUp = hasDelta && delta > 0
+                const isDown = hasDelta && delta < 0
                 const DeltaIcon = isUp ? TrendingUp : isDown ? TrendingDown : Minus
                 const deltaColor = isUp ? "text-emerald-500" : isDown ? "text-red-500" : "text-muted-foreground"
                 
@@ -218,12 +219,16 @@ export function RecentScorecardsCard({ data }: RecentScorecardsCardProps) {
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <div className={`flex items-center gap-1.5 ${deltaColor}`}>
-                        <DeltaIcon className="h-4 w-4" />
-                        <span className="text-sm font-semibold">
-                          {isUp ? "+" : ""}{delta !== 0 ? delta.toFixed(1) : "—"}
-                        </span>
-                      </div>
+                      {hasDelta ? (
+                        <div className={`flex items-center gap-1.5 ${deltaColor}`}>
+                          <DeltaIcon className="h-4 w-4" />
+                          <span className="text-sm font-semibold">
+                            {isUp ? "+" : ""}{delta.toFixed(1)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">First entry</span>
+                      )}
                       <Button 
                         variant="ghost" 
                         size="sm" 

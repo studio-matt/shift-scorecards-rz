@@ -377,16 +377,11 @@ export async function computeQuestionResults(
 ): Promise<QuestionResult[]> {
   const templates = await fetchTemplates()
 
-  // Build question text lookup AND identify scale 1-10 questions
+  // Build question text lookup
   const questionTextMap = new Map<string, string>()
-  const scaleQuestionIds = new Set<string>()
   for (const t of templates) {
     for (const q of t.questions || []) {
       questionTextMap.set(q.id, q.text)
-      // Only include scale type questions (1-10 ratings)
-      if (q.type === "scale" || q.type === "rating" || q.type === "confidence") {
-        scaleQuestionIds.add(q.id)
-      }
     }
   }
 
@@ -406,13 +401,12 @@ export async function computeQuestionResults(
     return d >= lastMonthStart && d < thisMonthStart
   })
 
-  // Aggregate answers per question for each period - ONLY scale 1-10 questions
+  // Aggregate answers per question for each period - ONLY scale 1-10 values
   const aggregateByQuestion = (resps: RawResponse[]) => {
     const map = new Map<string, { total: number; count: number }>()
     for (const r of resps) {
       for (const [qId, val] of Object.entries(r.answers)) {
-        // Only include scale 1-10 questions
-        if (!scaleQuestionIds.has(qId)) continue
+        // Only include values in the 1-10 range (scale questions)
         if (typeof val !== "number" || val < 1 || val > 10) continue
         if (!map.has(qId)) {
           map.set(qId, { total: 0, count: 0 })
@@ -428,12 +422,10 @@ export async function computeQuestionResults(
   const thisMonthData = aggregateByQuestion(thisMonthResponses)
   const lastMonthData = aggregateByQuestion(lastMonthResponses)
 
-  // Only use scale question IDs that have data
-  const scaleQuestionsWithData = Array.from(scaleQuestionIds).filter(
-    qId => thisMonthData.has(qId) || lastMonthData.has(qId)
-  )
+  // Get all question IDs that have scale data (1-10 values)
+  const allQuestionIds = new Set([...thisMonthData.keys(), ...lastMonthData.keys()])
 
-  return scaleQuestionsWithData
+  return Array.from(allQuestionIds)
     .map((qId) => {
       const thisMonth = thisMonthData.get(qId)
       const lastMonth = lastMonthData.get(qId)
@@ -497,24 +489,12 @@ export async function computeRecentScorecards(
     }
   }
 
-  // Build a set of scale 1-10 question IDs
-  const scaleQuestionIds = new Set<string>()
-  for (const t of templates) {
-    const tmpl = t as unknown as Record<string, unknown>
-    const questions = (tmpl.questions as { id: string; type: string }[]) || []
-    for (const q of questions) {
-      if (q.type === "scale" || q.type === "rating" || q.type === "confidence") {
-        scaleQuestionIds.add(q.id)
-      }
-    }
-  }
-
-  // Helper to calculate average of ONLY scale 1-10 answers from a response
+  // Helper to calculate average of scale 1-10 answers from a response
+  // We detect scale questions by checking if the answer value is between 1-10
   const calculateAvgScaleAnswer = (answers: Record<string, unknown>): number => {
     const scaleVals: number[] = []
-    for (const [qId, val] of Object.entries(answers)) {
-      // Only include scale 1-10 questions
-      if (!scaleQuestionIds.has(qId)) continue
+    for (const [, val] of Object.entries(answers)) {
+      // Include any numeric answer that's in the 1-10 range (these are scale questions)
       if (typeof val === "number" && val >= 1 && val <= 10) {
         scaleVals.push(val)
       }
@@ -545,10 +525,13 @@ export async function computeRecentScorecards(
       // Calculate delta from previous scorecard
       const userHistory = userAvgs.get(r.userId) || []
       const currentIdx = userHistory.findIndex(h => h.date === r.completedAt)
-      const previousAvg = currentIdx >= 0 && currentIdx < userHistory.length - 1 
-        ? userHistory[currentIdx + 1].avg 
-        : null
-      const delta = previousAvg !== null ? Math.round((currentAvg - previousAvg) * 10) / 10 : 0
+      const hasPrevious = currentIdx >= 0 && currentIdx < userHistory.length - 1
+      const previousAvg = hasPrevious ? userHistory[currentIdx + 1].avg : null
+      // If no previous scorecard, delta is undefined (will show as "--" in UI)
+      // If there IS a previous, calculate the difference
+      const delta = previousAvg !== null && previousAvg > 0 
+        ? Math.round((currentAvg - previousAvg) * 10) / 10 
+        : undefined
 
       const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
       return {
