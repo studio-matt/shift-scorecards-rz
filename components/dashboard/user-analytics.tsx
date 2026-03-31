@@ -39,7 +39,10 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
+  Wrench,
 } from "lucide-react"
+import Link from "next/link"
 import type {
   UserPersonalStreak,
   PersonalTrendPoint,
@@ -873,119 +876,116 @@ export function AIActionPlanCard({
   )
 }
 
-// ── Prompt Packs with Ready-to-Use Templates ───────────────────────────
-import type { PromptPack } from "@/lib/prompt-settings"
-import { getIconComponent, DEFAULT_PROMPT_PACKS } from "@/lib/prompt-settings"
+// ── Prompt Packs - Links to Real Packs ───────────────────────────────
+import Image from "next/image"
 
-export function PromptPacksCard({
-  weakCategories,
-  promptPacks = [],
-}: {
-  weakCategories?: { category: string; score: number }[]
-  promptPacks?: PromptPack[]
-}) {
-  const [expandedPack, setExpandedPack] = useState<string | null>(null)
-  const [copiedPrompt, setCopiedPrompt] = useState<string | null>(null)
+// Featured prompt packs from the main prompt packs page
+const FEATURED_PROMPT_PACKS = [
+  {
+    id: "you-are-the-product",
+    title: "You Are The Product",
+    subtitle: "Biases, Blind Spots & Bottlenecks",
+    promptCount: 25,
+    icon: Brain,
+    color: "from-purple-500 to-pink-500",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/you%20are%20the%20product-Pq0VsCopzX2obmFSZmcUEb593nITxR.png",
+  },
+  {
+    id: "master-prompt-builder",
+    title: "Master Prompt Builder",
+    subtitle: "Design Your AI Operating System",
+    icon: Wrench,
+    color: "from-blue-500 to-cyan-500",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/master%20prompt%20builder-yFl5O0aWN4MxN3Rk4sY5NMYKWrah6G.png",
+  },
+  {
+    id: "high-performance-flow",
+    title: "High Performance & Flow",
+    subtitle: "Rhythms, Rituals & Routines",
+    promptCount: 14,
+    icon: Rocket,
+    color: "from-violet-500 to-purple-500",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/header-high-performance_cc6133d2-QQ6UKPDNSpvI0Ao7fU2OyWCE5RN7O9.png",
+  },
+  {
+    id: "leader-manager",
+    title: "Leader & Manager Pack",
+    subtitle: "50 Prompts for 10 Responsibilities",
+    promptCount: 50,
+    icon: Target,
+    color: "from-rose-500 to-pink-500",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/leader-manager-header_8048d214-JWT91cOgiCBvSA3JB1zec722eDTsDc.png",
+  },
+]
 
-  // Use defaults if no packs provided
-  const packs = promptPacks.length > 0 ? promptPacks : DEFAULT_PROMPT_PACKS
-
-  // If we have weak categories, prioritize packs that match
-  const weakNames = weakCategories?.map((c) => c.category.toLowerCase()) ?? []
-  const sorted = [...packs].sort((a, b) => {
-    const aMatch = weakNames.some((n) => a.category.toLowerCase().includes(n) || a.title.toLowerCase().includes(n)) ? 0 : 1
-    const bMatch = weakNames.some((n) => b.category.toLowerCase().includes(n) || b.title.toLowerCase().includes(n)) ? 0 : 1
-    return aMatch - bMatch
-  })
-
-  const handleCopy = async (template: string, promptId: string) => {
-    await navigator.clipboard.writeText(template)
-    setCopiedPrompt(promptId)
-    setTimeout(() => setCopiedPrompt(null), 2000)
-  }
-
+export function PromptPacksCard() {
   return (
     <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-cyan/5 via-transparent to-transparent" />
       <CardHeader className="relative pb-3">
-        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-          <BookOpen className="h-4 w-4 text-cyan" />
-          Prompt Packs
-        </CardTitle>
-        <CardDescription className="text-[11px]">
-          Ready-to-use prompt templates matched to your growth areas
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+              <BookOpen className="h-4 w-4 text-cyan" />
+              Prompt Packs
+            </CardTitle>
+            <CardDescription className="text-[11px]">
+              Ready-to-use AI prompt collections for every situation
+            </CardDescription>
+          </div>
+          <Link href="/prompt-packs">
+            <Button variant="ghost" size="sm" className="h-7 text-xs">
+              View All
+              <ChevronRight className="h-3 w-3 ml-1" />
+            </Button>
+          </Link>
+        </div>
       </CardHeader>
       <CardContent className="relative">
-        <div className="flex flex-col gap-2">
-          {sorted.slice(0, 4).map((pack) => {
-            const isExpanded = expandedPack === pack.id
-            const isRecommended = weakNames.some((n) => 
-              pack.category.toLowerCase().includes(n) || pack.title.toLowerCase().includes(n)
-            )
-
-            const IconComponent = getIconComponent(pack.icon)
+        <div className="grid grid-cols-2 gap-2">
+          {FEATURED_PROMPT_PACKS.map((pack) => {
+            const IconComponent = pack.icon
             return (
-              <div key={pack.id} className="rounded-lg border border-border/50 bg-muted/30">
-                <div
-                  className={`flex items-center gap-3 p-3 cursor-pointer transition-colors hover:bg-muted/50 ${isExpanded ? "border-b border-border/50" : ""}`}
-                  onClick={() => setExpandedPack(isExpanded ? null : pack.id)}
-                >
-                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1 ${isRecommended ? "bg-cyan/10 ring-cyan/30" : "bg-muted/50 ring-border/50"}`}>
-                    <IconComponent className={`h-4 w-4 ${isRecommended ? "text-cyan" : "text-foreground"}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-foreground">{pack.title}</p>
-                      <Badge variant="secondary" className="text-[9px] h-4">{pack.prompts.length} prompts</Badge>
-                      {isRecommended && (
-                        <Badge className="text-[9px] h-4 bg-cyan/20 text-cyan hover:bg-cyan/20">Recommended</Badge>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground truncate">{pack.description}</p>
-                  </div>
-                  {isExpanded ? (
-                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  )}
-                </div>
-
-                {isExpanded && (
-                  <div className="p-3 space-y-2">
-                    {pack.prompts.map((prompt, idx) => {
-                      const promptId = `${pack.id}-${idx}`
-                      return (
-                        <div key={idx} className="rounded-md bg-background/50 p-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs font-medium text-foreground">{prompt.name}</p>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2 text-xs"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleCopy(prompt.template, promptId)
-                              }}
-                            >
-                              {copiedPrompt === promptId ? (
-                                <><Check className="h-3 w-3 mr-1" /> Copied</>
-                              ) : (
-                                <><Copy className="h-3 w-3 mr-1" /> Copy</>
-                              )}
-                            </Button>
-                          </div>
-                          <p className="text-[11px] text-muted-foreground font-mono leading-relaxed">
-                            {prompt.template}
-                          </p>
-                        </div>
-                      )
-                    })}
+              <Link
+                key={pack.id}
+                href={`/prompt-packs?pack=${pack.id}`}
+                className="group rounded-lg border border-border/50 bg-muted/30 overflow-hidden transition-all hover:border-cyan/30 hover:bg-muted/50"
+              >
+                {pack.image && (
+                  <div className="relative h-20 w-full overflow-hidden">
+                    <Image
+                      src={pack.image}
+                      alt={pack.title}
+                      fill
+                      className="object-cover transition-transform group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" />
                   </div>
                 )}
-              </div>
+                <div className="p-2.5">
+                  <div className="flex items-start gap-2">
+                    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gradient-to-br ${pack.color}`}>
+                      <IconComponent className="h-3.5 w-3.5 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-foreground truncate">{pack.title}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{pack.subtitle}</p>
+                      {pack.promptCount && (
+                        <Badge variant="secondary" className="text-[9px] h-4 mt-1">{pack.promptCount} prompts</Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </Link>
             )
           })}
+        </div>
+        <div className="mt-3 pt-3 border-t border-border/50">
+          <Link href="/prompt-packs" className="flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-cyan transition-colors">
+            <Sparkles className="h-3 w-3" />
+            Explore all 11 prompt packs with 200+ prompts
+            <ChevronRight className="h-3 w-3" />
+          </Link>
         </div>
       </CardContent>
     </Card>
