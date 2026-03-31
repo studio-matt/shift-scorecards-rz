@@ -1,8 +1,29 @@
 "use client"
 
 import { Card, CardContent } from "@/components/ui/card"
-import { TrendingUp, Flame, CheckCircle2, Target, Building2, Users, Clock, Send, DollarSign, Gauge, Trophy } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { TrendingUp, Flame, CheckCircle2, Target, Building2, Users, Clock, Send, DollarSign, Gauge, Trophy, Info } from "lucide-react"
 import type { AdminStats, OrgHoursMetrics, UserHoursMetrics } from "@/lib/dashboard-data"
+
+// Tooltip explanations for each metric
+const METRIC_EXPLANATIONS = {
+  // User metrics
+  completed: "Number of scorecards you've completed this period out of the total assigned to you.",
+  confidence: "Your average self-reported confidence score (1-10 scale) across all questions. Higher is better.",
+  rank: "Your percentile ranking compared to others in your company based on confidence scores.",
+  
+  // Admin metrics
+  totalHoursSaved: "Sum of all time-saving answers reported by employees this month. Calculated from 'hours saved' type questions in scorecards.",
+  productivityGain: "Hours saved as a percentage of total work capacity. Formula: (Hours Saved ÷ (Participants × 160 work hours/month)) × 100",
+  valueCreated: "Estimated dollar value of time saved. Calculated as: Hours Saved × Average Hourly Rate ($75 default).",
+  avgConfidence: "Average confidence score across all participants. Calculated from 1-10 scale responses.",
+  activeParticipants: "Number of unique users who have submitted at least one scorecard this month.",
+  completionRate: "Percentage of assigned scorecards that have been completed by employees.",
+  activeUsers: "Total number of users who are actively using the platform.",
+  scorecardsSent: "Number of scorecards distributed to employees this period.",
+  organizations: "Total number of organizations/teams in the system.",
+  fteEquivalent: "Full-Time Equivalent: Hours saved converted to equivalent full-time employees. 160 hours = 1 FTE per month.",
+}
 
 interface UserStatCardsProps {
   avgScore: number
@@ -30,58 +51,96 @@ export function StatCards({
   const confidenceChange = (hoursMetrics?.confidenceScore ?? avgScore) - (hoursMetrics?.lastMonthConfidence ?? lastMonthAvg)
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-      {/* Completed */}
-      <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-500/10 via-transparent to-transparent" />
-        <CardContent className="relative flex items-start gap-4 p-5">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 ring-1 ring-amber-500/20">
-            <CheckCircle2 className="h-5 w-5 text-amber-400" />
-          </div>
-          <div>
-            <p className="text-sm font-medium leading-snug text-muted-foreground">Completed</p>
-            <p className="text-2xl font-bold text-foreground">{completedSections}<span className="text-base text-muted-foreground">/{totalSections}</span></p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              scorecards this period
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+    <TooltipProvider>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {/* Completed */}
+        <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-500/10 via-transparent to-transparent" />
+          <CardContent className="relative flex items-start gap-4 p-5">
+            <div className="relative">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 ring-1 ring-amber-500/20">
+                <CheckCircle2 className="h-5 w-5 text-amber-400" />
+              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-muted border border-border hover:bg-muted/80 transition-colors">
+                    <Info className="h-2.5 w-2.5 text-muted-foreground" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                  {METRIC_EXPLANATIONS.completed}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            <div>
+              <p className="text-sm font-medium leading-snug text-muted-foreground">Completed</p>
+              <p className="text-2xl font-bold text-foreground">{completedSections}<span className="text-base text-muted-foreground">/{totalSections}</span></p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                scorecards this period
+              </p>
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Confidence */}
-      <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-transparent" />
-        <CardContent className="relative flex items-start gap-4 p-5">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-purple-500/15 ring-1 ring-purple-500/20">
-            <TrendingUp className="h-5 w-5 text-purple-400" />
-          </div>
-          <div>
-            <p className="text-sm font-medium leading-snug text-muted-foreground">Confidence</p>
-            <p className="text-2xl font-bold text-foreground">{confidenceScore.toFixed(1)}</p>
-            <p className={`mt-1 text-xs ${confidenceChange >= 0 ? "text-emerald-400" : "text-amber-400"}`}>
-              {confidenceChange >= 0 ? "+" : ""}{confidenceChange.toFixed(1)} vs last month
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+        {/* Confidence */}
+        <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-transparent" />
+          <CardContent className="relative flex items-start gap-4 p-5">
+            <div className="relative">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-purple-500/15 ring-1 ring-purple-500/20">
+                <TrendingUp className="h-5 w-5 text-purple-400" />
+              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-muted border border-border hover:bg-muted/80 transition-colors">
+                    <Info className="h-2.5 w-2.5 text-muted-foreground" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                  {METRIC_EXPLANATIONS.confidence}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            <div>
+              <p className="text-sm font-medium leading-snug text-muted-foreground">Confidence</p>
+              <p className="text-2xl font-bold text-foreground">{confidenceScore.toFixed(1)}</p>
+              <p className={`mt-1 text-xs ${confidenceChange >= 0 ? "text-emerald-400" : "text-amber-400"}`}>
+                {confidenceChange >= 0 ? "+" : ""}{confidenceChange.toFixed(1)} vs last month
+              </p>
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Your Rank */}
-      <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-orange-500/10 via-transparent to-transparent" />
-        <CardContent className="relative flex items-start gap-4 p-5">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-orange-500/15 ring-1 ring-orange-500/20">
-            <Trophy className="h-5 w-5 text-orange-400" />
-          </div>
-          <div>
-            <p className="text-sm font-medium leading-snug text-muted-foreground">Your Rank</p>
-            <p className="text-2xl font-bold text-foreground">{percentile}<span className="text-base text-muted-foreground">th</span></p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              percentile in your company
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+        {/* Your Rank */}
+        <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-orange-500/10 via-transparent to-transparent" />
+          <CardContent className="relative flex items-start gap-4 p-5">
+            <div className="relative">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-orange-500/15 ring-1 ring-orange-500/20">
+                <Trophy className="h-5 w-5 text-orange-400" />
+              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-muted border border-border hover:bg-muted/80 transition-colors">
+                    <Info className="h-2.5 w-2.5 text-muted-foreground" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                  {METRIC_EXPLANATIONS.rank}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            <div>
+              <p className="text-sm font-medium leading-snug text-muted-foreground">Your Rank</p>
+              <p className="text-2xl font-bold text-foreground">{percentile}<span className="text-base text-muted-foreground">th</span></p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                percentile in your company
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </TooltipProvider>
   )
 }
 
@@ -149,6 +208,7 @@ export function AdminStatCards({ data: s, targets, hoursMetrics }: AdminStatCard
         : `${formatHours(hoursMetrics.monthOverMonthChange)} from last month`,
       icon: Clock,
       positive: hoursMetrics.monthOverMonthChange >= 0,
+      explanation: METRIC_EXPLANATIONS.totalHoursSaved,
     },
     {
       label: "Productivity Gain",
@@ -156,6 +216,7 @@ export function AdminStatCards({ data: s, targets, hoursMetrics }: AdminStatCard
       change: `${hoursMetrics.fteEquivalent.toFixed(1)} FTE equivalent (${hoursMetrics.activeParticipants} people)`,
       icon: Gauge,
       positive: true,
+      explanation: METRIC_EXPLANATIONS.productivityGain,
     },
     {
       label: "Value Created",
@@ -163,6 +224,7 @@ export function AdminStatCards({ data: s, targets, hoursMetrics }: AdminStatCard
       change: `${formatValue(hoursMetrics.annualValue)} annual run rate`,
       icon: DollarSign,
       positive: true,
+      explanation: METRIC_EXPLANATIONS.valueCreated,
     },
     {
       label: "Avg Confidence",
@@ -172,6 +234,7 @@ export function AdminStatCards({ data: s, targets, hoursMetrics }: AdminStatCard
         : `${hoursMetrics.confidenceChange.toFixed(1)} from last month`,
       icon: Target,
       positive: hoursMetrics.confidenceChange >= 0,
+      explanation: METRIC_EXPLANATIONS.avgConfidence,
     },
     {
       label: "Active Participants",
@@ -179,6 +242,7 @@ export function AdminStatCards({ data: s, targets, hoursMetrics }: AdminStatCard
       change: `${hoursMetrics.thisMonthResponses} scorecards this month`,
       icon: Users,
       positive: true,
+      explanation: METRIC_EXPLANATIONS.activeParticipants,
     },
   ] : [
     // Fallback to traditional metrics if hours not available
@@ -188,6 +252,7 @@ export function AdminStatCards({ data: s, targets, hoursMetrics }: AdminStatCard
       change: completionVs.text,
       icon: CheckCircle2,
       positive: completionVs.positive,
+      explanation: METRIC_EXPLANATIONS.completionRate,
     },
     {
       label: "Active Users",
@@ -195,6 +260,7 @@ export function AdminStatCards({ data: s, targets, hoursMetrics }: AdminStatCard
       change: usersVs.text,
       icon: Users,
       positive: usersVs.positive,
+      explanation: METRIC_EXPLANATIONS.activeUsers,
     },
     {
       label: "Scorecards Sent",
@@ -202,6 +268,7 @@ export function AdminStatCards({ data: s, targets, hoursMetrics }: AdminStatCard
       change: sentVs.text,
       icon: Send,
       positive: sentVs.positive,
+      explanation: METRIC_EXPLANATIONS.scorecardsSent,
     },
     {
       label: "Organizations",
@@ -209,32 +276,47 @@ export function AdminStatCards({ data: s, targets, hoursMetrics }: AdminStatCard
       change: `${s.totalUsers} total users`,
       icon: Building2,
       positive: true,
+      explanation: METRIC_EXPLANATIONS.organizations,
     },
   ]
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-      {adminCards.map((stat, idx) => (
-        <Card key={stat.label} className="relative min-h-[120px] overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
-          <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${adminGradients[idx]} via-transparent to-transparent`} />
-          <CardContent className="relative flex h-full items-start gap-4 p-5">
-            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${adminIconColors[idx].bg}`}>
-              <stat.icon className={`h-5 w-5 ${adminIconColors[idx].text}`} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-medium leading-snug text-muted-foreground">
-                {stat.label}
-              </p>
-              <p className="text-2xl font-bold text-foreground">
-                {stat.value}
-              </p>
-              <p className={`mt-0.5 text-xs ${stat.positive === false ? "text-amber-400" : "text-emerald-400"}`}>
-                {stat.change}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+    <TooltipProvider>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {adminCards.map((stat, idx) => (
+          <Card key={stat.label} className="relative min-h-[120px] overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+            <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${adminGradients[idx]} via-transparent to-transparent`} />
+            <CardContent className="relative flex h-full items-start gap-4 p-5">
+              <div className="relative">
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${adminIconColors[idx].bg}`}>
+                  <stat.icon className={`h-5 w-5 ${adminIconColors[idx].text}`} />
+                </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-muted border border-border hover:bg-muted/80 transition-colors">
+                      <Info className="h-2.5 w-2.5 text-muted-foreground" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[250px] text-xs">
+                    {stat.explanation}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium leading-snug text-muted-foreground">
+                  {stat.label}
+                </p>
+                <p className="text-2xl font-bold text-foreground">
+                  {stat.value}
+                </p>
+                <p className={`mt-0.5 text-xs ${stat.positive === false ? "text-amber-400" : "text-emerald-400"}`}>
+                  {stat.change}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </TooltipProvider>
   )
 }
