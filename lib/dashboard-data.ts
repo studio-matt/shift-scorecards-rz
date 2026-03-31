@@ -385,28 +385,70 @@ export async function computeQuestionResults(
     }
   }
 
-  // Aggregate scale-type answers per question id
-  const questionMap = new Map<string, { total: number; count: number }>()
+  // Sort responses by date to separate current vs previous period
+  const sortedResponses = [...responses].sort((a, b) => 
+    new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
+  )
+  
+  // Split into this month vs last month
+  const now = new Date()
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  
+  const thisMonthResponses = sortedResponses.filter(r => new Date(r.completedAt) >= thisMonthStart)
+  const lastMonthResponses = sortedResponses.filter(r => {
+    const d = new Date(r.completedAt)
+    return d >= lastMonthStart && d < thisMonthStart
+  })
 
-  for (const r of responses) {
-    for (const [qId, val] of Object.entries(r.answers)) {
-      if (typeof val !== "number" || val < 1 || val > 10) continue
-      if (!questionMap.has(qId)) {
-        questionMap.set(qId, { total: 0, count: 0 })
+  // Aggregate answers per question for each period
+  const aggregateByQuestion = (resps: RawResponse[]) => {
+    const map = new Map<string, { total: number; count: number }>()
+    for (const r of resps) {
+      for (const [qId, val] of Object.entries(r.answers)) {
+        if (typeof val !== "number") continue
+        if (!map.has(qId)) {
+          map.set(qId, { total: 0, count: 0 })
+        }
+        const entry = map.get(qId)!
+        entry.total += val
+        entry.count += 1
       }
-      const entry = questionMap.get(qId)!
-      entry.total += val
-      entry.count += 1
     }
+    return map
   }
 
-  return Array.from(questionMap.entries())
-    .map(([qId, { total, count }]) => ({
-      question: questionTextMap.get(qId) ?? qId,
-      score: Math.round((total / count) * 10) / 10,
-      change: Math.round(Math.random() * 8) / 10, // placeholder delta
-    }))
-    .sort((a, b) => b.score - a.score)
+  const thisMonthData = aggregateByQuestion(thisMonthResponses)
+  const lastMonthData = aggregateByQuestion(lastMonthResponses)
+
+  // Combine all question IDs
+  const allQuestionIds = new Set([...thisMonthData.keys(), ...lastMonthData.keys()])
+
+  return Array.from(allQuestionIds)
+    .map((qId) => {
+      const thisMonth = thisMonthData.get(qId)
+      const lastMonth = lastMonthData.get(qId)
+      
+      const currentAvg = thisMonth && thisMonth.count > 0 
+        ? thisMonth.total / thisMonth.count 
+        : 0
+      const previousAvg = lastMonth && lastMonth.count > 0 
+        ? lastMonth.total / lastMonth.count 
+        : 0
+      
+      // Calculate change (difference between this month and last month averages)
+      const change = lastMonth && lastMonth.count > 0
+        ? Math.round((currentAvg - previousAvg) * 10) / 10
+        : 0
+      
+      return {
+        question: questionTextMap.get(qId) ?? qId,
+        score: Math.round(currentAvg * 10) / 10,
+        change,
+      }
+    })
+    .filter(q => q.score > 0) // Only show questions with data
+    .sort((a, b) => b.change - a.change) // Sort by biggest improvement
 }
 
 // ── Recent scorecards ─────────────────────────────────────────────────
@@ -446,51 +488,41 @@ export async function computeRecentScorecards(
     }
   }
 
-  // Helper to calculate hours saved from a response
-  const calculateHoursSaved = (answers: Record<string, unknown>, templateId: string): number => {
-    const questions = tmplQuestionsMap.get(templateId) ?? []
-    let totalMinutes = 0
-    for (const q of questions) {
-      // Check if this is a time-saving question
-      const isTimeSaving = q.type === "time_saving" || 
-        (q.text && (q.text.toLowerCase().includes("time") || q.text.toLowerCase().includes("hour") || q.text.toLowerCase().includes("minute")) && 
-         q.text.toLowerCase().includes("save"))
-      if (isTimeSaving) {
-        const val = answers[q.id]
-        if (typeof val === "number" && val > 0) {
-          totalMinutes += val
-        }
-      }
-    }
-    return Math.round((totalMinutes / 60) * 10) / 10
+  // Helper to calculate average numeric answer from a response
+  const calculateAvgAnswer = (answers: Record<string, unknown>): number => {
+    const numericVals = Object.values(answers).filter(
+      (v) => typeof v === "number" && v > 0
+    ) as number[]
+    if (numericVals.length === 0) return 0
+    return Math.round((numericVals.reduce((a, b) => a + b, 0) / numericVals.length) * 10) / 10
   }
 
-  // Group responses by user to calculate deltas based on hours saved
-  const userHours = new Map<string, { hours: number; date: string }[]>()
+  // Group responses by user to calculate deltas
+  const userAvgs = new Map<string, { avg: number; date: string }[]>()
   for (const r of responses) {
-    if (!userHours.has(r.userId)) {
-      userHours.set(r.userId, [])
+    if (!userAvgs.has(r.userId)) {
+      userAvgs.set(r.userId, [])
     }
-    const hours = calculateHoursSaved(r.answers, r.templateId)
-    userHours.get(r.userId)!.push({ hours, date: r.completedAt })
+    const avg = calculateAvgAnswer(r.answers)
+    userAvgs.get(r.userId)!.push({ avg, date: r.completedAt })
   }
   
-  // Sort each user's hours by date (newest first)
-  for (const hours of userHours.values()) {
-    hours.sort((a, b) => b.date.localeCompare(a.date))
+  // Sort each user's averages by date (newest first)
+  for (const avgs of userAvgs.values()) {
+    avgs.sort((a, b) => b.date.localeCompare(a.date))
   }
 
   return responses
     .map((r) => {
-      const hoursSaved = calculateHoursSaved(r.answers, r.templateId)
+      const currentAvg = calculateAvgAnswer(r.answers)
 
-      // Calculate delta from previous scorecard (hours saved comparison)
-      const userHistory = userHours.get(r.userId) || []
+      // Calculate delta from previous scorecard
+      const userHistory = userAvgs.get(r.userId) || []
       const currentIdx = userHistory.findIndex(h => h.date === r.completedAt)
-      const previousHours = currentIdx >= 0 && currentIdx < userHistory.length - 1 
-        ? userHistory[currentIdx + 1].hours 
+      const previousAvg = currentIdx >= 0 && currentIdx < userHistory.length - 1 
+        ? userHistory[currentIdx + 1].avg 
         : null
-      const delta = previousHours !== null ? Math.round((hoursSaved - previousHours) * 10) / 10 : 0
+      const delta = previousAvg !== null ? Math.round((currentAvg - previousAvg) * 10) / 10 : 0
 
       const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
       return {
@@ -501,7 +533,7 @@ export async function computeRecentScorecards(
           day: "numeric",
           year: "numeric",
         }),
-        score: hoursSaved, // Now represents hours saved, not avg score
+        score: currentAvg, // Average of all numeric answers
         templateName: tmplNameMap.get(r.templateId) ?? r.templateId,
         delta,
         answers: r.answers,
