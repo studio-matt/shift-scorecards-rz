@@ -5,25 +5,120 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { TrendingUp, Flame, CheckCircle2, Target, Building2, Users, Clock, Send, DollarSign, Gauge, Trophy, Info } from "lucide-react"
 import type { AdminStats, OrgHoursMetrics, UserHoursMetrics } from "@/lib/dashboard-data"
 
-// Tooltip explanations for each metric
+// Tooltip explanations for each metric (JSX for better formatting)
 const METRIC_EXPLANATIONS = {
   // User metrics
-  completed: "Number of scorecards you've completed this period out of the total assigned to you.",
-  confidence: "Your average self-reported confidence score (1-10 scale) across all questions. Higher is better.",
-  rank: "Your percentile ranking compared to others in your company based on confidence scores.",
+  completed: (
+    <div className="space-y-1">
+      <p className="font-semibold">Completed Scorecards</p>
+      <p>Shows how many scorecards you have finished this period compared to how many were assigned to you.</p>
+    </div>
+  ),
+  confidence: (
+    <div className="space-y-1">
+      <p className="font-semibold">Confidence Score</p>
+      <p>Your average self-reported confidence across all questions.</p>
+      <ul className="list-disc pl-4 space-y-0.5">
+        <li>Scale: 1-10 (higher is better)</li>
+        <li>Measures how confident you feel in your work</li>
+      </ul>
+    </div>
+  ),
+  rank: (
+    <div className="space-y-1">
+      <p className="font-semibold">Percentile Rank</p>
+      <p>Your ranking compared to others in your company based on confidence scores.</p>
+      <ul className="list-disc pl-4 space-y-0.5">
+        <li>90th = Top 10% of your company</li>
+        <li>50th = Middle of the pack</li>
+      </ul>
+    </div>
+  ),
   
   // Admin metrics
-  totalHoursSaved: "Sum of all time-saving answers reported by employees this month. Calculated from 'hours saved' type questions in scorecards.",
-  productivityGain: "Hours saved as a percentage of total work capacity. Formula: (Hours Saved ÷ (Participants × 160 work hours/month)) × 100",
-  valueCreated: "Estimated dollar value of time saved. Calculated as: Hours Saved × Average Hourly Rate ($75 default).",
-  avgConfidence: "Average confidence score across all participants. Calculated from 1-10 scale responses.",
-  activeParticipants: "Number of unique users who have submitted at least one scorecard this month.",
-  completionRate: "Percentage of assigned scorecards that have been completed by employees.",
-  activeUsers: "Total number of users who are actively using the platform.",
-  scorecardsSent: "Number of scorecards distributed to employees this period.",
-  organizations: "Total number of organizations/teams in the system.",
-  fteEquivalent: "Full-Time Equivalent: Hours saved converted to equivalent full-time employees. 160 hours = 1 FTE per month.",
-}
+  totalHoursSaved: (
+    <div className="space-y-1">
+      <p className="font-semibold">Total Hours Saved</p>
+      <p>Sum of all time savings reported by employees this month.</p>
+      <ul className="list-disc pl-4 space-y-0.5">
+        <li>Collected from "hours saved" questions in scorecards</li>
+        <li>Aggregated across all participants</li>
+      </ul>
+    </div>
+  ),
+  productivityGain: (
+    <div className="space-y-1">
+      <p className="font-semibold">Productivity Gain %</p>
+      <p>Hours saved as a percentage of total work capacity.</p>
+      <ul className="list-disc pl-4 space-y-0.5">
+        <li>Formula: Hours Saved / (Participants x 160 hrs) x 100</li>
+        <li>160 hours = standard monthly work hours per person</li>
+      </ul>
+    </div>
+  ),
+  valueCreated: (
+    <div className="space-y-1">
+      <p className="font-semibold">Value Created</p>
+      <p>Estimated dollar value of time saved.</p>
+      <ul className="list-disc pl-4 space-y-0.5">
+        <li>Formula: Hours Saved x Hourly Rate</li>
+        <li>Default rate: $75/hour (configurable)</li>
+      </ul>
+    </div>
+  ),
+  avgConfidence: (
+    <div className="space-y-1">
+      <p className="font-semibold">Average Confidence</p>
+      <p>Mean confidence score across all participants.</p>
+      <ul className="list-disc pl-4 space-y-0.5">
+        <li>Scale: 1-10</li>
+        <li>Calculated from all submitted responses</li>
+      </ul>
+    </div>
+  ),
+  activeParticipants: (
+    <div className="space-y-1">
+      <p className="font-semibold">Active Participants</p>
+      <p>Number of unique users who submitted at least one scorecard this month.</p>
+    </div>
+  ),
+  completionRate: (
+    <div className="space-y-1">
+      <p className="font-semibold">Completion Rate</p>
+      <p>Percentage of assigned scorecards that have been completed.</p>
+      <ul className="list-disc pl-4 space-y-0.5">
+        <li>Formula: Completed / Assigned x 100</li>
+      </ul>
+    </div>
+  ),
+  activeUsers: (
+    <div className="space-y-1">
+      <p className="font-semibold">Active Users</p>
+      <p>Total number of users actively using the platform.</p>
+    </div>
+  ),
+  scorecardsSent: (
+    <div className="space-y-1">
+      <p className="font-semibold">Scorecards Sent</p>
+      <p>Number of scorecards distributed to employees this period.</p>
+    </div>
+  ),
+  organizations: (
+    <div className="space-y-1">
+      <p className="font-semibold">Organizations</p>
+      <p>Total number of organizations or teams in the system.</p>
+    </div>
+  ),
+  fteEquivalent: (
+    <div className="space-y-1">
+      <p className="font-semibold">FTE Equivalent</p>
+      <p>Hours saved converted to full-time employee equivalent.</p>
+      <ul className="list-disc pl-4 space-y-0.5">
+        <li>160 hours = 1 FTE per month</li>
+      </ul>
+    </div>
+  ),
+} as const
 
 interface UserStatCardsProps {
   avgScore: number
@@ -57,17 +152,17 @@ export function StatCards({
         <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-500/10 via-transparent to-transparent" />
           <CardContent className="relative flex items-start gap-4 p-5">
-            <div className="relative">
+            <div className="flex flex-col items-center gap-2">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 ring-1 ring-amber-500/20">
                 <CheckCircle2 className="h-5 w-5 text-amber-400" />
               </div>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-muted border border-border hover:bg-muted/80 transition-colors">
-                    <Info className="h-2.5 w-2.5 text-muted-foreground" />
+                  <button className="flex h-6 w-6 items-center justify-center rounded-full bg-muted border border-border hover:bg-muted/80 transition-colors">
+                    <Info className="h-4 w-4 text-muted-foreground" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                <TooltipContent side="bottom" className="max-w-[280px] text-xs">
                   {METRIC_EXPLANATIONS.completed}
                 </TooltipContent>
               </Tooltip>
@@ -86,17 +181,17 @@ export function StatCards({
         <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-transparent" />
           <CardContent className="relative flex items-start gap-4 p-5">
-            <div className="relative">
+            <div className="flex flex-col items-center gap-2">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-purple-500/15 ring-1 ring-purple-500/20">
                 <TrendingUp className="h-5 w-5 text-purple-400" />
               </div>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-muted border border-border hover:bg-muted/80 transition-colors">
-                    <Info className="h-2.5 w-2.5 text-muted-foreground" />
+                  <button className="flex h-6 w-6 items-center justify-center rounded-full bg-muted border border-border hover:bg-muted/80 transition-colors">
+                    <Info className="h-4 w-4 text-muted-foreground" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                <TooltipContent side="bottom" className="max-w-[280px] text-xs">
                   {METRIC_EXPLANATIONS.confidence}
                 </TooltipContent>
               </Tooltip>
@@ -115,17 +210,17 @@ export function StatCards({
         <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-orange-500/10 via-transparent to-transparent" />
           <CardContent className="relative flex items-start gap-4 p-5">
-            <div className="relative">
+            <div className="flex flex-col items-center gap-2">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-orange-500/15 ring-1 ring-orange-500/20">
                 <Trophy className="h-5 w-5 text-orange-400" />
               </div>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-muted border border-border hover:bg-muted/80 transition-colors">
-                    <Info className="h-2.5 w-2.5 text-muted-foreground" />
+                  <button className="flex h-6 w-6 items-center justify-center rounded-full bg-muted border border-border hover:bg-muted/80 transition-colors">
+                    <Info className="h-4 w-4 text-muted-foreground" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                <TooltipContent side="bottom" className="max-w-[280px] text-xs">
                   {METRIC_EXPLANATIONS.rank}
                 </TooltipContent>
               </Tooltip>
@@ -284,20 +379,20 @@ export function AdminStatCards({ data: s, targets, hoursMetrics }: AdminStatCard
     <TooltipProvider>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {adminCards.map((stat, idx) => (
-          <Card key={stat.label} className="relative min-h-[120px] overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+          <Card key={stat.label} className="relative min-h-[140px] overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
             <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${adminGradients[idx]} via-transparent to-transparent`} />
             <CardContent className="relative flex h-full items-start gap-4 p-5">
-              <div className="relative">
+              <div className="flex flex-col items-center gap-2">
                 <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${adminIconColors[idx].bg}`}>
                   <stat.icon className={`h-5 w-5 ${adminIconColors[idx].text}`} />
                 </div>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-muted border border-border hover:bg-muted/80 transition-colors">
-                      <Info className="h-2.5 w-2.5 text-muted-foreground" />
+                    <button className="flex h-6 w-6 items-center justify-center rounded-full bg-muted border border-border hover:bg-muted/80 transition-colors">
+                      <Info className="h-4 w-4 text-muted-foreground" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[250px] text-xs">
+                  <TooltipContent side="bottom" className="max-w-[280px] text-xs">
                     {stat.explanation}
                   </TooltipContent>
                 </Tooltip>
