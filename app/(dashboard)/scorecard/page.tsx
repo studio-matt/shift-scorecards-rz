@@ -106,6 +106,12 @@ export default function ScorecardPage() {
 
         // Load template
         const tmpl = await getDocument(COLLECTIONS.TEMPLATES, rel.templateId)
+        console.log("[v0] Template loaded:", {
+          templateId: rel.templateId,
+          tmpl,
+          hasQuestions: Array.isArray((tmpl as unknown as TemplateData)?.questions),
+          questionsCount: (tmpl as unknown as TemplateData)?.questions?.length,
+        })
         if (tmpl) {
           setTemplate(tmpl as unknown as TemplateData)
         }
@@ -152,6 +158,17 @@ export default function ScorecardPage() {
   const totalQuestions = questions.length
   const completedCount = Object.keys(answers).length
   const progress = totalQuestions > 0 ? (completedCount / totalQuestions) * 100 : 0
+
+  // Debug logging
+  console.log("[v0] Scorecard Debug:", {
+    loading,
+    template: template?.name,
+    questionsCount: questions.length,
+    questions: questions.map(q => ({ id: q.id, type: q.type, text: q.text?.slice(0, 50) })),
+    release: release?.id,
+    noActive,
+    expired,
+  })
 
   const handleAnswer = useCallback(
     (questionId: string, value: string | number) => {
