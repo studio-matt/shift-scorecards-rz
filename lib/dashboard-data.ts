@@ -1303,13 +1303,24 @@ export function computeOrgHoursMetrics(
   // Active participants
   const activeParticipants = thisMonthUsers.size
   
-  // Weekly average across all participants
-  const weeksThisMonth = Math.max(1, Math.ceil((new Date().getDate()) / 7))
-  const totalWeeklyHours = monthlyHours / weeksThisMonth
-  const avgWeeklyPerPerson = activeParticipants > 0 ? totalWeeklyHours / activeParticipants : 0
-  const avgProductivityPercent = (avgWeeklyPerPerson / 40) * 100
+  // Calculate productivity as percentage of total work capacity saved
+  // Total work capacity for all participants = activeParticipants * 160 hours/month
+  // Productivity = hours saved / total work capacity * 100
+  const totalWorkCapacity = activeParticipants > 0 ? activeParticipants * 160 : 160
+  const avgProductivityPercent = (monthlyHours / totalWorkCapacity) * 100
   
-  // FTE equivalent (160 hours = 1 FTE per month)
+  // Debug logging for hours calculation
+  console.log("[v0] OrgHoursMetrics Debug:", {
+    totalMinutes,
+    thisMonthMinutes,
+    monthlyHours,
+    activeParticipants,
+    totalWorkCapacity,
+    avgProductivityPercent,
+    timeSavingIdsCount: timeSavingIds.length,
+  })
+  
+  // FTE equivalent (160 hours = 1 FTE per month) - this is the company total, not per person
   const fteEquivalent = monthlyHours / 160
   
   // Annual projections

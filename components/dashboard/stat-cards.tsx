@@ -142,7 +142,7 @@ export function AdminStatCards({ data: s, targets, hoursMetrics }: AdminStatCard
   // Hours-based cards when metrics available
   const adminCards = hoursMetrics ? [
     {
-      label: "Hours Saved / Month",
+      label: "Total Hours Saved",
       value: formatHours(hoursMetrics.monthlyHours),
       change: hoursMetrics.monthOverMonthChange >= 0 
         ? `+${formatHours(hoursMetrics.monthOverMonthChange)} from last month`
@@ -151,9 +151,9 @@ export function AdminStatCards({ data: s, targets, hoursMetrics }: AdminStatCard
       positive: hoursMetrics.monthOverMonthChange >= 0,
     },
     {
-      label: "Avg Productivity",
+      label: "Productivity Gain",
       value: `${hoursMetrics.avgProductivityPercent.toFixed(1)}%`,
-      change: `${hoursMetrics.fteEquivalent.toFixed(1)} FTE equivalent`,
+      change: `${hoursMetrics.fteEquivalent.toFixed(1)} FTE equivalent (${hoursMetrics.activeParticipants} people)`,
       icon: Gauge,
       positive: true,
     },
