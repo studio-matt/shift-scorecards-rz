@@ -377,11 +377,16 @@ export async function computeQuestionResults(
 ): Promise<QuestionResult[]> {
   const templates = await fetchTemplates()
 
-  // Build question text lookup
+  // Build question text lookup AND identify scale 1-10 questions
   const questionTextMap = new Map<string, string>()
+  const scaleQuestionIds = new Set<string>()
   for (const t of templates) {
     for (const q of t.questions || []) {
       questionTextMap.set(q.id, q.text)
+      // Only include scale type questions (1-10 ratings)
+      if (q.type === "scale" || q.type === "rating" || q.type === "confidence") {
+        scaleQuestionIds.add(q.id)
+      }
     }
   }
 
@@ -401,12 +406,14 @@ export async function computeQuestionResults(
     return d >= lastMonthStart && d < thisMonthStart
   })
 
-  // Aggregate answers per question for each period
+  // Aggregate answers per question for each period - ONLY scale 1-10 questions
   const aggregateByQuestion = (resps: RawResponse[]) => {
     const map = new Map<string, { total: number; count: number }>()
     for (const r of resps) {
       for (const [qId, val] of Object.entries(r.answers)) {
-        if (typeof val !== "number") continue
+        // Only include scale 1-10 questions
+        if (!scaleQuestionIds.has(qId)) continue
+        if (typeof val !== "number" || val < 1 || val > 10) continue
         if (!map.has(qId)) {
           map.set(qId, { total: 0, count: 0 })
         }
@@ -421,10 +428,12 @@ export async function computeQuestionResults(
   const thisMonthData = aggregateByQuestion(thisMonthResponses)
   const lastMonthData = aggregateByQuestion(lastMonthResponses)
 
-  // Combine all question IDs
-  const allQuestionIds = new Set([...thisMonthData.keys(), ...lastMonthData.keys()])
+  // Only use scale question IDs that have data
+  const scaleQuestionsWithData = Array.from(scaleQuestionIds).filter(
+    qId => thisMonthData.has(qId) || lastMonthData.has(qId)
+  )
 
-  return Array.from(allQuestionIds)
+  return scaleQuestionsWithData
     .map((qId) => {
       const thisMonth = thisMonthData.get(qId)
       const lastMonth = lastMonthData.get(qId)
@@ -451,7 +460,7 @@ export async function computeQuestionResults(
     .sort((a, b) => b.change - a.change) // Sort by biggest improvement
 }
 
-// ── Recent scorecards ─────────────────────────────────────────────────
+// ── Recent scorecards ────────────────────��────────────────────────────
 export interface RecentScorecard {
   userId: string
   name: string
@@ -488,13 +497,30 @@ export async function computeRecentScorecards(
     }
   }
 
-  // Helper to calculate average numeric answer from a response
-  const calculateAvgAnswer = (answers: Record<string, unknown>): number => {
-    const numericVals = Object.values(answers).filter(
-      (v) => typeof v === "number" && v > 0
-    ) as number[]
-    if (numericVals.length === 0) return 0
-    return Math.round((numericVals.reduce((a, b) => a + b, 0) / numericVals.length) * 10) / 10
+  // Build a set of scale 1-10 question IDs
+  const scaleQuestionIds = new Set<string>()
+  for (const t of templates) {
+    const tmpl = t as unknown as Record<string, unknown>
+    const questions = (tmpl.questions as { id: string; type: string }[]) || []
+    for (const q of questions) {
+      if (q.type === "scale" || q.type === "rating" || q.type === "confidence") {
+        scaleQuestionIds.add(q.id)
+      }
+    }
+  }
+
+  // Helper to calculate average of ONLY scale 1-10 answers from a response
+  const calculateAvgScaleAnswer = (answers: Record<string, unknown>): number => {
+    const scaleVals: number[] = []
+    for (const [qId, val] of Object.entries(answers)) {
+      // Only include scale 1-10 questions
+      if (!scaleQuestionIds.has(qId)) continue
+      if (typeof val === "number" && val >= 1 && val <= 10) {
+        scaleVals.push(val)
+      }
+    }
+    if (scaleVals.length === 0) return 0
+    return Math.round((scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length) * 10) / 10
   }
 
   // Group responses by user to calculate deltas
@@ -503,7 +529,7 @@ export async function computeRecentScorecards(
     if (!userAvgs.has(r.userId)) {
       userAvgs.set(r.userId, [])
     }
-    const avg = calculateAvgAnswer(r.answers)
+    const avg = calculateAvgScaleAnswer(r.answers)
     userAvgs.get(r.userId)!.push({ avg, date: r.completedAt })
   }
   
@@ -514,7 +540,7 @@ export async function computeRecentScorecards(
 
   return responses
     .map((r) => {
-      const currentAvg = calculateAvgAnswer(r.answers)
+      const currentAvg = calculateAvgScaleAnswer(r.answers)
 
       // Calculate delta from previous scorecard
       const userHistory = userAvgs.get(r.userId) || []
