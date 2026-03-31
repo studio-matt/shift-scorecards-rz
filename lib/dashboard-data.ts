@@ -417,6 +417,8 @@ export interface RecentScorecard {
   score: number
   templateName: string
   delta?: number
+  answers?: Record<string, unknown>
+  questions?: { id: string; text: string; type: string }[]
 }
 
 export async function computeRecentScorecards(
@@ -425,6 +427,11 @@ export async function computeRecentScorecards(
 ): Promise<RecentScorecard[]> {
   const templates = await fetchTemplates()
   const tmplNameMap = new Map(templates.map((t) => [t.id, (t as unknown as Record<string, unknown>).name as string]))
+  const tmplQuestionsMap = new Map(templates.map((t) => {
+    const tmpl = t as unknown as Record<string, unknown>
+    const questions = (tmpl.questions as { id: string; text: string; type: string }[]) || []
+    return [t.id, questions]
+  }))
 
   // Build a map of userId -> full name (firstName + lastName)
   const allUsers = await getDocuments(COLLECTIONS.USERS)
@@ -489,6 +496,8 @@ export async function computeRecentScorecards(
         score: avg,
         templateName: tmplNameMap.get(r.templateId) ?? r.templateId,
         delta,
+        answers: r.answers,
+        questions: tmplQuestionsMap.get(r.templateId) ?? [],
         _completedAt: r.completedAt,
       }
     })

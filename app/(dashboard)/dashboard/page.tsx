@@ -569,6 +569,15 @@ export default function DashboardPage() {
 
           <QuestionResults data={questionResults} />
 
+          {/* ── Prompt Packs ────────────────────────────── */}
+          <div className="border-t border-border/50 pt-4">
+            <h2 className="text-lg font-semibold text-foreground">Prompt Packs</h2>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Ready-to-use AI prompt collections for your team
+            </p>
+            <PromptPacksCard />
+          </div>
+
           <RecentScorecardsCard data={recentScorecards} />
         </div>
       </div>

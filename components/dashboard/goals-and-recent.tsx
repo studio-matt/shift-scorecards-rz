@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import {
   Card,
@@ -7,9 +8,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, Clock, Circle, Download, Target, TrendingUp, TrendingDown, Minus } from "lucide-react"
+import { CheckCircle2, Clock, Circle, Target, TrendingUp, TrendingDown, Minus, Eye } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { MostImprovedEntry, RecentScorecard } from "@/lib/dashboard-data"
 
@@ -169,60 +176,119 @@ export function MostImprovedCard({ showCompany = false, data }: MostImprovedProp
 }
 
 interface RecentScorecardsCardProps {
-  data: (RecentScorecard & { delta?: number })[]
+  data: (RecentScorecard & { delta?: number; answers?: Record<string, unknown>; questions?: { id: string; text: string; type: string }[] })[]
 }
 
 export function RecentScorecardsCard({ data }: RecentScorecardsCardProps) {
+  const [selectedScorecard, setSelectedScorecard] = useState<(typeof data)[0] | null>(null)
+
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base font-semibold">
-          Recent Scorecards
-        </CardTitle>
-        <Button variant="outline" size="sm">
-          <Download className="mr-2 h-3 w-3" />
-          Download Results
-        </Button>
-      </CardHeader>
-      <CardContent>
-        {data.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted-foreground">
-            No scorecard submissions yet
-          </p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {data.map((sc, idx) => {
-              const delta = sc.delta ?? 0
-              const isUp = delta > 0
-              const isDown = delta < 0
-              const DeltaIcon = isUp ? TrendingUp : isDown ? TrendingDown : Minus
-              const deltaColor = isUp ? "text-emerald-500" : isDown ? "text-red-500" : "text-muted-foreground"
-              
-              return (
-                <div
-                  key={`${sc.userId}-${idx}`}
-                  className="flex items-center justify-between rounded-md border border-border p-3"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
-                      {sc.date}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {sc.templateName}
-                    </p>
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base font-semibold">
+            Recent Scorecards
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {data.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              No scorecard submissions yet
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {data.map((sc, idx) => {
+                const delta = sc.delta ?? 0
+                const isUp = delta > 0
+                const isDown = delta < 0
+                const DeltaIcon = isUp ? TrendingUp : isDown ? TrendingDown : Minus
+                const deltaColor = isUp ? "text-emerald-500" : isDown ? "text-red-500" : "text-muted-foreground"
+                
+                return (
+                  <div
+                    key={`${sc.userId}-${idx}`}
+                    className="flex items-center justify-between rounded-md border border-border p-3"
+                  >
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-foreground">
+                        {sc.date}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {sc.templateName}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className={`flex items-center gap-1.5 ${deltaColor}`}>
+                        <DeltaIcon className="h-4 w-4" />
+                        <span className="text-sm font-semibold">
+                          {isUp ? "+" : ""}{delta !== 0 ? delta.toFixed(1) : "—"}
+                        </span>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-7 px-2 text-xs"
+                        onClick={() => setSelectedScorecard(sc)}
+                      >
+                        <Eye className="mr-1 h-3 w-3" />
+                        View
+                      </Button>
+                    </div>
                   </div>
-                  <div className={`flex items-center gap-1.5 ${deltaColor}`}>
-                    <DeltaIcon className="h-4 w-4" />
-                    <span className="text-sm font-semibold">
-                      {isUp ? "+" : ""}{delta !== 0 ? delta.toFixed(1) : "—"}
-                    </span>
+                )
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* View Results Modal */}
+      <Dialog open={!!selectedScorecard} onOpenChange={(open) => !open && setSelectedScorecard(null)}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex flex-col gap-1">
+              <span>{selectedScorecard?.templateName}</span>
+              <span className="text-sm font-normal text-muted-foreground">{selectedScorecard?.date}</span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 pt-4">
+            {selectedScorecard?.questions && selectedScorecard?.answers ? (
+              selectedScorecard.questions.map((q, idx) => {
+                const answer = selectedScorecard.answers?.[q.id]
+                const displayAnswer = answer !== undefined && answer !== null
+                  ? typeof answer === "number"
+                    ? answer.toString()
+                    : typeof answer === "string"
+                    ? answer
+                    : JSON.stringify(answer)
+                  : "No response"
+                
+                return (
+                  <div key={q.id} className="rounded-lg border border-border/50 bg-muted/30 p-4">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Question {idx + 1}</p>
+                    <p className="text-sm font-medium text-foreground mb-2">{q.text}</p>
+                    <div className="rounded-md bg-background/50 px-3 py-2">
+                      <p className="text-sm text-foreground">
+                        {q.type === "scale" && typeof answer === "number" ? (
+                          <span className="font-semibold">{answer}/10</span>
+                        ) : q.type === "time_saving" && typeof answer === "number" ? (
+                          <span className="font-semibold">{answer} minutes</span>
+                        ) : (
+                          displayAnswer
+                        )}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })
+            ) : (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                Response details not available for this scorecard
+              </p>
+            )}
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
