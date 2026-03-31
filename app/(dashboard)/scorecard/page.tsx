@@ -621,16 +621,33 @@ function ResultsSummary({
   userId: string
   router: ReturnType<typeof useRouter>
 }) {
-  const [loading, setLoading] = useState(true)
-  const [myScore, setMyScore] = useState(0)
-  const [prevScore, setPrevScore] = useState<number | null>(null)
+const [loading, setLoading] = useState(true)
+  const [hoursSaved, setHoursSaved] = useState(0)
+  const [prevHours, setPrevHours] = useState<number | null>(null)
   const [benchmark, setBenchmark] = useState<{ deptAvg: number; orgAvg: number; percentile: number; deptName: string } | null>(null)
   const [insight, setInsight] = useState("")
-
+  
   useEffect(() => {
     async function compute() {
       try {
-        // 1. Current submission score
+        // 1. Calculate hours saved from this submission
+        // Find time-saving questions and sum the minutes
+        const timeSavingQuestions = template?.questions?.filter(q => {
+          const text = q.text.toLowerCase()
+          return (text.includes("time") || text.includes("hours")) && text.includes("save")
+        }) ?? []
+        
+        let totalMinutes = 0
+        for (const q of timeSavingQuestions) {
+          const val = answers[q.id]
+          if (typeof val === "number" && val > 0) {
+            totalMinutes += val
+          }
+        }
+        const thisHours = Math.round((totalMinutes / 60) * 10) / 10
+        setHoursSaved(thisHours)
+        
+        // Keep score calculation for insight generation
         const scaleVals = Object.values(answers).filter(
           (v) => typeof v === "number" && v >= 1 && v <= 10,
         ) as number[]
@@ -638,17 +655,30 @@ function ResultsSummary({
           scaleVals.length > 0
             ? Math.round((scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length) * 10) / 10
             : 0
-        setMyScore(thisScore)
 
         // 2. Fetch historical data for trend + benchmark
         const allResponses = await fetchAllResponses()
         const trend = computePersonalTrend(allResponses, userId)
         const bench = computePersonalBenchmark(allResponses, userId)
-
-        if (trend.length >= 2) {
-          setPrevScore(trend[trend.length - 2]?.myScore ?? null)
-        } else if (trend.length === 1) {
-          setPrevScore(trend[0].myScore)
+        
+        // Get previous hours from last submission
+        const myResponses = allResponses.filter(r => r.userId === userId)
+        if (myResponses.length >= 2) {
+          // Sort by date and get previous submission
+          const sorted = [...myResponses].sort((a, b) => 
+            new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
+          )
+          const prevResponse = sorted[1] // Second most recent
+          if (prevResponse) {
+            let prevMinutes = 0
+            for (const q of timeSavingQuestions) {
+              const val = prevResponse.answers[q.id]
+              if (typeof val === "number" && val > 0) {
+                prevMinutes += val
+              }
+            }
+            setPrevHours(Math.round((prevMinutes / 60) * 10) / 10)
+          }
         }
 
         if (bench) {
@@ -734,7 +764,7 @@ function ResultsSummary({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const delta = prevScore !== null ? myScore - prevScore : null
+  const delta = prevHours !== null ? hoursSaved - prevHours : null
   const TrendIcon = delta !== null && delta > 0 ? TrendingUp : delta !== null && delta < 0 ? TrendingDown : Minus
 
   if (loading) {
@@ -759,14 +789,14 @@ function ResultsSummary({
         </p>
       </div>
 
-      {/* Score cards row */}
+      {/* Hours saved cards row */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {/* Your Score */}
+        {/* Hours Saved */}
         <Card>
           <CardContent className="flex flex-col items-center p-6">
-            <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">Your Score</p>
-            <p className="text-4xl font-bold text-primary">{myScore}</p>
-            <p className="text-xs text-muted-foreground">/10</p>
+            <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">Hours Saved</p>
+            <p className="text-4xl font-bold text-primary">{hoursSaved}</p>
+            <p className="text-xs text-muted-foreground">this week</p>
           </CardContent>
         </Card>
 
@@ -785,10 +815,10 @@ function ResultsSummary({
                     "text-2xl font-bold",
                     delta > 0 ? "text-green-600" : delta < 0 ? "text-red-500" : "text-muted-foreground"
                   )}>
-                    {delta > 0 ? "+" : ""}{delta.toFixed(1)}
+                    {delta > 0 ? "+" : ""}{delta.toFixed(1)} hrs
                   </p>
                 </div>
-                <p className="text-xs text-muted-foreground">from {prevScore?.toFixed(1)}</p>
+                <p className="text-xs text-muted-foreground">from {prevHours?.toFixed(1)} hrs</p>
               </>
             ) : (
               <>
@@ -809,7 +839,7 @@ function ResultsSummary({
                   Top {Math.max(1, 100 - benchmark.percentile)}%
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  vs. {benchmark.deptName} avg {benchmark.deptAvg}/10
+                  vs. {benchmark.deptName} avg
                 </p>
               </>
             ) : (

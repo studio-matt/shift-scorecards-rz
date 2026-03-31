@@ -149,7 +149,7 @@ export function StatCards({
     <TooltipProvider>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {/* Completed */}
-        <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+        <Card className="relative border-border/50 bg-card/80 backdrop-blur-sm">
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-500/10 via-transparent to-transparent" />
           <CardContent className="relative flex items-start gap-4 p-5">
             <div className="flex flex-col items-center gap-2">
@@ -178,7 +178,7 @@ export function StatCards({
         </Card>
 
         {/* Confidence */}
-        <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+        <Card className="relative border-border/50 bg-card/80 backdrop-blur-sm">
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-transparent" />
           <CardContent className="relative flex items-start gap-4 p-5">
             <div className="flex flex-col items-center gap-2">
@@ -207,7 +207,7 @@ export function StatCards({
         </Card>
 
         {/* Your Rank */}
-        <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+        <Card className="relative border-border/50 bg-card/80 backdrop-blur-sm">
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-orange-500/10 via-transparent to-transparent" />
           <CardContent className="relative flex items-start gap-4 p-5">
             <div className="flex flex-col items-center gap-2">
@@ -379,7 +379,7 @@ export function AdminStatCards({ data: s, targets, hoursMetrics }: AdminStatCard
     <TooltipProvider>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {adminCards.map((stat, idx) => (
-          <Card key={stat.label} className="relative min-h-[140px] overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+          <Card key={stat.label} className="relative min-h-[140px] border-border/50 bg-card/80 backdrop-blur-sm">
             <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${adminGradients[idx]} via-transparent to-transparent`} />
             <CardContent className="relative flex h-full items-start gap-4 p-5">
               <div className="flex flex-col items-center gap-2">
