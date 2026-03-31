@@ -879,6 +879,10 @@ export function AIActionPlanCard({
 // ── Prompt Packs - Links to Real Packs ───────────────────────────────
 import Image from "next/image"
 
+// Generic image for all prompt pack cards
+const GENERIC_PACK_IMAGE = "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Building%20the%20Limitless%20Org-cgbiPsyabIOZ6ganlKUuPo5caB4Zg1.png"
+const SHIFT_LOGO = "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/2020_Shift_Logo_PNG_White-oHuVe5im3yqRlmCF8NxkQK11YY4Xrj.png"
+
 // Featured prompt packs from the main prompt packs page - exact data from /prompt-packs
 const FEATURED_PROMPT_PACKS = [
   {
@@ -888,7 +892,6 @@ const FEATURED_PROMPT_PACKS = [
     promptCount: 25,
     icon: Brain,
     color: "from-purple-500 to-pink-500",
-    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/you%20are%20the%20product-Pq0VsCopzX2obmFSZmcUEb593nITxR.png",
   },
   {
     id: "master-prompt-builder",
@@ -896,7 +899,6 @@ const FEATURED_PROMPT_PACKS = [
     subtitle: "Design Your AI Operating System",
     icon: Wrench,
     color: "from-blue-500 to-cyan-500",
-    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/master%20prompt%20builder-yFl5O0aWN4MxN3Rk4sY5NMYKWrah6G.png",
   },
   {
     id: "leader-manager",
@@ -905,7 +907,6 @@ const FEATURED_PROMPT_PACKS = [
     promptCount: 50,
     icon: Target,
     color: "from-rose-500 to-pink-500",
-    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/leader-manager-header_8048d214-JWT91cOgiCBvSA3JB1zec722eDTsDc.png",
   },
   {
     id: "high-performance-flow",
@@ -914,7 +915,6 @@ const FEATURED_PROMPT_PACKS = [
     promptCount: 14,
     icon: Rocket,
     color: "from-violet-500 to-purple-500",
-    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/header-high-performance_cc6133d2-QQ6UKPDNSpvI0Ao7fU2OyWCE5RN7O9.png",
   },
 ]
 
@@ -951,30 +951,35 @@ export function PromptPacksCard() {
                 href={`/prompt-packs?pack=${pack.id}`}
                 className="group rounded-lg border border-border/50 bg-muted/30 overflow-hidden transition-all hover:border-cyan/30 hover:bg-muted/50"
               >
-                {pack.image && (
-                  <div className="relative h-20 w-full overflow-hidden">
+                {/* Generic image with title overlay */}
+                <div className="relative h-20 w-full overflow-hidden">
+                  <Image
+                    src={GENERIC_PACK_IMAGE}
+                    alt={pack.title}
+                    fill
+                    className="object-cover transition-transform group-hover:scale-105"
+                  />
+                  {/* Title overlay on image */}
+                  <div className="absolute inset-0 flex items-center justify-start bg-gradient-to-r from-black/50 to-transparent px-3">
+                    <h3 className="text-xs font-bold uppercase tracking-wide text-white drop-shadow-lg line-clamp-2" style={{ fontFamily: 'system-ui, sans-serif' }}>
+                      {pack.title}
+                    </h3>
+                  </div>
+                  {/* SHIFT Logo */}
+                  <div className="absolute bottom-1 right-1">
                     <Image
-                      src={pack.image}
-                      alt={pack.title}
-                      fill
-                      className="object-cover transition-transform group-hover:scale-105"
+                      src={SHIFT_LOGO}
+                      alt="SHIFT"
+                      width={16}
+                      height={16}
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" />
                   </div>
-                )}
+                </div>
                 <div className="p-2.5">
-                  <div className="flex items-start gap-2">
-                    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gradient-to-br ${pack.color}`}>
-                      <IconComponent className="h-3.5 w-3.5 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-foreground truncate">{pack.title}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">{pack.subtitle}</p>
-                      {pack.promptCount && (
-                        <Badge variant="secondary" className="text-[9px] h-4 mt-1">{pack.promptCount} prompts</Badge>
-                      )}
-                    </div>
-                  </div>
+                  <p className="text-[10px] text-muted-foreground line-clamp-2">{pack.subtitle}</p>
+                  {pack.promptCount && (
+                    <Badge variant="secondary" className="text-[9px] h-4 mt-1.5">{pack.promptCount} prompts</Badge>
+                  )}
                 </div>
               </Link>
             )
