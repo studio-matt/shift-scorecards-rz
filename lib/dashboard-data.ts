@@ -372,17 +372,28 @@ export async function computeMostImproved(
 }
 
 // ── Question results ──────────────────────────────────────────────────
+// ONLY shows time_saving type questions - these are the only ones that count for hours saved
 export async function computeQuestionResults(
   responses: RawResponse[],
 ): Promise<QuestionResult[]> {
   const templates = await fetchTemplates()
 
-  // Build question text lookup
+  // Build question text lookup AND identify time_saving questions ONLY
   const questionTextMap = new Map<string, string>()
+  const timeSavingQuestionIds = new Set<string>()
   for (const t of templates) {
     for (const q of t.questions || []) {
       questionTextMap.set(q.id, q.text)
+      // ONLY time_saving type questions count for hours saved metrics
+      if (q.type === "time_saving") {
+        timeSavingQuestionIds.add(q.id)
+      }
     }
+  }
+
+  // If no time_saving questions found, return empty
+  if (timeSavingQuestionIds.size === 0) {
+    return []
   }
 
   // Sort responses by date to separate current vs previous period
@@ -390,24 +401,25 @@ export async function computeQuestionResults(
     new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
   )
   
-  // Split into this month vs last month
+  // Split into this week vs last week (for more granular comparison)
   const now = new Date()
-  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+  const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
   
-  const thisMonthResponses = sortedResponses.filter(r => new Date(r.completedAt) >= thisMonthStart)
-  const lastMonthResponses = sortedResponses.filter(r => {
+  const thisWeekResponses = sortedResponses.filter(r => new Date(r.completedAt) >= oneWeekAgo)
+  const lastWeekResponses = sortedResponses.filter(r => {
     const d = new Date(r.completedAt)
-    return d >= lastMonthStart && d < thisMonthStart
+    return d >= twoWeeksAgo && d < oneWeekAgo
   })
 
-  // Aggregate answers per question for each period - ONLY scale 1-10 values
+  // Aggregate answers per question for each period - ONLY time_saving questions
   const aggregateByQuestion = (resps: RawResponse[]) => {
     const map = new Map<string, { total: number; count: number }>()
     for (const r of resps) {
       for (const [qId, val] of Object.entries(r.answers)) {
-        // Only include values in the 1-10 range (scale questions)
-        if (typeof val !== "number" || val < 1 || val > 10) continue
+        // ONLY include time_saving type questions
+        if (!timeSavingQuestionIds.has(qId)) continue
+        if (typeof val !== "number" || val < 0) continue
         if (!map.has(qId)) {
           map.set(qId, { total: 0, count: 0 })
         }
@@ -419,40 +431,44 @@ export async function computeQuestionResults(
     return map
   }
 
-  const thisMonthData = aggregateByQuestion(thisMonthResponses)
-  const lastMonthData = aggregateByQuestion(lastMonthResponses)
+  const thisWeekData = aggregateByQuestion(thisWeekResponses)
+  const lastWeekData = aggregateByQuestion(lastWeekResponses)
 
-  // Get all question IDs that have scale data (1-10 values)
-  const allQuestionIds = new Set([...thisMonthData.keys(), ...lastMonthData.keys()])
+  // Only use time_saving question IDs that have data
+  const questionsWithData = Array.from(timeSavingQuestionIds).filter(
+    qId => thisWeekData.has(qId) || lastWeekData.has(qId)
+  )
 
-  return Array.from(allQuestionIds)
+  return questionsWithData
     .map((qId) => {
-      const thisMonth = thisMonthData.get(qId)
-      const lastMonth = lastMonthData.get(qId)
+      const thisWeek = thisWeekData.get(qId)
+      const lastWeek = lastWeekData.get(qId)
       
-      const currentAvg = thisMonth && thisMonth.count > 0 
-        ? thisMonth.total / thisMonth.count 
+      const currentAvg = thisWeek && thisWeek.count > 0 
+        ? thisWeek.total / thisWeek.count 
         : 0
-      const previousAvg = lastMonth && lastMonth.count > 0 
-        ? lastMonth.total / lastMonth.count 
+      const previousAvg = lastWeek && lastWeek.count > 0 
+        ? lastWeek.total / lastWeek.count 
         : 0
       
-      // Calculate change (difference between this month and last month averages)
-      const change = lastMonth && lastMonth.count > 0
+      // Calculate change (difference between this week and last week averages)
+      // Positive = saving more time this week
+      const change = lastWeek && lastWeek.count > 0
         ? Math.round((currentAvg - previousAvg) * 10) / 10
         : 0
       
       return {
         question: questionTextMap.get(qId) ?? qId,
-        score: Math.round(currentAvg * 10) / 10,
+        score: Math.round(currentAvg * 10) / 10, // Average minutes saved
         change,
       }
     })
-    .filter(q => q.score > 0) // Only show questions with data
+    .filter(q => q.score > 0 || q.change !== 0) // Show questions with data or changes
     .sort((a, b) => b.change - a.change) // Sort by biggest improvement
 }
 
-// ── Recent scorecards ────────────────────��────────────────────────────
+// ── Recent scorecards ─────────────────────────────────────────────────
+// Delta is calculated ONLY from time_saving type questions (minutes saved)
 export interface RecentScorecard {
   userId: string
   name: string
@@ -476,6 +492,18 @@ export async function computeRecentScorecards(
     return [t.id, questions]
   }))
 
+  // Build set of time_saving question IDs per template
+  const templateTimeSavingIds = new Map<string, Set<string>>()
+  for (const t of templates) {
+    const ids = new Set<string>()
+    for (const q of t.questions || []) {
+      if (q.type === "time_saving") {
+        ids.add(q.id)
+      }
+    }
+    templateTimeSavingIds.set(t.id, ids)
+  }
+
   // Build a map of userId -> full name (firstName + lastName)
   const allUsers = await getDocuments(COLLECTIONS.USERS)
   const userNameMap = new Map<string, string>()
@@ -489,48 +517,49 @@ export async function computeRecentScorecards(
     }
   }
 
-  // Helper to calculate average of scale 1-10 answers from a response
-  // We detect scale questions by checking if the answer value is between 1-10
-  const calculateAvgScaleAnswer = (answers: Record<string, unknown>): number => {
-    const scaleVals: number[] = []
-    for (const [, val] of Object.entries(answers)) {
-      // Include any numeric answer that's in the 1-10 range (these are scale questions)
-      if (typeof val === "number" && val >= 1 && val <= 10) {
-        scaleVals.push(val)
+  // Helper to calculate total minutes saved from ONLY time_saving type questions
+  const calculateTimeSaved = (answers: Record<string, unknown>, templateId: string): number => {
+    const timeSavingIds = templateTimeSavingIds.get(templateId) || new Set()
+    let totalMinutes = 0
+    for (const [qId, val] of Object.entries(answers)) {
+      // ONLY include time_saving type questions
+      if (!timeSavingIds.has(qId)) continue
+      if (typeof val === "number" && val >= 0) {
+        totalMinutes += val
       }
     }
-    if (scaleVals.length === 0) return 0
-    return Math.round((scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length) * 10) / 10
+    return totalMinutes
   }
 
   // Group responses by user to calculate deltas
-  const userAvgs = new Map<string, { avg: number; date: string }[]>()
+  const userTimeSaved = new Map<string, { minutes: number; date: string }[]>()
   for (const r of responses) {
-    if (!userAvgs.has(r.userId)) {
-      userAvgs.set(r.userId, [])
+    if (!userTimeSaved.has(r.userId)) {
+      userTimeSaved.set(r.userId, [])
     }
-    const avg = calculateAvgScaleAnswer(r.answers)
-    userAvgs.get(r.userId)!.push({ avg, date: r.completedAt })
+    const minutes = calculateTimeSaved(r.answers, r.templateId)
+    userTimeSaved.get(r.userId)!.push({ minutes, date: r.completedAt })
   }
   
-  // Sort each user's averages by date (newest first)
-  for (const avgs of userAvgs.values()) {
-    avgs.sort((a, b) => b.date.localeCompare(a.date))
+  // Sort each user's data by date (newest first)
+  for (const data of userTimeSaved.values()) {
+    data.sort((a, b) => b.date.localeCompare(a.date))
   }
 
   return responses
     .map((r) => {
-      const currentAvg = calculateAvgScaleAnswer(r.answers)
+      const currentMinutes = calculateTimeSaved(r.answers, r.templateId)
 
-      // Calculate delta from previous scorecard
-      const userHistory = userAvgs.get(r.userId) || []
+      // Calculate delta from previous scorecard (minutes difference)
+      const userHistory = userTimeSaved.get(r.userId) || []
       const currentIdx = userHistory.findIndex(h => h.date === r.completedAt)
       const hasPrevious = currentIdx >= 0 && currentIdx < userHistory.length - 1
-      const previousAvg = hasPrevious ? userHistory[currentIdx + 1].avg : null
-      // If no previous scorecard, delta is undefined (will show as "--" in UI)
-      // If there IS a previous, calculate the difference
-      const delta = previousAvg !== null && previousAvg > 0 
-        ? Math.round((currentAvg - previousAvg) * 10) / 10 
+      const previousMinutes = hasPrevious ? userHistory[currentIdx + 1].minutes : null
+      
+      // If no previous scorecard, delta is undefined (will show as "First entry" in UI)
+      // If there IS a previous, calculate the difference in minutes
+      const delta = previousMinutes !== null 
+        ? Math.round(currentMinutes - previousMinutes) 
         : undefined
 
       const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
@@ -542,7 +571,7 @@ export async function computeRecentScorecards(
           day: "numeric",
           year: "numeric",
         }),
-        score: currentAvg, // Average of all numeric answers
+        score: currentMinutes, // Total minutes saved from time_saving questions
         templateName: tmplNameMap.get(r.templateId) ?? r.templateId,
         delta,
         answers: r.answers,
@@ -1169,7 +1198,7 @@ export async function findTimeSavingQuestionIds(): Promise<string[]> {
   return ids
 }
 
-// ── Helper: Find ALL confidence question IDs from templates ────────────────
+// ─��� Helper: Find ALL confidence question IDs from templates ────────────────
 // Simply looks for questions with type === "confidence" - no pattern matching needed
 export async function findConfidenceQuestionIds(): Promise<string[]> {
   const templates = await fetchTemplates()

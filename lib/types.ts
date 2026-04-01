@@ -46,7 +46,7 @@ export interface Organization {
 export interface ScorecardQuestion {
   id: string
   text: string
-  type: "scale" | "number" | "text" | "multichoice" | "confidence" | "win" | "goals"
+  type: "scale" | "number" | "text" | "multichoice" | "confidence" | "win" | "goals" | "time_saving"
   scaleMin?: number
   scaleMax?: number
   options?: { label: string; value: string }[] // For multichoice questions (A, B, C, etc.)
@@ -54,7 +54,10 @@ export interface ScorecardQuestion {
 }
 
 // Question type meanings:
-// - confidence: Always 1-10 scale, used for metrics calculation
+// - time_saving: Scale 0-10 representing minutes saved (0 min to 60+ min) - ONLY this type is used for Hours Saved calculations
+// - confidence: Always 1-10 scale, used for confidence metrics
+// - scale: Generic 1-10 scale for other ratings (NOT used in hours saved)
+// - number: Numeric input (e.g., "how many meetings") - NOT used in hours saved
 // - win: Text answer that captures "biggest win" - shown in Win of the Month section
 // - goals: Text answer for goals - shown in Weekly Goals section with completion tracking
 

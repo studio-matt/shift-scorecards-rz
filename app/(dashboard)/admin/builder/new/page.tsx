@@ -53,7 +53,7 @@ import {
 interface BuilderQuestion {
   id: string
   text: string
-  type: "scale" | "number" | "text" | "multichoice" | "confidence" | "win" | "goals"
+  type: "scale" | "number" | "text" | "multichoice" | "confidence" | "win" | "goals" | "time_saving"
   options?: { label: string; value: string }[] // For multichoice (A, B, C, etc.)
 }
 
@@ -222,7 +222,7 @@ export default function NewScorecardBuilderPage() {
   const [status, setStatus] = useState<"active" | "draft">("draft")
   const [questions, setQuestions] = useState<BuilderQuestion[]>([])
   const [newQuestionText, setNewQuestionText] = useState("")
-  const [newQuestionType, setNewQuestionType] = useState<"scale" | "number" | "text" | "multichoice" | "confidence">("scale")
+  const [newQuestionType, setNewQuestionType] = useState<"scale" | "number" | "text" | "multichoice" | "confidence" | "time_saving">("scale")
   const [newMultichoiceOptions, setNewMultichoiceOptions] = useState<string[]>([])
   const [bulkOptionsText, setBulkOptionsText] = useState("")
   const [showBulkOptions, setShowBulkOptions] = useState(false)
@@ -375,7 +375,7 @@ export default function NewScorecardBuilderPage() {
     setQuestions((prev) => prev.map((q) => (q.id === id ? { ...q, text } : q)))
   }
 
-  function updateQuestionType(id: string, type: "scale" | "number" | "text" | "multichoice" | "confidence" | "win" | "goals") {
+  function updateQuestionType(id: string, type: "scale" | "number" | "text" | "multichoice" | "confidence" | "win" | "goals" | "time_saving") {
     setQuestions((prev) => prev.map((q) => {
       if (q.id !== id) return q
       // If changing to multichoice, initialize with empty options array
@@ -551,7 +551,7 @@ export default function NewScorecardBuilderPage() {
                   <Label>Questions ({questions.length})</Label>
                   {questions.length > 0 && (
                     <span className="text-[11px] text-muted-foreground">
-                      {questions.filter((q) => q.type === "scale").length} scale, {questions.filter((q) => q.type === "number").length} numeric, {questions.filter((q) => q.type === "text").length} text, {questions.filter((q) => q.type === "multichoice").length} multi-choice, {questions.filter((q) => q.type === "confidence").length} confidence, {questions.filter((q) => q.type === "win").length} win, {questions.filter((q) => q.type === "goals").length} goals
+                      {questions.filter((q) => q.type === "time_saving").length} time-saving, {questions.filter((q) => q.type === "scale").length} scale, {questions.filter((q) => q.type === "number").length} numeric, {questions.filter((q) => q.type === "text").length} text, {questions.filter((q) => q.type === "multichoice").length} multi-choice, {questions.filter((q) => q.type === "confidence").length} confidence, {questions.filter((q) => q.type === "win").length} win, {questions.filter((q) => q.type === "goals").length} goals
                     </span>
                   )}
                 </div>
@@ -575,23 +575,24 @@ export default function NewScorecardBuilderPage() {
                         <Select
                           value={q.type}
                           onValueChange={(val) =>
-                            updateQuestionType(q.id, val as "scale" | "number" | "text" | "multichoice")
+                            updateQuestionType(q.id, val as "scale" | "number" | "text" | "multichoice" | "time_saving")
                           }
                         >
                           <SelectTrigger className="w-36">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-  <SelectItem value="scale">Scale: 1-10</SelectItem>
-  <SelectItem value="number">Number</SelectItem>
-  <SelectItem value="text">Text</SelectItem>
-  <SelectItem value="multichoice">Multi Choice</SelectItem>
-  <SelectItem value="confidence">Confidence (1-10)</SelectItem>
-  <SelectItem value="win">Win (Biggest Win)</SelectItem>
-  <SelectItem value="goals">Goals (Weekly Goals)</SelectItem>
-  </SelectContent>
-  </Select>
-  <button
+<SelectItem value="time_saving">Time Saving (minutes)</SelectItem>
+                  <SelectItem value="scale">Scale: 1-10</SelectItem>
+                  <SelectItem value="number">Number</SelectItem>
+                  <SelectItem value="text">Text</SelectItem>
+                  <SelectItem value="multichoice">Multi Choice</SelectItem>
+                  <SelectItem value="confidence">Confidence (1-10)</SelectItem>
+                  <SelectItem value="win">Win (Biggest Win)</SelectItem>
+                  <SelectItem value="goals">Goals (Weekly Goals)</SelectItem>
+                  </SelectContent>
+                  </Select>
+                  <button
   type="button"
   onClick={() => removeQuestion(q.id)}
                           className="text-muted-foreground hover:text-destructive"
@@ -651,7 +652,7 @@ export default function NewScorecardBuilderPage() {
                     <Select
                       value={newQuestionType}
                       onValueChange={(val) => {
-                        setNewQuestionType(val as "scale" | "number" | "text" | "multichoice")
+                        setNewQuestionType(val as "scale" | "number" | "text" | "multichoice" | "time_saving")
                         if (val !== "multichoice") {
                           setNewMultichoiceOptions([])
                           setShowBulkOptions(false)
@@ -661,17 +662,18 @@ export default function NewScorecardBuilderPage() {
                       <SelectTrigger className="w-36">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
-  <SelectItem value="scale">Scale: 1-10</SelectItem>
-  <SelectItem value="number">Number</SelectItem>
-  <SelectItem value="text">Text</SelectItem>
-  <SelectItem value="multichoice">Multi Choice</SelectItem>
-  <SelectItem value="confidence">Confidence (1-10)</SelectItem>
-  <SelectItem value="win">Win (Biggest Win)</SelectItem>
-  <SelectItem value="goals">Goals (Weekly Goals)</SelectItem>
-  </SelectContent>
-  </Select>
-  <Button variant="outline" onClick={addQuestion}>
+<SelectContent>
+                <SelectItem value="time_saving">Time Saving (minutes)</SelectItem>
+                <SelectItem value="scale">Scale: 1-10</SelectItem>
+                <SelectItem value="number">Number</SelectItem>
+                <SelectItem value="text">Text</SelectItem>
+                <SelectItem value="multichoice">Multi Choice</SelectItem>
+                <SelectItem value="confidence">Confidence (1-10)</SelectItem>
+                <SelectItem value="win">Win (Biggest Win)</SelectItem>
+                <SelectItem value="goals">Goals (Weekly Goals)</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button variant="outline" onClick={addQuestion}>
   <Plus className="mr-1 h-4 w-4" />
   Add
                     </Button>
