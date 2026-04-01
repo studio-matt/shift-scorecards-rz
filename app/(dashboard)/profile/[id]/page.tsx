@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
 import { getDocument, updateDocument, getOrganizations, COLLECTIONS } from "@/lib/firestore"
 import { Button } from "@/components/ui/button"
@@ -159,11 +160,13 @@ export default function EditUserProfilePage({ params }: { params: Promise<{ id: 
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => router.back()}
+          asChild
           className="mb-4 -ml-2"
         >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Users
+          <Link href="/admin/users">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Users
+          </Link>
         </Button>
         <div className="flex items-center justify-between">
           <div>
