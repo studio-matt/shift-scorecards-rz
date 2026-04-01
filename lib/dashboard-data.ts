@@ -1180,7 +1180,7 @@ export interface OrgHoursMetrics {
   lastMonthResponses: number
 }
 
-// ── Helper: Find time-saving question IDs from templates ──────────��───
+// ── Helper: Find time-saving question IDs from templates ──────────���───
 // Questions with type === "time_saving" OR questions containing "time/hours" AND "save" in text
 export async function findTimeSavingQuestionIds(): Promise<string[]> {
   const templates = await fetchTemplates()
@@ -1203,18 +1203,29 @@ export async function findTimeSavingQuestionIds(): Promise<string[]> {
   return ids
 }
 
-// ─��� Helper: Find ALL confidence question IDs from templates ────────────────
-// Simply looks for questions with type === "confidence" - no pattern matching needed
+// ── Helper: Find ALL confidence question IDs from templates ────────────────
+// Looks for questions with type === "confidence" OR text containing "confidence"
 export async function findConfidenceQuestionIds(): Promise<string[]> {
   const templates = await fetchTemplates()
   const ids: string[] = []
+  const allQuestionTypes: string[] = []
   for (const t of templates) {
     for (const q of t.questions || []) {
+      allQuestionTypes.push(`${q.id}: ${q.type} - "${q.text?.substring(0, 30) || ''}"`)
+      // First check for explicit confidence type
       if (q.type === "confidence") {
+        ids.push(q.id)
+        continue
+      }
+      // Fallback: Match questions containing "confidence" in text
+      const text = (q.text || "").toLowerCase()
+      if (text.includes("confidence")) {
         ids.push(q.id)
       }
     }
   }
+  console.log("[v0] findConfidenceQuestionIds - All question types:", allQuestionTypes)
+  console.log("[v0] findConfidenceQuestionIds - Found confidence IDs:", ids)
   return ids
 }
 
