@@ -582,8 +582,8 @@ export default function NewScorecardBuilderPage() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-<SelectItem value="time_saving">Time Saving (minutes)</SelectItem>
-                  <SelectItem value="scale">Scale: 1-10</SelectItem>
+<SelectItem value="time_saving">Hours: 1-10 (time saved)</SelectItem>
+                  <SelectItem value="scale">Scale: 1-10 (general rating)</SelectItem>
                   <SelectItem value="number">Number</SelectItem>
                   <SelectItem value="text">Text</SelectItem>
                   <SelectItem value="multichoice">Multi Choice</SelectItem>
@@ -663,8 +663,8 @@ export default function NewScorecardBuilderPage() {
                         <SelectValue />
                       </SelectTrigger>
 <SelectContent>
-                <SelectItem value="time_saving">Time Saving (minutes)</SelectItem>
-                <SelectItem value="scale">Scale: 1-10</SelectItem>
+                <SelectItem value="time_saving">Hours: 1-10 (time saved)</SelectItem>
+                <SelectItem value="scale">Scale: 1-10 (general rating)</SelectItem>
                 <SelectItem value="number">Number</SelectItem>
                 <SelectItem value="text">Text</SelectItem>
                 <SelectItem value="multichoice">Multi Choice</SelectItem>

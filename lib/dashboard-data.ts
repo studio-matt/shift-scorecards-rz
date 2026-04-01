@@ -1181,14 +1181,19 @@ export interface OrgHoursMetrics {
 }
 
 // ── Helper: Find time-saving question IDs from templates ──────────────
-// Questions containing "time" AND "save" are time-saving questions
+// Questions with type === "time_saving" OR questions containing "time/hours" AND "save" in text
 export async function findTimeSavingQuestionIds(): Promise<string[]> {
   const templates = await fetchTemplates()
   const ids: string[] = []
   for (const t of templates) {
     for (const q of t.questions || []) {
+      // First check for explicit time_saving type
+      if (q.type === "time_saving") {
+        ids.push(q.id)
+        continue
+      }
+      // Fallback: Match questions about time/hours saved in text
       const text = q.text.toLowerCase()
-      // Match questions about time/hours saved: "time...save", "hours...save", "save...time", "save...hours"
       const hasTimeSave = (text.includes("time") || text.includes("hours")) && text.includes("save")
       if (hasTimeSave) {
         ids.push(q.id)
@@ -1343,24 +1348,24 @@ export function computeOrgHoursMetrics(
     const isThisMonth = responseDate >= thisMonthStart
     const isLastMonth = responseDate >= lastMonthStart && responseDate <= lastMonthEnd
     
+    // Count responses and track users who submitted this month (for active participants)
+    if (isThisMonth) {
+      thisMonthResponses++
+      thisMonthUsers.add(r.userId)
+    }
+    if (isLastMonth) lastMonthResponses++
+    
     // Sum all time-saving question answers (in minutes)
     for (const qId of timeSavingIds) {
       const val = r.answers[qId]
       if (typeof val === "number" && val > 0) {
         totalMinutes += val
-        if (isThisMonth) {
-          thisMonthMinutes += val
-          thisMonthUsers.add(r.userId)
-        }
+        if (isThisMonth) thisMonthMinutes += val
         if (isLastMonth) lastMonthMinutes += val
       }
     }
     
-    // Count responses
-    if (isThisMonth) thisMonthResponses++
-    if (isLastMonth) lastMonthResponses++
-    
-    // Track confidence scores
+    // Track confidence scores - check ALL answers for values 1-10 from confidence-type questions
     if (confidenceId) {
       const conf = r.answers[confidenceId]
       if (typeof conf === "number" && conf >= 1 && conf <= 10) {
@@ -1402,9 +1407,14 @@ export function computeOrgHoursMetrics(
     thisMonthMinutes,
     monthlyHours,
     activeParticipants,
+    thisMonthResponsesCount: thisMonthResponses,
     totalWorkCapacity,
     avgProductivityPercent,
     timeSavingIdsCount: timeSavingIds.length,
+    timeSavingIds,
+    confidenceId,
+    confidenceScoresCount: confidenceScores.length,
+    confidenceScores,
   })
   
   // FTE equivalent (160 hours = 1 FTE per month) - this is the company total, not per person
