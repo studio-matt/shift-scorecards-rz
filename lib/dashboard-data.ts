@@ -1180,7 +1180,7 @@ export interface OrgHoursMetrics {
   lastMonthResponses: number
 }
 
-// ── Helper: Find time-saving question IDs from templates ──────────────
+// ── Helper: Find time-saving question IDs from templates ──────────��───
 // Questions with type === "time_saving" OR questions containing "time/hours" AND "save" in text
 export async function findTimeSavingQuestionIds(): Promise<string[]> {
   const templates = await fetchTemplates()
@@ -1238,7 +1238,7 @@ export function computeUserHoursMetrics(
   responses: RawResponse[],
   userId: string,
   timeSavingIds: string[],
-  confidenceId: string | null,
+  confidenceIds: string[], // Changed to array to support multiple confidence questions
 ): UserHoursMetrics {
   const { thisMonthStart, lastMonthStart, lastMonthEnd } = getMonthBoundaries()
   
@@ -1271,9 +1271,9 @@ export function computeUserHoursMetrics(
     if (isThisMonth) thisMonthResponses++
     if (isLastMonth) lastMonthResponses++
     
-    // Track confidence scores
-    if (confidenceId) {
-      const conf = r.answers[confidenceId]
+    // Track confidence scores from ALL confidence-type questions
+    for (const confId of confidenceIds) {
+      const conf = r.answers[confId]
       if (typeof conf === "number" && conf >= 1 && conf <= 10) {
         confidenceScores.push(conf)
         if (isLastMonth) lastMonthConfidenceScores.push(conf)
@@ -1329,7 +1329,7 @@ export function computeUserHoursMetrics(
 export function computeOrgHoursMetrics(
   responses: RawResponse[],
   timeSavingIds: string[],
-  confidenceId: string | null,
+  confidenceIds: string[], // Changed to array to support multiple confidence questions
   hourlyRate: number = 100,
 ): OrgHoursMetrics {
   const { thisMonthStart, lastMonthStart, lastMonthEnd } = getMonthBoundaries()
@@ -1339,7 +1339,7 @@ export function computeOrgHoursMetrics(
   let lastMonthMinutes = 0
   let thisMonthResponses = 0
   let lastMonthResponses = 0
-  const thisMonthUsers = new Set<string>()
+  const allUsers = new Set<string>() // ALL users who ever submitted ANY scorecard
   const confidenceScores: number[] = []
   const lastMonthConfidenceScores: number[] = []
   
@@ -1348,11 +1348,11 @@ export function computeOrgHoursMetrics(
     const isThisMonth = responseDate >= thisMonthStart
     const isLastMonth = responseDate >= lastMonthStart && responseDate <= lastMonthEnd
     
-    // Count responses and track users who submitted this month (for active participants)
-    if (isThisMonth) {
-      thisMonthResponses++
-      thisMonthUsers.add(r.userId)
-    }
+    // Track ALL users who have ever submitted any scorecard (Active Participants)
+    allUsers.add(r.userId)
+    
+    // Count responses by month
+    if (isThisMonth) thisMonthResponses++
     if (isLastMonth) lastMonthResponses++
     
     // Sum all time-saving question answers (in minutes)
@@ -1365,9 +1365,9 @@ export function computeOrgHoursMetrics(
       }
     }
     
-    // Track confidence scores - check ALL answers for values 1-10 from confidence-type questions
-    if (confidenceId) {
-      const conf = r.answers[confidenceId]
+    // Track confidence scores from ALL confidence-type questions
+    for (const confId of confidenceIds) {
+      const conf = r.answers[confId]
       if (typeof conf === "number" && conf >= 1 && conf <= 10) {
         if (isThisMonth) confidenceScores.push(conf)
         if (isLastMonth) lastMonthConfidenceScores.push(conf)
@@ -1392,8 +1392,8 @@ export function computeOrgHoursMetrics(
     ? ((monthlyHours - lastMonthHoursRaw) / lastMonthHoursRaw) * 100
     : 0
   
-  // Active participants
-  const activeParticipants = thisMonthUsers.size
+  // Active participants = ALL users who have EVER submitted ANY scorecard
+  const activeParticipants = allUsers.size
   
   // Calculate productivity as percentage of total work capacity saved
   // Total work capacity for all participants = activeParticipants * 160 hours/month
@@ -1401,21 +1401,7 @@ export function computeOrgHoursMetrics(
   const totalWorkCapacity = activeParticipants > 0 ? activeParticipants * 160 : 160
   const avgProductivityPercent = (monthlyHours / totalWorkCapacity) * 100
   
-  // Debug logging for hours calculation
-  console.log("[v0] OrgHoursMetrics Debug:", {
-    totalMinutes,
-    thisMonthMinutes,
-    monthlyHours,
-    activeParticipants,
-    thisMonthResponsesCount: thisMonthResponses,
-    totalWorkCapacity,
-    avgProductivityPercent,
-    timeSavingIdsCount: timeSavingIds.length,
-    timeSavingIds,
-    confidenceId,
-    confidenceScoresCount: confidenceScores.length,
-    confidenceScores,
-  })
+
   
   // FTE equivalent (160 hours = 1 FTE per month) - this is the company total, not per person
   const fteEquivalent = monthlyHours / 160

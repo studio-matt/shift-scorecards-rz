@@ -42,7 +42,6 @@ import {
   NonRespondersCard,
   ScoreVelocityCard,
   DepartmentVarianceCard,
-  QuestionCorrelationsCard,
   DeptOverTimeChart,
   OrgBenchmarkCard,
   FieldReportCard,
@@ -74,7 +73,6 @@ import {
   computeNonResponders,
   computeScoreVelocity,
   computeDepartmentVariance,
-  computeQuestionCorrelations,
   computeDeptOverTime,
   computeOrgBenchmarks,
   computeFieldReport,
@@ -83,7 +81,7 @@ import {
   computePersonalTrend,
   computePersonalBenchmark,
   findTimeSavingQuestionIds,
-  findConfidenceQuestionId,
+  findConfidenceQuestionIds,
   computeUserHoursMetrics,
   computeOrgHoursMetrics,
   computeWeeklyHoursTrend,
@@ -94,7 +92,6 @@ import {
   type NonResponder,
   type ScoreVelocity,
   type DepartmentVariance,
-  type QuestionCorrelation,
   type DeptOverTime,
   type OrgBenchmark,
   type FieldReportData,
@@ -139,7 +136,6 @@ export default function DashboardPage() {
   const [nonResponders, setNonResponders] = useState<NonResponder[]>([])
   const [velocities, setVelocities] = useState<ScoreVelocity[]>([])
   const [deptVariance, setDeptVariance] = useState<DepartmentVariance[]>([])
-  const [correlations, setCorrelations] = useState<QuestionCorrelation[]>([])
   const [deptOverTime, setDeptOverTime] = useState<DeptOverTime[]>([])
   const [orgBenchmarks, setOrgBenchmarks] = useState<OrgBenchmark[]>([])
   const [fieldReport, setFieldReport] = useState<FieldReportData | null>(null)
@@ -215,38 +211,36 @@ export default function DashboardPage() {
       setQuestionResults(questions)
       setRecentScorecards(recent)
 
-      // New analytics
-      const [streakData, nonResp, vel, variance, corr, dot, benchmarks, report] =
-        await Promise.all([
-          computeStreaks(responses),
-          computeNonResponders(responses),
-          computeScoreVelocity(responses),
-          Promise.resolve(computeDepartmentVariance(responses)),
-          computeQuestionCorrelations(responses),
-          Promise.resolve(computeDeptOverTime(responses)),
-          computeOrgBenchmarks(responses),
-          computeFieldReport(responses),
-        ])
+  // New analytics
+  const [streakData, nonResp, vel, variance, dot, benchmarks, report] =
+    await Promise.all([
+      computeStreaks(responses),
+      computeNonResponders(responses),
+      computeScoreVelocity(responses),
+      Promise.resolve(computeDepartmentVariance(responses)),
+      Promise.resolve(computeDeptOverTime(responses)),
+      computeOrgBenchmarks(responses),
+      computeFieldReport(responses),
+    ])
       setStreaks(streakData)
       setNonResponders(nonResp)
-      setVelocities(vel)
-      setDeptVariance(variance)
-      setCorrelations(corr)
-      setDeptOverTime(dot)
+  setVelocities(vel)
+  setDeptVariance(variance)
+  setDeptOverTime(dot)
       setOrgBenchmarks(benchmarks)
       setFieldReport(report)
       setAlerts(computeAlerts(responses, dept, vel))
 
-      // Compute hours metrics for admin view (all responses or filtered by org)
-      const [timeSavingIds, confidenceId] = await Promise.all([
-        findTimeSavingQuestionIds(),
-        findConfidenceQuestionId(),
-      ])
+  // Compute hours metrics for admin view (all responses or filtered by org)
+  const [timeSavingIds, confidenceIds] = await Promise.all([
+    findTimeSavingQuestionIds(),
+    findConfidenceQuestionIds(),
+  ])
       
       // For admin: compute org hours based on current filter
       const selectedOrgDoc = orgDocs.find((o) => o.id === selectedOrg) as unknown as Organization | undefined
       const adminHourlyRate = selectedOrgDoc?.hourlyRate ?? 100
-      const adminOrgHours = computeOrgHoursMetrics(responses, timeSavingIds, confidenceId, adminHourlyRate)
+      const adminOrgHours = computeOrgHoursMetrics(responses, timeSavingIds, confidenceIds, adminHourlyRate)
       setOrgHoursMetrics(adminOrgHours)
       
       // Compute weekly hours trend for chart
@@ -259,8 +253,8 @@ export default function DashboardPage() {
         setPersonalTrend(computePersonalTrend(responses, user.id))
         setPersonalBenchmark(computePersonalBenchmark(responses, user.id))
         
-        // Compute user-specific hours metrics (reuse timeSavingIds/confidenceId from above)
-        const userHours = computeUserHoursMetrics(responses, user.id, timeSavingIds, confidenceId)
+  // Compute user-specific hours metrics (reuse timeSavingIds/confidenceIds from above)
+  const userHours = computeUserHoursMetrics(responses, user.id, timeSavingIds, confidenceIds)
         setUserHoursMetrics(userHours)
 
         // Extract goals and wins from user's responses based on question types
@@ -514,13 +508,10 @@ export default function DashboardPage() {
           {/* ── Hours Saved Trends ─────────────────────── */}
           <div className="border-t border-border pt-4">
             <h2 className="text-lg font-semibold text-foreground">Hours Saved Trends</h2>
-            <p className="mb-4 text-sm text-muted-foreground">Hours saved velocity, variance, and question correlations</p>
+            <p className="mb-4 text-sm text-muted-foreground">Hours saved velocity and variance by department</p>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <ScoreVelocityCard data={velocities} />
               <DepartmentVarianceCard data={deptVariance} feedbackSettings={varianceFeedback as Record<string, unknown> | undefined} />
-            </div>
-            <div className="mt-4">
-              <QuestionCorrelationsCard data={correlations} />
             </div>
           </div>
 
@@ -577,8 +568,6 @@ export default function DashboardPage() {
             </p>
             <PromptPacksCard />
           </div>
-
-          <RecentScorecardsCard data={recentScorecards} />
         </div>
       </div>
     )
