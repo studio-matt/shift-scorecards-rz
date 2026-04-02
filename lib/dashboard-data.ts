@@ -1190,29 +1190,20 @@ export interface OrgHoursMetrics {
 }
 
 // ── Helper: Find time-saving question IDs from templates ──────────────────
-// Questions with type === "time_saving" OR questions containing "time/hours" AND "save" in text
+// ONLY matches questions with explicit type === "time_saving"
+// Text-based fallback removed because it was matching 7+ questions and inflating hours
 export async function findTimeSavingQuestionIds(): Promise<string[]> {
   const templates = await fetchTemplates()
   const ids: string[] = []
-  const debugMatches: string[] = []
   for (const t of templates) {
     for (const q of t.questions || []) {
-      // First check for explicit time_saving type
+      // ONLY check for explicit time_saving type - no text fallback
       if (q.type === "time_saving") {
         ids.push(q.id)
-        debugMatches.push(`[type] ${q.id}: ${q.text?.substring(0, 50)}`)
-        continue
-      }
-      // Fallback: Match questions about time/hours saved in text
-      const text = (q.text || "").toLowerCase()
-      const hasTimeSave = (text.includes("time") || text.includes("hours")) && text.includes("save")
-      if (hasTimeSave) {
-        ids.push(q.id)
-        debugMatches.push(`[text] ${q.id}: ${q.text?.substring(0, 50)}`)
       }
     }
   }
-  console.log("[v0] findTimeSavingQuestionIds found:", ids.length, "questions:", debugMatches)
+  console.log("[v0] findTimeSavingQuestionIds found:", ids.length, "IDs:", ids)
   return ids
 }
 
