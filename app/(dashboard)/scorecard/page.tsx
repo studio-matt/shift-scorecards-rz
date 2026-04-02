@@ -631,20 +631,23 @@ const [loading, setLoading] = useState(true)
     async function compute() {
       try {
         // 1. Calculate hours saved from this submission
-        // Find time-saving questions and sum the minutes
+        // Find time-saving questions (type === "time_saving" OR text matches pattern)
+        // For "Hours: 1-10" type questions, the values ARE hours directly (not minutes)
         const timeSavingQuestions = template?.questions?.filter(q => {
+          if (q.type === "time_saving") return true
           const text = q.text.toLowerCase()
           return (text.includes("time") || text.includes("hours")) && text.includes("save")
         }) ?? []
         
-        let totalMinutes = 0
+        // Sum the HOURS directly - values are already in hours (1-10 scale)
+        let totalHours = 0
         for (const q of timeSavingQuestions) {
           const val = answers[q.id]
           if (typeof val === "number" && val > 0) {
-            totalMinutes += val
+            totalHours += val
           }
         }
-        const thisHours = Math.round((totalMinutes / 60) * 10) / 10
+        const thisHours = Math.round(totalHours * 10) / 10
         setHoursSaved(thisHours)
         
         // Keep score calculation for insight generation
@@ -670,14 +673,15 @@ const [loading, setLoading] = useState(true)
           )
           const prevResponse = sorted[1] // Second most recent
           if (prevResponse) {
-            let prevMinutes = 0
+            // Values are in HOURS directly (not minutes)
+            let prevHoursTotal = 0
             for (const q of timeSavingQuestions) {
               const val = prevResponse.answers[q.id]
               if (typeof val === "number" && val > 0) {
-                prevMinutes += val
+                prevHoursTotal += val
               }
             }
-            setPrevHours(Math.round((prevMinutes / 60) * 10) / 10)
+            setPrevHours(Math.round(prevHoursTotal * 10) / 10)
           }
         }
 

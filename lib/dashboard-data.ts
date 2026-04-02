@@ -517,28 +517,29 @@ export async function computeRecentScorecards(
     }
   }
 
-  // Helper to calculate total minutes saved from ONLY time_saving type questions
-  const calculateTimeSaved = (answers: Record<string, unknown>, templateId: string): number => {
+  // Helper to calculate total HOURS saved from ONLY time_saving type questions
+  // Values are in HOURS directly (1-10 scale = 1-10 hours)
+  const calculateHoursSaved = (answers: Record<string, unknown>, templateId: string): number => {
     const timeSavingIds = templateTimeSavingIds.get(templateId) || new Set()
-    let totalMinutes = 0
+    let totalHours = 0
     for (const [qId, val] of Object.entries(answers)) {
       // ONLY include time_saving type questions
       if (!timeSavingIds.has(qId)) continue
       if (typeof val === "number" && val >= 0) {
-        totalMinutes += val
+        totalHours += val
       }
     }
-    return totalMinutes
+    return totalHours
   }
 
   // Group responses by user to calculate deltas
-  const userTimeSaved = new Map<string, { minutes: number; date: string }[]>()
+  const userTimeSaved = new Map<string, { hours: number; date: string }[]>()
   for (const r of responses) {
     if (!userTimeSaved.has(r.userId)) {
       userTimeSaved.set(r.userId, [])
     }
-    const minutes = calculateTimeSaved(r.answers, r.templateId)
-    userTimeSaved.get(r.userId)!.push({ minutes, date: r.completedAt })
+    const hours = calculateHoursSaved(r.answers, r.templateId)
+    userTimeSaved.get(r.userId)!.push({ hours, date: r.completedAt })
   }
   
   // Sort each user's data by date (newest first)
@@ -548,18 +549,18 @@ export async function computeRecentScorecards(
 
   return responses
     .map((r) => {
-      const currentMinutes = calculateTimeSaved(r.answers, r.templateId)
+      const currentHours = calculateHoursSaved(r.answers, r.templateId)
 
-      // Calculate delta from previous scorecard (minutes difference)
+      // Calculate delta from previous scorecard (hours difference)
       const userHistory = userTimeSaved.get(r.userId) || []
       const currentIdx = userHistory.findIndex(h => h.date === r.completedAt)
       const hasPrevious = currentIdx >= 0 && currentIdx < userHistory.length - 1
-      const previousMinutes = hasPrevious ? userHistory[currentIdx + 1].minutes : null
+      const previousHours = hasPrevious ? userHistory[currentIdx + 1].hours : null
       
       // If no previous scorecard, delta is undefined (will show as "First entry" in UI)
-      // If there IS a previous, calculate the difference in minutes
-      const delta = previousMinutes !== null 
-        ? Math.round(currentMinutes - previousMinutes) 
+      // If there IS a previous, calculate the difference in hours
+      const delta = previousHours !== null 
+        ? Math.round((currentHours - previousHours) * 10) / 10 
         : undefined
 
       const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
@@ -571,7 +572,7 @@ export async function computeRecentScorecards(
           day: "numeric",
           year: "numeric",
         }),
-        score: currentMinutes, // Total minutes saved from time_saving questions
+        score: currentHours, // Total HOURS saved from time_saving questions
         templateName: tmplNameMap.get(r.templateId) ?? r.templateId,
         delta,
         answers: r.answers,
@@ -1133,6 +1134,15 @@ export function computePersonalBenchmark(responses: RawResponse[], userId: strin
   // If only 1 user or no other users, they are in the top percentile (100)
   // If multiple users, calculate normally
   const percentile = allUserAvgs.length <= 1 ? 100 : Math.round((belowMe / (allUserAvgs.length - 1)) * 100)
+  
+  console.log("[v0] computePersonalBenchmark Debug:", {
+    userId,
+    myOrg,
+    allUserAvgsCount: allUserAvgs.length,
+    belowMe,
+    myAvg,
+    percentile,
+  })
 
   // My velocity
   const vel = computeScoreVelocity(myResponses)
@@ -1259,9 +1269,10 @@ export function computeUserHoursMetrics(
   
   const myResponses = responses.filter((r) => r.userId === userId)
   
-  let totalMinutes = 0
-  let thisMonthMinutes = 0
-  let lastMonthMinutes = 0
+  // Values are already in HOURS (not minutes) - users enter hours directly (1-10 scale = 1-10 hours)
+  let totalHoursVal = 0
+  let thisMonthHoursVal = 0
+  let lastMonthHoursVal = 0
   let thisMonthResponses = 0
   let lastMonthResponses = 0
   const confidenceScores: number[] = []
@@ -1272,13 +1283,13 @@ export function computeUserHoursMetrics(
     const isThisMonth = responseDate >= thisMonthStart
     const isLastMonth = responseDate >= lastMonthStart && responseDate <= lastMonthEnd
     
-    // Sum all time-saving question answers (in minutes)
+    // Sum all time-saving question answers - values ARE hours directly (not minutes)
     for (const qId of timeSavingIds) {
       const val = r.answers[qId]
       if (typeof val === "number" && val > 0) {
-        totalMinutes += val
-        if (isThisMonth) thisMonthMinutes += val
-        if (isLastMonth) lastMonthMinutes += val
+        totalHoursVal += val
+        if (isThisMonth) thisMonthHoursVal += val
+        if (isLastMonth) lastMonthHoursVal += val
       }
     }
     
@@ -1296,10 +1307,10 @@ export function computeUserHoursMetrics(
     }
   }
   
-  // Convert minutes to hours
-  const totalHours = totalMinutes / 60
-  const thisMonthHours = thisMonthMinutes / 60
-  const lastMonthHours = lastMonthMinutes / 60
+  // Values are already in hours - no conversion needed
+  const totalHours = totalHoursVal
+  const thisMonthHours = thisMonthHoursVal
+  const lastMonthHours = lastMonthHoursVal
   
   // Calculate MoM change
   const monthOverMonthChange = thisMonthHours - lastMonthHours
@@ -1322,6 +1333,15 @@ export function computeUserHoursMetrics(
     ? lastMonthConfidenceScores.reduce((a, b) => a + b, 0) / lastMonthConfidenceScores.length
     : 0
   const confidenceChange = confidenceScore - lastMonthConfidence
+  
+  console.log("[v0] computeUserHoursMetrics confidence Debug:", {
+    userId,
+    confidenceIdsCount: confidenceIds.length,
+    confidenceIds,
+    confidenceScoresCount: confidenceScores.length,
+    confidenceScores,
+    confidenceScore,
+  })
   
   return {
     totalHoursSavedAllTime: Math.round(totalHours * 10) / 10,
@@ -1349,9 +1369,10 @@ export function computeOrgHoursMetrics(
 ): OrgHoursMetrics {
   const { thisMonthStart, lastMonthStart, lastMonthEnd } = getMonthBoundaries()
   
-  let totalMinutes = 0
-  let thisMonthMinutes = 0
-  let lastMonthMinutes = 0
+  // Values are already in HOURS (not minutes) - users enter hours directly (1-10 scale = 1-10 hours)
+  let totalHoursVal = 0
+  let thisMonthHoursVal = 0
+  let lastMonthHoursVal = 0
   let thisMonthResponses = 0
   let lastMonthResponses = 0
   const allUsers = new Set<string>() // ALL users who ever submitted ANY scorecard
@@ -1371,13 +1392,13 @@ export function computeOrgHoursMetrics(
     if (isThisMonth) thisMonthResponses++
     if (isLastMonth) lastMonthResponses++
     
-    // Sum all time-saving question answers (in minutes)
+    // Sum all time-saving question answers - values ARE hours directly (not minutes)
     for (const qId of timeSavingIds) {
       const val = r.answers[qId]
       if (typeof val === "number" && val > 0) {
-        totalMinutes += val
-        if (isThisMonth) thisMonthMinutes += val
-        if (isLastMonth) lastMonthMinutes += val
+        totalHoursVal += val
+        if (isThisMonth) thisMonthHoursVal += val
+        if (isLastMonth) lastMonthHoursVal += val
       }
     }
     
@@ -1392,14 +1413,14 @@ export function computeOrgHoursMetrics(
     }
   }
   
-  // Convert to hours
-  const totalHours = totalMinutes / 60
-  const thisMonthHoursRaw = thisMonthMinutes / 60
-  const lastMonthHoursRaw = lastMonthMinutes / 60
+  // Values are already in hours - no conversion needed
+  const totalHours = totalHoursVal
+  const thisMonthHoursRaw = thisMonthHoursVal
+  const lastMonthHoursRaw = lastMonthHoursVal
   
   // If no data this month, use last month as "current" for display purposes
   // This prevents showing all zeros at the start of a new month
-  const hasThisMonthData = thisMonthMinutes > 0
+  const hasThisMonthData = thisMonthHoursVal > 0
   const monthlyHours = hasThisMonthData ? thisMonthHoursRaw : lastMonthHoursRaw
   const lastMonthHours = hasThisMonthData ? lastMonthHoursRaw : 0 // No comparison if showing last month
   
@@ -1476,32 +1497,34 @@ export function computeWeeklyHoursTrend(
   responses: RawResponse[],
   timeSavingIds: string[],
 ): WeeklyHoursTrend[] {
-  const weekMap = new Map<string, { minutes: number; count: number; date: string }>()
+  // Values are already in HOURS (not minutes) - users enter hours directly (1-10 scale)
+  const weekMap = new Map<string, { hours: number; count: number; date: string }>()
   
   for (const r of responses) {
     const week = r.weekOf || "Unknown"
     const date = r.weekDate || r.completedAt
     
-    let responseMinutes = 0
+    // Sum hours directly - values ARE hours (not minutes)
+    let responseHours = 0
     for (const qId of timeSavingIds) {
       const val = r.answers[qId]
       if (typeof val === "number" && val > 0) {
-        responseMinutes += val
+        responseHours += val
       }
     }
     
     if (!weekMap.has(week)) {
-      weekMap.set(week, { minutes: 0, count: 0, date })
+      weekMap.set(week, { hours: 0, count: 0, date })
     }
     const entry = weekMap.get(week)!
-    entry.minutes += responseMinutes
+    entry.hours += responseHours
     entry.count += 1
   }
   
   return Array.from(weekMap.entries())
-    .map(([week, { minutes, count, date }]) => ({
+    .map(([week, { hours, count, date }]) => ({
       week,
-      hours: Math.round((minutes / 60) * 10) / 10,
+      hours: Math.round(hours * 10) / 10,
       responses: count,
       _date: date,
     }))
@@ -1533,11 +1556,12 @@ export function computePersonalHoursTrend(
     const week = r.weekOf
     const date = r.weekDate || r.completedAt
     
-    let responseMinutes = 0
+    // Sum hours directly - values ARE hours (not minutes)
+    let responseHours = 0
     for (const qId of timeSavingIds) {
       const val = r.answers[qId]
       if (typeof val === "number" && val > 0) {
-        responseMinutes += val
+        responseHours += val
       }
     }
     
@@ -1547,9 +1571,9 @@ export function computePersonalHoursTrend(
     const entry = weekMap.get(week)!
     
     if (r.userId === userId) {
-      entry.my = responseMinutes / 60
+      entry.my = responseHours // Already in hours, no division needed
     }
-    entry.org.push(responseMinutes / 60)
+    entry.org.push(responseHours) // Already in hours
   }
   
   return Array.from(weekMap.entries())
