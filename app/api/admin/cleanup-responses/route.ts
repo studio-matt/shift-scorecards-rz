@@ -20,6 +20,15 @@ export async function POST(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const dryRun = searchParams.get("dryRun") === "true"
+    const confirmDelete = searchParams.get("confirm") === "true"
+    
+    // Safety: require explicit confirmation
+    if (!dryRun && !confirmDelete) {
+      return NextResponse.json({
+        error: "Safety check: Add ?confirm=true to actually delete. Use ?dryRun=true to preview first.",
+        hint: "Run: fetch('/api/admin/cleanup-responses?dryRun=true', { method: 'POST' }).then(r => r.json()).then(console.log)"
+      }, { status: 400 })
+    }
 
     // Fetch all responses
     const responsesRef = collection(db, COLLECTIONS.RESPONSES)
