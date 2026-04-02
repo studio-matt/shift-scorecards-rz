@@ -764,6 +764,7 @@ function OrgDetailView({
   const [editSaving, setEditSaving] = useState(false)
   const [reInviting, setReInviting] = useState(false)
   const [reInviteResult, setReInviteResult] = useState<{ sent: number; failed: number; total: number } | null>(null)
+  const [reInviteConfirmOpen, setReInviteConfirmOpen] = useState(false)
 
   // Branding & Settings state
   const [accentColor, setAccentColor] = useState(org.accentColor ?? "#3b82f6")
@@ -1070,8 +1071,9 @@ function OrgDetailView({
     }
   }
 
-  async function handleReInviteAll() {
+  async function handleReInviteAllConfirmed() {
     if (members.length === 0) return
+    setReInviteConfirmOpen(false)
     setReInviting(true)
     setReInviteResult(null)
     try {
@@ -1706,7 +1708,7 @@ function OrgDetailView({
                     <Button 
                       size="sm" 
                       variant="outline"
-                      onClick={handleReInviteAll}
+                      onClick={() => setReInviteConfirmOpen(true)}
                       disabled={reInviting}
                     >
                       {reInviting ? (
@@ -2068,6 +2070,47 @@ function OrgDetailView({
                   {inviteSending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   <Mail className="mr-2 h-4 w-4" />
                   {inviteCsvFile ? `Invite ${inviteCsvCount} Users` : "Send Invite"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Re-Invite All Confirmation Dialog */}
+          <Dialog open={reInviteConfirmOpen} onOpenChange={setReInviteConfirmOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Re-Invite All Members</DialogTitle>
+                <DialogDescription>
+                  This will send invitation emails to all {members.length} members in {org.name}.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="rounded-md border border-border bg-muted/50 p-3">
+                  <p className="text-sm font-medium mb-2">Recipients ({members.length}):</p>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {members.slice(0, 5).map((m) => (
+                      <p key={m.id} className="text-xs text-muted-foreground">
+                        {m.name} &lt;{m.email}&gt;
+                      </p>
+                    ))}
+                    {members.length > 5 && (
+                      <p className="text-xs text-muted-foreground italic">
+                        ...and {members.length - 5} more
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Each member will receive an email inviting them to log in and complete their scorecard.
+                </p>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setReInviteConfirmOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleReInviteAllConfirmed}>
+                  <Send className="mr-2 h-4 w-4" />
+                  Send {members.length} Invites
                 </Button>
               </DialogFooter>
             </DialogContent>
