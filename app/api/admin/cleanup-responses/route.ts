@@ -21,6 +21,7 @@ export async function POST(request: Request) {
     const { searchParams } = new URL(request.url)
     const dryRun = searchParams.get("dryRun") === "true"
     const confirmDelete = searchParams.get("confirm") === "true"
+    const deleteAll = searchParams.get("deleteAll") === "true"
     
     // Safety: require explicit confirmation
     if (!dryRun && !confirmDelete) {
@@ -28,6 +29,29 @@ export async function POST(request: Request) {
         error: "Safety check: Add ?confirm=true to actually delete. Use ?dryRun=true to preview first.",
         hint: "Run: fetch('/api/admin/cleanup-responses?dryRun=true', { method: 'POST' }).then(r => r.json()).then(console.log)"
       }, { status: 400 })
+    }
+    
+    // Option to delete ALL responses for a fresh start
+    if (deleteAll && confirmDelete) {
+      const responsesRef = collection(db, COLLECTIONS.RESPONSES)
+      const snapshot = await getDocs(responsesRef)
+      
+      if (dryRun) {
+        return NextResponse.json({
+          message: `Dry run: Would delete ALL ${snapshot.size} responses`,
+          count: snapshot.size,
+        })
+      }
+      
+      for (const docSnap of snapshot.docs) {
+        await deleteDoc(doc(db, COLLECTIONS.RESPONSES, docSnap.id))
+      }
+      
+      return NextResponse.json({
+        success: true,
+        message: `Deleted ALL ${snapshot.size} responses`,
+        deleted: snapshot.size,
+      })
     }
 
     // Fetch all responses
