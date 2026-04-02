@@ -173,41 +173,75 @@ export async function computeTopPerformers(
   const orgs = await getOrganizations()
   const orgNameMap = new Map(orgs.map((o) => [o.id, (o as Record<string, unknown>).name as string]))
 
-  // Build set of excluded user IDs (admins / non-participants)
+  // Build set of excluded user IDs (admins / non-participants) and user name map
   const allUsers = await getDocuments(COLLECTIONS.USERS)
   const excludedUserIds = new Set(
     allUsers
       .filter((u) => (u as Record<string, unknown>).excludeFromReporting === true)
       .map((u) => u.id),
   )
+  
+  // Build a map of userId -> full name (firstName + lastName)
+  const userNameMap = new Map<string, string>()
+  for (const u of allUsers) {
+    const userData = u as Record<string, unknown>
+    const firstName = (userData.firstName as string) || ""
+    const lastName = (userData.lastName as string) || ""
+    const fullName = `${firstName} ${lastName}`.trim()
+    if (fullName) {
+      userNameMap.set(u.id, fullName)
+    }
+  }
+
+  // Fetch templates to identify win and goal question types
+  const templates = await fetchTemplates()
+  const templateMap = new Map<string, { questions: Array<{ id: string; type: string }> }>()
+  for (const t of templates) {
+    const template = t as unknown as { id: string; questions: Array<{ id: string; type: string }> }
+    templateMap.set(template.id, template)
+  }
 
   const userMap = new Map<
     string,
-    { name: string; orgId: string; dept: string; total: number; count: number; weeks: Set<string>; textAnswers: string[] }
+    { name: string; orgId: string; dept: string; total: number; count: number; weeks: Set<string>; winAnswers: string[]; goalAnswers: string[] }
   >()
 
   for (const r of responses) {
     if (excludedUserIds.has(r.userId)) continue
     if (!userMap.has(r.userId)) {
+      // Prefer firstName/lastName from users collection, fallback to userName or userId
+      const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
       userMap.set(r.userId, {
-        name: r.userName || r.userId,
+        name: resolvedName,
         orgId: r.organizationId,
         dept: r.department,
         total: 0,
         count: 0,
         weeks: new Set(),
-        textAnswers: [],
+        winAnswers: [],
+        goalAnswers: [],
       })
     }
     const entry = userMap.get(r.userId)!
     const scaleVals = Object.values(r.answers).filter(
       (v) => typeof v === "number" && v >= 1 && v <= 10,
     ) as number[]
-    // Collect text answers as potential win narratives
-    const textVals = Object.values(r.answers).filter(
-      (v) => typeof v === "string" && v.length > 15,
-    ) as string[]
-    entry.textAnswers.push(...textVals)
+    
+    // Extract win and goal answers based on question type
+    const template = templateMap.get(r.templateId)
+    if (template?.questions) {
+      for (const q of template.questions) {
+        const answer = r.answers[q.id]
+        if (typeof answer === "string" && answer.trim().length > 10) {
+          if (q.type === "win") {
+            entry.winAnswers.push(answer)
+          } else if (q.type === "goals") {
+            entry.goalAnswers.push(answer)
+          }
+        }
+      }
+    }
+    
     if (scaleVals.length === 0) continue
     const avg = scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length
     entry.total += avg
@@ -223,7 +257,7 @@ export async function computeTopPerformers(
   } catch { /* ignore */ }
 
   return Array.from(userMap.entries())
-    .map(([userId, { name, orgId, dept, total, count, weeks, textAnswers }]) => ({
+    .map(([userId, { name, orgId, dept, total, count, weeks, winAnswers, goalAnswers }]) => ({
       id: userId,
       name,
       company: orgNameMap.get(orgId) ?? orgId,
@@ -231,8 +265,9 @@ export async function computeTopPerformers(
       department: dept,
       avgScore: Math.round((total / count) * 10) / 10,
       streak: weeks.size,
-      // Prefer admin-set narrative, then most recent text answer
-      winNarrative: adminNarratives[userId] || textAnswers[textAnswers.length - 1] || undefined,
+      // Prefer admin-set narrative, then most recent win answer
+      winNarrative: adminNarratives[userId] || winAnswers[winAnswers.length - 1] || undefined,
+      goalNarrative: goalAnswers[goalAnswers.length - 1] || undefined,
     }))
     .sort((a, b) => b.avgScore - a.avgScore)
     .slice(0, limit)
@@ -257,6 +292,19 @@ export async function computeMostImproved(
   const orgs = await getOrganizations()
   const orgNameMap = new Map(orgs.map((o) => [o.id, (o as Record<string, unknown>).name as string]))
 
+  // Build a map of userId -> full name (firstName + lastName)
+  const allUsers = await getDocuments(COLLECTIONS.USERS)
+  const userNameMap = new Map<string, string>()
+  for (const u of allUsers) {
+    const userData = u as Record<string, unknown>
+    const firstName = (userData.firstName as string) || ""
+    const lastName = (userData.lastName as string) || ""
+    const fullName = `${firstName} ${lastName}`.trim()
+    if (fullName) {
+      userNameMap.set(u.id, fullName)
+    }
+  }
+
   // Group by user, then by weekOf
   const userWeeks = new Map<
     string,
@@ -265,8 +313,9 @@ export async function computeMostImproved(
 
   for (const r of responses) {
     if (!userWeeks.has(r.userId)) {
+      const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
       userWeeks.set(r.userId, {
-        name: r.userName || r.userId,
+        name: resolvedName,
         orgId: r.organizationId,
         dept: r.department,
         weeks: new Map(),
@@ -323,50 +372,112 @@ export async function computeMostImproved(
 }
 
 // ── Question results ──────────────────────────────────────────────────
+// ONLY shows time_saving type questions - these are the only ones that count for hours saved
 export async function computeQuestionResults(
   responses: RawResponse[],
 ): Promise<QuestionResult[]> {
   const templates = await fetchTemplates()
 
-  // Build question text lookup
+  // Build question text lookup AND identify time_saving questions ONLY
   const questionTextMap = new Map<string, string>()
+  const timeSavingQuestionIds = new Set<string>()
   for (const t of templates) {
     for (const q of t.questions || []) {
       questionTextMap.set(q.id, q.text)
-    }
-  }
-
-  // Aggregate scale-type answers per question id
-  const questionMap = new Map<string, { total: number; count: number }>()
-
-  for (const r of responses) {
-    for (const [qId, val] of Object.entries(r.answers)) {
-      if (typeof val !== "number" || val < 1 || val > 10) continue
-      if (!questionMap.has(qId)) {
-        questionMap.set(qId, { total: 0, count: 0 })
+      // ONLY time_saving type questions count for hours saved metrics
+      if (q.type === "time_saving") {
+        timeSavingQuestionIds.add(q.id)
       }
-      const entry = questionMap.get(qId)!
-      entry.total += val
-      entry.count += 1
     }
   }
 
-  return Array.from(questionMap.entries())
-    .map(([qId, { total, count }]) => ({
-      question: questionTextMap.get(qId) ?? qId,
-      score: Math.round((total / count) * 10) / 10,
-      change: Math.round(Math.random() * 8) / 10, // placeholder delta
-    }))
-    .sort((a, b) => b.score - a.score)
+  // If no time_saving questions found, return empty
+  if (timeSavingQuestionIds.size === 0) {
+    return []
+  }
+
+  // Sort responses by date to separate current vs previous period
+  const sortedResponses = [...responses].sort((a, b) => 
+    new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
+  )
+  
+  // Split into this week vs last week (for more granular comparison)
+  const now = new Date()
+  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+  const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
+  
+  const thisWeekResponses = sortedResponses.filter(r => new Date(r.completedAt) >= oneWeekAgo)
+  const lastWeekResponses = sortedResponses.filter(r => {
+    const d = new Date(r.completedAt)
+    return d >= twoWeeksAgo && d < oneWeekAgo
+  })
+
+  // Aggregate answers per question for each period - ONLY time_saving questions
+  const aggregateByQuestion = (resps: RawResponse[]) => {
+    const map = new Map<string, { total: number; count: number }>()
+    for (const r of resps) {
+      for (const [qId, val] of Object.entries(r.answers)) {
+        // ONLY include time_saving type questions
+        if (!timeSavingQuestionIds.has(qId)) continue
+        if (typeof val !== "number" || val < 0) continue
+        if (!map.has(qId)) {
+          map.set(qId, { total: 0, count: 0 })
+        }
+        const entry = map.get(qId)!
+        entry.total += val
+        entry.count += 1
+      }
+    }
+    return map
+  }
+
+  const thisWeekData = aggregateByQuestion(thisWeekResponses)
+  const lastWeekData = aggregateByQuestion(lastWeekResponses)
+
+  // Only use time_saving question IDs that have data
+  const questionsWithData = Array.from(timeSavingQuestionIds).filter(
+    qId => thisWeekData.has(qId) || lastWeekData.has(qId)
+  )
+
+  return questionsWithData
+    .map((qId) => {
+      const thisWeek = thisWeekData.get(qId)
+      const lastWeek = lastWeekData.get(qId)
+      
+      const currentAvg = thisWeek && thisWeek.count > 0 
+        ? thisWeek.total / thisWeek.count 
+        : 0
+      const previousAvg = lastWeek && lastWeek.count > 0 
+        ? lastWeek.total / lastWeek.count 
+        : 0
+      
+      // Calculate change (difference between this week and last week averages)
+      // Positive = saving more time this week
+      const change = lastWeek && lastWeek.count > 0
+        ? Math.round((currentAvg - previousAvg) * 10) / 10
+        : 0
+      
+      return {
+        question: questionTextMap.get(qId) ?? qId,
+        score: Math.round(currentAvg * 10) / 10, // Average minutes saved
+        change,
+      }
+    })
+    .filter(q => q.score > 0 || q.change !== 0) // Show questions with data or changes
+    .sort((a, b) => b.change - a.change) // Sort by biggest improvement
 }
 
 // ── Recent scorecards ─────────────────────────────────────────────────
+// Delta is calculated ONLY from time_saving type questions (minutes saved)
 export interface RecentScorecard {
   userId: string
   name: string
   date: string
   score: number
   templateName: string
+  delta?: number
+  answers?: Record<string, unknown>
+  questions?: { id: string; text: string; type: string }[]
 }
 
 export async function computeRecentScorecards(
@@ -375,27 +486,97 @@ export async function computeRecentScorecards(
 ): Promise<RecentScorecard[]> {
   const templates = await fetchTemplates()
   const tmplNameMap = new Map(templates.map((t) => [t.id, (t as unknown as Record<string, unknown>).name as string]))
+  const tmplQuestionsMap = new Map(templates.map((t) => {
+    const tmpl = t as unknown as Record<string, unknown>
+    const questions = (tmpl.questions as { id: string; text: string; type: string }[]) || []
+    return [t.id, questions]
+  }))
+
+  // Build set of time_saving question IDs per template
+  const templateTimeSavingIds = new Map<string, Set<string>>()
+  for (const t of templates) {
+    const ids = new Set<string>()
+    for (const q of t.questions || []) {
+      if (q.type === "time_saving") {
+        ids.add(q.id)
+      }
+    }
+    templateTimeSavingIds.set(t.id, ids)
+  }
+
+  // Build a map of userId -> full name (firstName + lastName)
+  const allUsers = await getDocuments(COLLECTIONS.USERS)
+  const userNameMap = new Map<string, string>()
+  for (const u of allUsers) {
+    const userData = u as Record<string, unknown>
+    const firstName = (userData.firstName as string) || ""
+    const lastName = (userData.lastName as string) || ""
+    const fullName = `${firstName} ${lastName}`.trim()
+    if (fullName) {
+      userNameMap.set(u.id, fullName)
+    }
+  }
+
+  // Helper to calculate total HOURS saved from ONLY time_saving type questions
+  // Values are in HOURS directly (1-10 scale = 1-10 hours)
+  const calculateHoursSaved = (answers: Record<string, unknown>, templateId: string): number => {
+    const timeSavingIds = templateTimeSavingIds.get(templateId) || new Set()
+    let totalHours = 0
+    for (const [qId, val] of Object.entries(answers)) {
+      // ONLY include time_saving type questions
+      if (!timeSavingIds.has(qId)) continue
+      if (typeof val === "number" && val >= 0) {
+        totalHours += val
+      }
+    }
+    return totalHours
+  }
+
+  // Group responses by user to calculate deltas
+  const userTimeSaved = new Map<string, { hours: number; date: string }[]>()
+  for (const r of responses) {
+    if (!userTimeSaved.has(r.userId)) {
+      userTimeSaved.set(r.userId, [])
+    }
+    const hours = calculateHoursSaved(r.answers, r.templateId)
+    userTimeSaved.get(r.userId)!.push({ hours, date: r.completedAt })
+  }
+  
+  // Sort each user's data by date (newest first)
+  for (const data of userTimeSaved.values()) {
+    data.sort((a, b) => b.date.localeCompare(a.date))
+  }
 
   return responses
     .map((r) => {
-      const scaleVals = Object.values(r.answers).filter(
-        (v) => typeof v === "number" && v >= 1 && v <= 10,
-      ) as number[]
-      const avg =
-        scaleVals.length > 0
-          ? Math.round((scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length) * 10) / 10
-          : 0
+      const currentHours = calculateHoursSaved(r.answers, r.templateId)
 
+      // Calculate delta from previous scorecard (hours difference)
+      const userHistory = userTimeSaved.get(r.userId) || []
+      const currentIdx = userHistory.findIndex(h => h.date === r.completedAt)
+      const hasPrevious = currentIdx >= 0 && currentIdx < userHistory.length - 1
+      const previousHours = hasPrevious ? userHistory[currentIdx + 1].hours : null
+      
+      // If no previous scorecard, delta is undefined (will show as "First entry" in UI)
+      // If there IS a previous, calculate the difference in hours
+      const delta = previousHours !== null 
+        ? Math.round((currentHours - previousHours) * 10) / 10 
+        : undefined
+
+      const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
       return {
         userId: r.userId,
-        name: r.userName || r.userId,
+        name: resolvedName,
         date: new Date(r.completedAt).toLocaleDateString("en-US", {
           month: "short",
           day: "numeric",
           year: "numeric",
         }),
-        score: avg,
+        score: currentHours, // Total HOURS saved from time_saving questions
         templateName: tmplNameMap.get(r.templateId) ?? r.templateId,
+        delta,
+        answers: r.answers,
+        questions: tmplQuestionsMap.get(r.templateId) ?? [],
         _completedAt: r.completedAt,
       }
     })
@@ -414,10 +595,28 @@ export interface UserStreak {
   totalResponses: number
 }
 
-export function computeStreaks(responses: RawResponse[]): UserStreak[] {
+export async function computeStreaks(responses: RawResponse[], userNameMap?: Map<string, string>): Promise<UserStreak[]> {
+  // Build a map of userId -> full name if not provided
+  if (!userNameMap) {
+    userNameMap = new Map<string, string>()
+    const allUsers = await getDocuments(COLLECTIONS.USERS)
+    for (const u of allUsers) {
+      const userData = u as Record<string, unknown>
+      const firstName = (userData.firstName as string) || ""
+      const lastName = (userData.lastName as string) || ""
+      const fullName = `${firstName} ${lastName}`.trim()
+      if (fullName) {
+        userNameMap.set(u.id, fullName)
+      }
+    }
+  }
+
   const userMap = new Map<string, { name: string; dept: string; weeks: Set<string>; total: number }>()
   for (const r of responses) {
-    if (!userMap.has(r.userId)) userMap.set(r.userId, { name: r.userName || r.userId, dept: r.department, weeks: new Set(), total: 0 })
+    if (!userMap.has(r.userId)) {
+      const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
+      userMap.set(r.userId, { name: resolvedName, dept: r.department, weeks: new Set(), total: 0 })
+    }
     const entry = userMap.get(r.userId)!
     entry.weeks.add(r.weekOf)
     entry.total += 1
@@ -442,12 +641,18 @@ export interface NonResponder {
   lastResponseWeek: string
 }
 
-export async function computeNonResponders(responses: RawResponse[]): Promise<NonResponder[]> {
+export async function computeNonResponders(responses: RawResponse[], filterOrgId?: string): Promise<NonResponder[]> {
   const allUsersRaw = await getDocuments(COLLECTIONS.USERS)
   // Filter out users flagged as excluded from reporting (admins, non-participants)
+  // AND filter by organization if filterOrgId is provided
   const allUsers = allUsersRaw.filter((u) => {
     const data = u as Record<string, unknown>
-    return !(data.excludeFromReporting === true)
+    if (data.excludeFromReporting === true) return false
+    // If filtering by org, only include users from that org
+    if (filterOrgId && filterOrgId !== "all") {
+      return data.organizationId === filterOrgId
+    }
+    return true
   })
   const orgs = await getOrganizations()
   const orgNameMap = new Map(orgs.map((o) => [o.id, (o as Record<string, unknown>).name as string]))
@@ -531,10 +736,26 @@ export interface ScoreVelocity {
   currentAvg: number
 }
 
-export function computeScoreVelocity(responses: RawResponse[]): ScoreVelocity[] {
+export async function computeScoreVelocity(responses: RawResponse[]): Promise<ScoreVelocity[]> {
+  // Build a map of userId -> full name (firstName + lastName)
+  const allUsers = await getDocuments(COLLECTIONS.USERS)
+  const userNameMap = new Map<string, string>()
+  for (const u of allUsers) {
+    const userData = u as Record<string, unknown>
+    const firstName = (userData.firstName as string) || ""
+    const lastName = (userData.lastName as string) || ""
+    const fullName = `${firstName} ${lastName}`.trim()
+    if (fullName) {
+      userNameMap.set(u.id, fullName)
+    }
+  }
+
   const userWeeks = new Map<string, { name: string; dept: string; weeks: Map<string, { total: number; count: number; date: string }> }>()
   for (const r of responses) {
-    if (!userWeeks.has(r.userId)) userWeeks.set(r.userId, { name: r.userName, dept: r.department, weeks: new Map() })
+    if (!userWeeks.has(r.userId)) {
+      const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
+      userWeeks.set(r.userId, { name: resolvedName, dept: r.department, weeks: new Map() })
+    }
     const entry = userWeeks.get(r.userId)!
     const scaleVals = Object.values(r.answers).filter((v) => typeof v === "number" && v >= 1 && v <= 10) as number[]
     if (scaleVals.length === 0) continue
@@ -606,7 +827,7 @@ export function computeDepartmentVariance(responses: RawResponse[]): DepartmentV
   }).filter(Boolean).sort((a, b) => b!.stdDev - a!.stdDev) as DepartmentVariance[]
 }
 
-// ── Trend: Question correlation ───────────────────────────────────────
+// ── Trend: Question correlation ──��────────────────────────────────────
 export interface QuestionCorrelation {
   question1: string
   question2: string
@@ -910,7 +1131,9 @@ export function computePersonalBenchmark(responses: RawResponse[], userId: strin
     avg: scores.reduce((a, b) => a + b, 0) / scores.length,
   }))
   const belowMe = allUserAvgs.filter((u) => u.avg < myAvg).length
-  const percentile = allUserAvgs.length > 1 ? Math.round((belowMe / (allUserAvgs.length - 1)) * 100) : 50
+  // If only 1 user or no other users, they are in the top percentile (100)
+  // If multiple users, calculate normally
+  const percentile = allUserAvgs.length <= 1 ? 100 : Math.round((belowMe / (allUserAvgs.length - 1)) * 100)
 
   // My velocity
   const vel = computeScoreVelocity(myResponses)
@@ -966,32 +1189,40 @@ export interface OrgHoursMetrics {
   lastMonthResponses: number
 }
 
-// ── Helper: Find time-saving question IDs from templates ──────────────
-// Questions containing "time" AND "save" are time-saving questions
+// ── Helper: Find time-saving question IDs from templates ──────────────────
+// Returns ALL questions with type === "time_saving"
+// Each question represents hours saved on a different task, so we sum them all
 export async function findTimeSavingQuestionIds(): Promise<string[]> {
   const templates = await fetchTemplates()
   const ids: string[] = []
+  
+  // Collect ALL questions with explicit type === "time_saving"
   for (const t of templates) {
     for (const q of t.questions || []) {
-      const text = q.text.toLowerCase()
-      // Match questions about time/hours saved: "time...save", "hours...save", "save...time", "save...hours"
-      const hasTimeSave = (text.includes("time") || text.includes("hours")) && text.includes("save")
-      if (hasTimeSave) {
+      if (q.type === "time_saving") {
         ids.push(q.id)
       }
     }
   }
+  
   return ids
 }
 
 // ── Helper: Find ALL confidence question IDs from templates ────────────────
-// Simply looks for questions with type === "confidence" - no pattern matching needed
+// Looks for questions with type === "confidence" OR text containing "confidence"
 export async function findConfidenceQuestionIds(): Promise<string[]> {
   const templates = await fetchTemplates()
   const ids: string[] = []
   for (const t of templates) {
     for (const q of t.questions || []) {
+      // First check for explicit confidence type
       if (q.type === "confidence") {
+        ids.push(q.id)
+        continue
+      }
+      // Fallback: Match questions containing "confidence" in text
+      const text = (q.text || "").toLowerCase()
+      if (text.includes("confidence")) {
         ids.push(q.id)
       }
     }
@@ -1019,15 +1250,16 @@ export function computeUserHoursMetrics(
   responses: RawResponse[],
   userId: string,
   timeSavingIds: string[],
-  confidenceId: string | null,
+  confidenceIds: string[], // Changed to array to support multiple confidence questions
 ): UserHoursMetrics {
   const { thisMonthStart, lastMonthStart, lastMonthEnd } = getMonthBoundaries()
   
   const myResponses = responses.filter((r) => r.userId === userId)
   
-  let totalMinutes = 0
-  let thisMonthMinutes = 0
-  let lastMonthMinutes = 0
+  // Values are already in HOURS (not minutes) - users enter hours directly (1-10 scale = 1-10 hours)
+  let totalHoursVal = 0
+  let thisMonthHoursVal = 0
+  let lastMonthHoursVal = 0
   let thisMonthResponses = 0
   let lastMonthResponses = 0
   const confidenceScores: number[] = []
@@ -1038,13 +1270,13 @@ export function computeUserHoursMetrics(
     const isThisMonth = responseDate >= thisMonthStart
     const isLastMonth = responseDate >= lastMonthStart && responseDate <= lastMonthEnd
     
-    // Sum all time-saving question answers (in minutes)
+    // Sum all time-saving question answers - values ARE hours directly (not minutes)
     for (const qId of timeSavingIds) {
       const val = r.answers[qId]
       if (typeof val === "number" && val > 0) {
-        totalMinutes += val
-        if (isThisMonth) thisMonthMinutes += val
-        if (isLastMonth) lastMonthMinutes += val
+        totalHoursVal += val
+        if (isThisMonth) thisMonthHoursVal += val
+        if (isLastMonth) lastMonthHoursVal += val
       }
     }
     
@@ -1052,9 +1284,9 @@ export function computeUserHoursMetrics(
     if (isThisMonth) thisMonthResponses++
     if (isLastMonth) lastMonthResponses++
     
-    // Track confidence scores
-    if (confidenceId) {
-      const conf = r.answers[confidenceId]
+    // Track confidence scores from ALL confidence-type questions
+    for (const confId of confidenceIds) {
+      const conf = r.answers[confId]
       if (typeof conf === "number" && conf >= 1 && conf <= 10) {
         confidenceScores.push(conf)
         if (isLastMonth) lastMonthConfidenceScores.push(conf)
@@ -1062,10 +1294,10 @@ export function computeUserHoursMetrics(
     }
   }
   
-  // Convert minutes to hours
-  const totalHours = totalMinutes / 60
-  const thisMonthHours = thisMonthMinutes / 60
-  const lastMonthHours = lastMonthMinutes / 60
+  // Values are already in hours - no conversion needed
+  const totalHours = totalHoursVal
+  const thisMonthHours = thisMonthHoursVal
+  const lastMonthHours = lastMonthHoursVal
   
   // Calculate MoM change
   const monthOverMonthChange = thisMonthHours - lastMonthHours
@@ -1110,18 +1342,20 @@ export function computeUserHoursMetrics(
 export function computeOrgHoursMetrics(
   responses: RawResponse[],
   timeSavingIds: string[],
-  confidenceId: string | null,
+  confidenceIds: string[], // Changed to array to support multiple confidence questions
   hourlyRate: number = 100,
 ): OrgHoursMetrics {
   const { thisMonthStart, lastMonthStart, lastMonthEnd } = getMonthBoundaries()
   
-  let totalMinutes = 0
-  let thisMonthMinutes = 0
-  let lastMonthMinutes = 0
+  // Values are already in HOURS (not minutes) - users enter hours directly (1-10 scale = 1-10 hours)
+  let totalHoursVal = 0
+  let thisMonthHoursVal = 0
+  let lastMonthHoursVal = 0
   let thisMonthResponses = 0
   let lastMonthResponses = 0
-  const thisMonthUsers = new Set<string>()
-  const confidenceScores: number[] = []
+  const allUsers = new Set<string>() // ALL users who ever submitted ANY scorecard
+  const allConfidenceScores: number[] = [] // ALL confidence scores ever
+  const thisMonthConfidenceScores: number[] = []
   const lastMonthConfidenceScores: number[] = []
   
   for (const r of responses) {
@@ -1129,41 +1363,42 @@ export function computeOrgHoursMetrics(
     const isThisMonth = responseDate >= thisMonthStart
     const isLastMonth = responseDate >= lastMonthStart && responseDate <= lastMonthEnd
     
-    // Sum all time-saving question answers (in minutes)
-    for (const qId of timeSavingIds) {
-      const val = r.answers[qId]
-      if (typeof val === "number" && val > 0) {
-        totalMinutes += val
-        if (isThisMonth) {
-          thisMonthMinutes += val
-          thisMonthUsers.add(r.userId)
-        }
-        if (isLastMonth) lastMonthMinutes += val
-      }
-    }
+    // Track ALL users who have ever submitted any scorecard (Active Participants)
+    allUsers.add(r.userId)
     
-    // Count responses
+    // Count responses by month
     if (isThisMonth) thisMonthResponses++
     if (isLastMonth) lastMonthResponses++
     
-    // Track confidence scores
-    if (confidenceId) {
-      const conf = r.answers[confidenceId]
+    // Sum all time-saving question answers - values ARE hours directly (not minutes)
+    for (const qId of timeSavingIds) {
+      const val = r.answers[qId]
+      if (typeof val === "number" && val > 0) {
+        totalHoursVal += val
+        if (isThisMonth) thisMonthHoursVal += val
+        if (isLastMonth) lastMonthHoursVal += val
+      }
+    }
+    
+    // Track confidence scores from ALL confidence-type questions
+    for (const confId of confidenceIds) {
+      const conf = r.answers[confId]
       if (typeof conf === "number" && conf >= 1 && conf <= 10) {
-        if (isThisMonth) confidenceScores.push(conf)
+        allConfidenceScores.push(conf) // Track ALL scores ever
+        if (isThisMonth) thisMonthConfidenceScores.push(conf)
         if (isLastMonth) lastMonthConfidenceScores.push(conf)
       }
     }
   }
   
-  // Convert to hours
-  const totalHours = totalMinutes / 60
-  const thisMonthHoursRaw = thisMonthMinutes / 60
-  const lastMonthHoursRaw = lastMonthMinutes / 60
+  // Values are already in hours - no conversion needed
+  const totalHours = totalHoursVal
+  const thisMonthHoursRaw = thisMonthHoursVal
+  const lastMonthHoursRaw = lastMonthHoursVal
   
   // If no data this month, use last month as "current" for display purposes
   // This prevents showing all zeros at the start of a new month
-  const hasThisMonthData = thisMonthMinutes > 0
+  const hasThisMonthData = thisMonthHoursVal > 0
   const monthlyHours = hasThisMonthData ? thisMonthHoursRaw : lastMonthHoursRaw
   const lastMonthHours = hasThisMonthData ? lastMonthHoursRaw : 0 // No comparison if showing last month
   
@@ -1173,16 +1408,18 @@ export function computeOrgHoursMetrics(
     ? ((monthlyHours - lastMonthHoursRaw) / lastMonthHoursRaw) * 100
     : 0
   
-  // Active participants
-  const activeParticipants = thisMonthUsers.size
+  // Active participants = ALL users who have EVER submitted ANY scorecard
+  const activeParticipants = allUsers.size
   
-  // Weekly average across all participants
-  const weeksThisMonth = Math.max(1, Math.ceil((new Date().getDate()) / 7))
-  const totalWeeklyHours = monthlyHours / weeksThisMonth
-  const avgWeeklyPerPerson = activeParticipants > 0 ? totalWeeklyHours / activeParticipants : 0
-  const avgProductivityPercent = (avgWeeklyPerPerson / 40) * 100
+  // Calculate productivity as percentage of total work capacity saved
+  // Total work capacity for all participants = activeParticipants * 160 hours/month
+  // Productivity = hours saved / total work capacity * 100
+  const totalWorkCapacity = activeParticipants > 0 ? activeParticipants * 160 : 160
+  const avgProductivityPercent = (monthlyHours / totalWorkCapacity) * 100
   
-  // FTE equivalent (160 hours = 1 FTE per month)
+
+  
+  // FTE equivalent (160 hours = 1 FTE per month) - this is the company total, not per person
   const fteEquivalent = monthlyHours / 160
   
   // Annual projections
@@ -1193,14 +1430,18 @@ export function computeOrgHoursMetrics(
   const annualValue = monthlyValue * 12
   const perPersonValue = activeParticipants > 0 ? monthlyValue / activeParticipants : 0
   
-  // Confidence averages
-  const avgConfidence = confidenceScores.length > 0
-    ? confidenceScores.reduce((a, b) => a + b, 0) / confidenceScores.length
+  // Confidence averages - use ALL scores ever for the main average
+  // If we have this month's data, use that for comparison; otherwise fall back to all-time
+  const avgConfidence = allConfidenceScores.length > 0
+    ? allConfidenceScores.reduce((a, b) => a + b, 0) / allConfidenceScores.length
     : 0
+  const thisMonthConfidence = thisMonthConfidenceScores.length > 0
+    ? thisMonthConfidenceScores.reduce((a, b) => a + b, 0) / thisMonthConfidenceScores.length
+    : avgConfidence // Fall back to all-time if no this month data
   const lastMonthConfidence = lastMonthConfidenceScores.length > 0
     ? lastMonthConfidenceScores.reduce((a, b) => a + b, 0) / lastMonthConfidenceScores.length
     : 0
-  const confidenceChange = avgConfidence - lastMonthConfidence
+  const confidenceChange = thisMonthConfidence - lastMonthConfidence
   
   return {
     totalHoursSaved: Math.round(totalHours * 10) / 10,
@@ -1234,32 +1475,34 @@ export function computeWeeklyHoursTrend(
   responses: RawResponse[],
   timeSavingIds: string[],
 ): WeeklyHoursTrend[] {
-  const weekMap = new Map<string, { minutes: number; count: number; date: string }>()
+  // Values are already in HOURS (not minutes) - users enter hours directly (1-10 scale)
+  const weekMap = new Map<string, { hours: number; count: number; date: string }>()
   
   for (const r of responses) {
     const week = r.weekOf || "Unknown"
     const date = r.weekDate || r.completedAt
     
-    let responseMinutes = 0
+    // Sum hours directly - values ARE hours (not minutes)
+    let responseHours = 0
     for (const qId of timeSavingIds) {
       const val = r.answers[qId]
       if (typeof val === "number" && val > 0) {
-        responseMinutes += val
+        responseHours += val
       }
     }
     
     if (!weekMap.has(week)) {
-      weekMap.set(week, { minutes: 0, count: 0, date })
+      weekMap.set(week, { hours: 0, count: 0, date })
     }
     const entry = weekMap.get(week)!
-    entry.minutes += responseMinutes
+    entry.hours += responseHours
     entry.count += 1
   }
   
   return Array.from(weekMap.entries())
-    .map(([week, { minutes, count, date }]) => ({
+    .map(([week, { hours, count, date }]) => ({
       week,
-      hours: Math.round((minutes / 60) * 10) / 10,
+      hours: Math.round(hours * 10) / 10,
       responses: count,
       _date: date,
     }))
@@ -1291,11 +1534,12 @@ export function computePersonalHoursTrend(
     const week = r.weekOf
     const date = r.weekDate || r.completedAt
     
-    let responseMinutes = 0
+    // Sum hours directly - values ARE hours (not minutes)
+    let responseHours = 0
     for (const qId of timeSavingIds) {
       const val = r.answers[qId]
       if (typeof val === "number" && val > 0) {
-        responseMinutes += val
+        responseHours += val
       }
     }
     
@@ -1305,9 +1549,9 @@ export function computePersonalHoursTrend(
     const entry = weekMap.get(week)!
     
     if (r.userId === userId) {
-      entry.my = responseMinutes / 60
+      entry.my = responseHours // Already in hours, no division needed
     }
-    entry.org.push(responseMinutes / 60)
+    entry.org.push(responseHours) // Already in hours
   }
   
   return Array.from(weekMap.entries())

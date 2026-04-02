@@ -106,6 +106,12 @@ export default function ScorecardPage() {
 
         // Load template
         const tmpl = await getDocument(COLLECTIONS.TEMPLATES, rel.templateId)
+        console.log("[v0] Template loaded:", {
+          templateId: rel.templateId,
+          tmpl,
+          hasQuestions: Array.isArray((tmpl as unknown as TemplateData)?.questions),
+          questionsCount: (tmpl as unknown as TemplateData)?.questions?.length,
+        })
         if (tmpl) {
           setTemplate(tmpl as unknown as TemplateData)
         }
@@ -152,6 +158,17 @@ export default function ScorecardPage() {
   const totalQuestions = questions.length
   const completedCount = Object.keys(answers).length
   const progress = totalQuestions > 0 ? (completedCount / totalQuestions) * 100 : 0
+
+  // Debug logging
+  console.log("[v0] Scorecard Debug:", {
+    loading,
+    template: template?.name,
+    questionsCount: questions.length,
+    questions: questions.map(q => ({ id: q.id, type: q.type, text: q.text?.slice(0, 50) })),
+    release: release?.id,
+    noActive,
+    expired,
+  })
 
   const handleAnswer = useCallback(
     (questionId: string, value: string | number) => {
@@ -317,6 +334,13 @@ export default function ScorecardPage() {
       <div className="flex flex-col gap-6 lg:flex-row">
         {/* Questions list */}
         <div className="flex-1">
+          {questions.length === 0 && !loading && (
+            <div className="rounded-lg border border-dashed border-amber-500/50 bg-amber-500/10 p-6 text-center">
+              <p className="text-sm font-medium text-amber-400">No questions found in this scorecard template.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Template ID: {release?.templateId ?? "unknown"}</p>
+              <p className="text-xs text-muted-foreground">Please contact your admin to configure the scorecard questions.</p>
+            </div>
+          )}
           <div className="flex flex-col gap-4">
             {questions.map((q, index) => {
               const isActive = index === currentQuestion
@@ -479,6 +503,48 @@ export default function ScorecardPage() {
                               </div>
                             </div>
                           )}
+                          {q.type === "win" && (
+                            <div className="flex flex-col gap-2">
+                              <Textarea
+                                placeholder="Share your biggest win or success with AI this week..."
+                                value={(answers[q.id] as string) ?? ""}
+                                onChange={(e) => handleAnswer(q.id, e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                                    e.preventDefault()
+                                    if (index < totalQuestions - 1) {
+                                      handleNext()
+                                    }
+                                  }
+                                }}
+                                rows={3}
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                This will appear in your Win of the Month section
+                              </p>
+                            </div>
+                          )}
+                          {q.type === "goals" && (
+                            <div className="flex flex-col gap-2">
+                              <Textarea
+                                placeholder="What are your goals for the upcoming week?"
+                                value={(answers[q.id] as string) ?? ""}
+                                onChange={(e) => handleAnswer(q.id, e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                                    e.preventDefault()
+                                    if (index < totalQuestions - 1) {
+                                      handleNext()
+                                    }
+                                  }
+                                }}
+                                rows={3}
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Track and complete these in your Weekly Goals section
+                              </p>
+                            </div>
+                          )}
                           {index < totalQuestions - 1 && (
                             <Button
                               size="sm"
@@ -555,16 +621,36 @@ function ResultsSummary({
   userId: string
   router: ReturnType<typeof useRouter>
 }) {
-  const [loading, setLoading] = useState(true)
-  const [myScore, setMyScore] = useState(0)
-  const [prevScore, setPrevScore] = useState<number | null>(null)
+const [loading, setLoading] = useState(true)
+  const [hoursSaved, setHoursSaved] = useState(0)
+  const [prevHours, setPrevHours] = useState<number | null>(null)
   const [benchmark, setBenchmark] = useState<{ deptAvg: number; orgAvg: number; percentile: number; deptName: string } | null>(null)
   const [insight, setInsight] = useState("")
-
+  
   useEffect(() => {
     async function compute() {
       try {
-        // 1. Current submission score
+        // 1. Calculate hours saved from this submission
+        // Find time-saving questions (type === "time_saving" OR text matches pattern)
+        // For "Hours: 1-10" type questions, the values ARE hours directly (not minutes)
+        const timeSavingQuestions = template?.questions?.filter(q => {
+          if (q.type === "time_saving") return true
+          const text = q.text.toLowerCase()
+          return (text.includes("time") || text.includes("hours")) && text.includes("save")
+        }) ?? []
+        
+        // Sum the HOURS directly - values are already in hours (1-10 scale)
+        let totalHours = 0
+        for (const q of timeSavingQuestions) {
+          const val = answers[q.id]
+          if (typeof val === "number" && val > 0) {
+            totalHours += val
+          }
+        }
+        const thisHours = Math.round(totalHours * 10) / 10
+        setHoursSaved(thisHours)
+        
+        // Keep score calculation for insight generation
         const scaleVals = Object.values(answers).filter(
           (v) => typeof v === "number" && v >= 1 && v <= 10,
         ) as number[]
@@ -572,17 +658,31 @@ function ResultsSummary({
           scaleVals.length > 0
             ? Math.round((scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length) * 10) / 10
             : 0
-        setMyScore(thisScore)
 
         // 2. Fetch historical data for trend + benchmark
         const allResponses = await fetchAllResponses()
         const trend = computePersonalTrend(allResponses, userId)
         const bench = computePersonalBenchmark(allResponses, userId)
-
-        if (trend.length >= 2) {
-          setPrevScore(trend[trend.length - 2]?.myScore ?? null)
-        } else if (trend.length === 1) {
-          setPrevScore(trend[0].myScore)
+        
+        // Get previous hours from last submission
+        const myResponses = allResponses.filter(r => r.userId === userId)
+        if (myResponses.length >= 2) {
+          // Sort by date and get previous submission
+          const sorted = [...myResponses].sort((a, b) => 
+            new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
+          )
+          const prevResponse = sorted[1] // Second most recent
+          if (prevResponse) {
+            // Values are in HOURS directly (not minutes)
+            let prevHoursTotal = 0
+            for (const q of timeSavingQuestions) {
+              const val = prevResponse.answers[q.id]
+              if (typeof val === "number" && val > 0) {
+                prevHoursTotal += val
+              }
+            }
+            setPrevHours(Math.round(prevHoursTotal * 10) / 10)
+          }
         }
 
         if (bench) {
@@ -668,7 +768,7 @@ function ResultsSummary({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const delta = prevScore !== null ? myScore - prevScore : null
+  const delta = prevHours !== null ? hoursSaved - prevHours : null
   const TrendIcon = delta !== null && delta > 0 ? TrendingUp : delta !== null && delta < 0 ? TrendingDown : Minus
 
   if (loading) {
@@ -693,14 +793,14 @@ function ResultsSummary({
         </p>
       </div>
 
-      {/* Score cards row */}
+      {/* Hours saved cards row */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {/* Your Score */}
+        {/* Hours Saved */}
         <Card>
           <CardContent className="flex flex-col items-center p-6">
-            <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">Your Score</p>
-            <p className="text-4xl font-bold text-primary">{myScore}</p>
-            <p className="text-xs text-muted-foreground">/10</p>
+            <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">Hours Saved</p>
+            <p className="text-4xl font-bold text-primary">{hoursSaved}</p>
+            <p className="text-xs text-muted-foreground">this week</p>
           </CardContent>
         </Card>
 
@@ -719,10 +819,10 @@ function ResultsSummary({
                     "text-2xl font-bold",
                     delta > 0 ? "text-green-600" : delta < 0 ? "text-red-500" : "text-muted-foreground"
                   )}>
-                    {delta > 0 ? "+" : ""}{delta.toFixed(1)}
+                    {delta > 0 ? "+" : ""}{delta.toFixed(1)} hrs
                   </p>
                 </div>
-                <p className="text-xs text-muted-foreground">from {prevScore?.toFixed(1)}</p>
+                <p className="text-xs text-muted-foreground">from {prevHours?.toFixed(1)} hrs</p>
               </>
             ) : (
               <>
@@ -743,7 +843,7 @@ function ResultsSummary({
                   Top {Math.max(1, 100 - benchmark.percentile)}%
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  vs. {benchmark.deptName} avg {benchmark.deptAvg}/10
+                  vs. {benchmark.deptName} avg
                 </p>
               </>
             ) : (

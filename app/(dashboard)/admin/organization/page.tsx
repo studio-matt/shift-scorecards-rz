@@ -63,6 +63,9 @@ import {
   ChevronDown,
   ChevronRight,
   DollarSign,
+  Send,
+  CheckCircle,
+  AlertCircle,
 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import type { Organization } from "@/lib/types"
@@ -759,6 +762,9 @@ function OrgDetailView({
   const [memberSearch, setMemberSearch] = useState("")
   const [editingMember, setEditingMember] = useState<{ id: string; firstName: string; lastName: string; email: string; department: string; role: string } | null>(null)
   const [editSaving, setEditSaving] = useState(false)
+  const [reInviting, setReInviting] = useState(false)
+  const [reInviteResult, setReInviteResult] = useState<{ sent: number; failed: number; total: number } | null>(null)
+  const [reInviteConfirmOpen, setReInviteConfirmOpen] = useState(false)
 
   // Branding & Settings state
   const [accentColor, setAccentColor] = useState(org.accentColor ?? "#3b82f6")
@@ -1062,6 +1068,32 @@ function OrgDetailView({
       console.error("Failed to update member:", err)
     } finally {
       setEditSaving(false)
+    }
+  }
+
+  async function handleReInviteAllConfirmed() {
+    if (members.length === 0) return
+    setReInviteConfirmOpen(false)
+    setReInviting(true)
+    setReInviteResult(null)
+    try {
+      const emails = members.map((m) => m.email).filter(Boolean)
+      const res = await fetch("/api/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails, orgName: orgName }),
+      })
+      const result = await res.json()
+      setReInviteResult({
+        sent: result.sent ?? 0,
+        failed: result.failed ?? 0,
+        total: emails.length,
+      })
+    } catch (err) {
+      console.error("Failed to re-invite members:", err)
+      setReInviteResult({ sent: 0, failed: members.length, total: members.length })
+    } finally {
+      setReInviting(false)
     }
   }
 
@@ -1671,11 +1703,58 @@ function OrgDetailView({
                     Users assigned to this organization
                   </CardDescription>
                 </div>
-                <Button size="sm" onClick={() => setInviteDialogOpen(true)}>
-                  <UserPlus className="mr-2 h-4 w-4" />
-                  Invite Members
-                </Button>
+                <div className="flex items-center gap-2">
+                  {members.length > 0 && (
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => setReInviteConfirmOpen(true)}
+                      disabled={reInviting}
+                    >
+                      {reInviting ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="mr-2 h-4 w-4" />
+                      )}
+                      Re-Invite All
+                    </Button>
+                  )}
+                  <Button size="sm" onClick={() => setInviteDialogOpen(true)}>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Invite Members
+                  </Button>
+                </div>
               </div>
+              {reInviteResult && (
+                <div className={`mt-3 flex items-center gap-2 rounded-md px-3 py-2 text-sm ${
+                  reInviteResult.failed === 0 
+                    ? "bg-green-500/10 text-green-500" 
+                    : reInviteResult.sent === 0 
+                      ? "bg-destructive/10 text-destructive"
+                      : "bg-amber-500/10 text-amber-500"
+                }`}>
+                  {reInviteResult.failed === 0 ? (
+                    <CheckCircle className="h-4 w-4" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4" />
+                  )}
+                  <span>
+                    {reInviteResult.sent === reInviteResult.total 
+                      ? `Successfully sent ${reInviteResult.sent} invitation${reInviteResult.sent !== 1 ? "s" : ""}`
+                      : reInviteResult.sent === 0
+                        ? "Failed to send invitations. Please check email settings."
+                        : `Sent ${reInviteResult.sent} of ${reInviteResult.total} invitations (${reInviteResult.failed} failed)`
+                    }
+                  </span>
+                  <button 
+                    type="button"
+                    onClick={() => setReInviteResult(null)}
+                    className="ml-auto text-xs hover:underline"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
               {members.length > 0 && (
                 <div className="relative mt-3">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1991,6 +2070,47 @@ function OrgDetailView({
                   {inviteSending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   <Mail className="mr-2 h-4 w-4" />
                   {inviteCsvFile ? `Invite ${inviteCsvCount} Users` : "Send Invite"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Re-Invite All Confirmation Dialog */}
+          <Dialog open={reInviteConfirmOpen} onOpenChange={setReInviteConfirmOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Re-Invite All Members</DialogTitle>
+                <DialogDescription>
+                  This will send invitation emails to all {members.length} members in {org.name}.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="rounded-md border border-border bg-muted/50 p-3">
+                  <p className="text-sm font-medium mb-2">Recipients ({members.length}):</p>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {members.slice(0, 5).map((m) => (
+                      <p key={m.id} className="text-xs text-muted-foreground">
+                        {m.name} &lt;{m.email}&gt;
+                      </p>
+                    ))}
+                    {members.length > 5 && (
+                      <p className="text-xs text-muted-foreground italic">
+                        ...and {members.length - 5} more
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Each member will receive an email inviting them to log in and complete their scorecard.
+                </p>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setReInviteConfirmOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleReInviteAllConfirmed}>
+                  <Send className="mr-2 h-4 w-4" />
+                  Send {members.length} Invites
                 </Button>
               </DialogFooter>
             </DialogContent>

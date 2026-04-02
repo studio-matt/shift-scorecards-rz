@@ -39,7 +39,10 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
+  Wrench,
 } from "lucide-react"
+import Link from "next/link"
 import type {
   UserPersonalStreak,
   PersonalTrendPoint,
@@ -195,83 +198,7 @@ export function ProductivityHero({ data }: { data: ProductivityHeroData }) {
         </Card>
       </div>
 
-      {/* Month-over-Month Comparison Row */}
-      <Card className="border-border/50 bg-card/80">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {lastMonth} → {currentMonth}
-            </p>
-            <p className="text-[10px] text-muted-foreground">Month-over-month changes</p>
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-            {/* Scorecards */}
-            <div className="rounded-lg border border-border bg-muted/30 p-3">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Scorecards</p>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-xs text-muted-foreground">{data.lastMonthResponses}</span>
-                <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                <span className="text-lg font-bold text-foreground">{data.thisMonthResponses}</span>
-              </div>
-              <p className={`mt-1 text-[10px] font-medium ${responseChange >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                {responseChange >= 0 ? "+" : ""}{responseChange} {responseChangePercent !== 0 && `(${responseChangePercent >= 0 ? "+" : ""}${responseChangePercent.toFixed(1)}%)`}
-              </p>
-            </div>
 
-            {/* Hours/Month */}
-            <div className="rounded-lg border border-border bg-muted/30 p-3">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Hours/Month</p>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-xs text-muted-foreground">{formatHours(data.lastMonthHours)}</span>
-                <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                <span className="text-lg font-bold text-foreground">{formatHours(data.monthlyHours)}</span>
-              </div>
-              <p className={`mt-1 text-[10px] font-medium ${hoursChange >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                {hoursChange >= 0 ? "+" : ""}{formatHours(hoursChange)} {hoursChangePercent !== 0 && `(${hoursChangePercent >= 0 ? "+" : ""}${hoursChangePercent.toFixed(1)}%)`}
-              </p>
-            </div>
-
-            {/* Productivity */}
-            <div className="rounded-lg border border-border bg-muted/30 p-3">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Productivity</p>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-xs text-muted-foreground">{data.lastMonthProductivity.toFixed(1)}%</span>
-                <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                <span className="text-lg font-bold text-foreground">{data.productivityPercent.toFixed(1)}%</span>
-              </div>
-              <p className={`mt-1 text-[10px] font-medium ${productivityChange >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                {productivityChange >= 0 ? "+" : ""}{productivityChange.toFixed(1)}pp
-              </p>
-            </div>
-
-            {/* Confidence */}
-            <div className="rounded-lg border border-border bg-muted/30 p-3">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Confidence</p>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-xs text-muted-foreground">{data.lastMonthConfidence.toFixed(1)}</span>
-                <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                <span className="text-lg font-bold text-foreground">{data.confidenceScore.toFixed(1)}</span>
-              </div>
-              <p className={`mt-1 text-[10px] font-medium ${confidenceChange >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                {confidenceChange >= 0 ? "+" : ""}{confidenceChange.toFixed(1)}
-              </p>
-            </div>
-
-            {/* Monthly Value */}
-            <div className="rounded-lg border border-border bg-muted/30 p-3">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Monthly Value</p>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-xs text-muted-foreground">{formatValue(data.lastMonthValue)}</span>
-                <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                <span className="text-lg font-bold text-foreground">{formatValue(data.monthlyValue)}</span>
-              </div>
-              <p className={`mt-1 text-[10px] font-medium ${valueChange >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                {valueChange >= 0 ? "+" : ""}{formatValue(Math.abs(valueChange))} {hoursChangePercent !== 0 && `(${hoursChangePercent >= 0 ? "+" : ""}${hoursChangePercent.toFixed(1)}%)`}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }
@@ -615,61 +542,68 @@ export function PersonalStreakCard({ data }: { data: UserPersonalStreak }) {
   )
 }
 
-// ── You vs. Benchmark Card (3 reference points) ────────────────────────
+// ── Monthly Progress Card (hours saved month over month) ────────────────────────
 export function PersonalBenchmarkCard({
   data,
   fieldAverage,
   monthlyGoal,
   lastMonthAvg,
+  thisMonthHours,
+  lastMonthHours,
 }: {
   data: PersonalVsBenchmark
   fieldAverage?: number
   monthlyGoal?: number
   lastMonthAvg?: number
+  thisMonthHours?: number
+  lastMonthHours?: number
 }) {
+  const currentHours = thisMonthHours ?? 0
+  const previousHours = lastMonthHours ?? 0
+  const hoursChange = currentHours - previousHours
+  const percentChange = previousHours > 0 ? ((hoursChange / previousHours) * 100) : 0
+
   const VelocityIcon =
-    data.myVelocity > 0.1 ? TrendingUp :
-    data.myVelocity < -0.1 ? TrendingDown :
+    hoursChange > 0 ? TrendingUp :
+    hoursChange < 0 ? TrendingDown :
     Minus
 
   const velocityColor =
-    data.myVelocity > 0.1 ? "text-emerald-600" :
-    data.myVelocity < -0.1 ? "text-red-500" :
+    hoursChange > 0 ? "text-emerald-500" :
+    hoursChange < 0 ? "text-red-500" :
     "text-muted-foreground"
 
   const velocityLabel =
-    data.myVelocity > 0.1 ? "Improving" :
-    data.myVelocity < -0.1 ? "Declining" :
+    hoursChange > 0 ? "Increasing" :
+    hoursChange < 0 ? "Decreasing" :
     "Steady"
 
-  const goal = monthlyGoal ?? 8.0
-  const field = fieldAverage ?? 6.2
-  const lastMonth = lastMonthAvg ?? (data.myAvg - data.myVelocity * 4)
+  const formatHours = (hrs: number) => hrs >= 1000 ? `${(hrs / 1000).toFixed(1)}K` : hrs.toFixed(1)
 
   return (
     <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
       <CardHeader className="relative pb-2">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-          <Target className="h-4 w-4 text-primary" />
-          Your Score in Context
+          <Clock className="h-4 w-4 text-primary" />
+          Your Monthly Progress in Context
         </CardTitle>
         <CardDescription className="text-[11px]">
-          How you compare across three key reference points
+          Hours saved month over month comparison
         </CardDescription>
       </CardHeader>
       <CardContent className="relative flex flex-col gap-4">
-        {/* Primary score */}
+        {/* Primary hours */}
         <div className="flex items-center gap-4">
           <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-[3px] border-primary bg-primary/10">
-            <span className="text-2xl font-bold text-primary">{data.myAvg}</span>
+            <span className="text-xl font-bold text-primary">{formatHours(currentHours)}</span>
           </div>
           <div className="flex-1">
-            <p className="text-sm font-semibold text-foreground">Your Average</p>
+            <p className="text-sm font-semibold text-foreground">This Month</p>
             <div className="mt-1 flex items-center gap-2">
               <VelocityIcon className={`h-3.5 w-3.5 ${velocityColor}`} />
               <span className={`text-xs font-medium ${velocityColor}`}>
-                {velocityLabel} ({data.myVelocity > 0 ? "+" : ""}{data.myVelocity} pts/wk)
+                {velocityLabel} ({hoursChange >= 0 ? "+" : ""}{formatHours(hoursChange)} hrs)
               </span>
             </div>
           </div>
@@ -679,35 +613,25 @@ export function PersonalBenchmarkCard({
           </div>
         </div>
 
-        {/* 3 reference bars */}
+        {/* Month over month comparison */}
         <div className="flex flex-col gap-2">
-          {[
-            { label: "vs. Field Average", ref: field, description: "Industry benchmark across all SHIFT clients" },
-            { label: "vs. Last Month", ref: Math.round(lastMonth * 10) / 10, description: "Your score last period" },
-            { label: "vs. My Goal", ref: goal, description: "Your target score" },
-          ].map((item) => {
-            const diff = data.myAvg - item.ref
-            const isAbove = diff >= 0
-            return (
-              <div key={item.label} className="rounded-md border border-border px-3 py-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-foreground">{item.label}</p>
-                    <p className="text-[10px] text-muted-foreground">{item.description}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">{item.ref}</span>
-                    <Badge
-                      variant={isAbove ? "default" : "secondary"}
-                      className={`text-[10px] h-5 ${isAbove ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400" : "bg-amber-100 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400"}`}
-                    >
-                      {isAbove ? "+" : ""}{diff.toFixed(1)}
-                    </Badge>
-                  </div>
-                </div>
+          <div className="rounded-md border border-border px-3 py-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-foreground">Last Month</p>
+                <p className="text-[10px] text-muted-foreground">Previous period hours</p>
               </div>
-            )
-          })}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{formatHours(previousHours)} hrs</span>
+                <Badge
+                  variant={hoursChange >= 0 ? "default" : "secondary"}
+                  className={`text-[10px] h-5 ${hoursChange >= 0 ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400" : "bg-amber-100 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400"}`}
+                >
+                  {hoursChange >= 0 ? "+" : ""}{percentChange.toFixed(0)}%
+                </Badge>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Dept & Org context */}
@@ -952,119 +876,121 @@ export function AIActionPlanCard({
   )
 }
 
-// ── Prompt Packs with Ready-to-Use Templates ───────────────────────────
-import type { PromptPack } from "@/lib/prompt-settings"
-import { getIconComponent, DEFAULT_PROMPT_PACKS } from "@/lib/prompt-settings"
+// ── Prompt Packs - Links to Real Packs ───────────────────────────────
+import Image from "next/image"
 
-export function PromptPacksCard({
-  weakCategories,
-  promptPacks = [],
-}: {
-  weakCategories?: { category: string; score: number }[]
-  promptPacks?: PromptPack[]
-}) {
-  const [expandedPack, setExpandedPack] = useState<string | null>(null)
-  const [copiedPrompt, setCopiedPrompt] = useState<string | null>(null)
+// Generic image for all prompt pack cards
+const GENERIC_PACK_IMAGE = "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Building%20the%20Limitless%20Org-cgbiPsyabIOZ6ganlKUuPo5caB4Zg1.png"
+const SHIFT_LOGO = "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/2020_Shift_Logo_PNG_White-oHuVe5im3yqRlmCF8NxkQK11YY4Xrj.png"
 
-  // Use defaults if no packs provided
-  const packs = promptPacks.length > 0 ? promptPacks : DEFAULT_PROMPT_PACKS
+// Featured prompt packs from the main prompt packs page - exact data from /prompt-packs
+const FEATURED_PROMPT_PACKS = [
+  {
+    id: "you-are-the-product",
+    title: "You Are The Product Prompt Pack",
+    subtitle: "Biases, Blind Spots, Binds, and Bottlenecks",
+    promptCount: 25,
+    icon: Brain,
+    color: "from-purple-500 to-pink-500",
+  },
+  {
+    id: "master-prompt-builder",
+    title: "The Master Prompt Builder",
+    subtitle: "Design Your AI Operating System",
+    icon: Wrench,
+    color: "from-blue-500 to-cyan-500",
+  },
+  {
+    id: "leader-manager",
+    title: "Leader & Manager Prompt Pack",
+    subtitle: "50 AI Prompts Across 10 Leadership Responsibilities",
+    promptCount: 50,
+    icon: Target,
+    color: "from-rose-500 to-pink-500",
+  },
+  {
+    id: "high-performance-flow",
+    title: "The High Performance & Flow Prompt Pack",
+    subtitle: "Rhythms, Rituals & Routines for Peak Performance",
+    promptCount: 14,
+    icon: Rocket,
+    color: "from-violet-500 to-purple-500",
+  },
+]
 
-  // If we have weak categories, prioritize packs that match
-  const weakNames = weakCategories?.map((c) => c.category.toLowerCase()) ?? []
-  const sorted = [...packs].sort((a, b) => {
-    const aMatch = weakNames.some((n) => a.category.toLowerCase().includes(n) || a.title.toLowerCase().includes(n)) ? 0 : 1
-    const bMatch = weakNames.some((n) => b.category.toLowerCase().includes(n) || b.title.toLowerCase().includes(n)) ? 0 : 1
-    return aMatch - bMatch
-  })
-
-  const handleCopy = async (template: string, promptId: string) => {
-    await navigator.clipboard.writeText(template)
-    setCopiedPrompt(promptId)
-    setTimeout(() => setCopiedPrompt(null), 2000)
-  }
-
+export function PromptPacksCard() {
   return (
     <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-cyan/5 via-transparent to-transparent" />
       <CardHeader className="relative pb-3">
-        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-          <BookOpen className="h-4 w-4 text-cyan" />
-          Prompt Packs
-        </CardTitle>
-        <CardDescription className="text-[11px]">
-          Ready-to-use prompt templates matched to your growth areas
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+              <BookOpen className="h-4 w-4 text-cyan" />
+              Prompt Packs
+            </CardTitle>
+            <CardDescription className="text-[11px]">
+              Ready-to-use AI prompt collections for every situation
+            </CardDescription>
+          </div>
+          <Link href="/prompt-packs">
+            <Button variant="ghost" size="sm" className="h-7 text-xs">
+              View All
+              <ChevronRight className="h-3 w-3 ml-1" />
+            </Button>
+          </Link>
+        </div>
       </CardHeader>
       <CardContent className="relative">
-        <div className="flex flex-col gap-2">
-          {sorted.slice(0, 4).map((pack) => {
-            const isExpanded = expandedPack === pack.id
-            const isRecommended = weakNames.some((n) => 
-              pack.category.toLowerCase().includes(n) || pack.title.toLowerCase().includes(n)
-            )
-
-            const IconComponent = getIconComponent(pack.icon)
+        <div className="grid grid-cols-2 gap-2">
+          {FEATURED_PROMPT_PACKS.map((pack) => {
+            const IconComponent = pack.icon
             return (
-              <div key={pack.id} className="rounded-lg border border-border/50 bg-muted/30">
-                <div
-                  className={`flex items-center gap-3 p-3 cursor-pointer transition-colors hover:bg-muted/50 ${isExpanded ? "border-b border-border/50" : ""}`}
-                  onClick={() => setExpandedPack(isExpanded ? null : pack.id)}
-                >
-                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1 ${isRecommended ? "bg-cyan/10 ring-cyan/30" : "bg-muted/50 ring-border/50"}`}>
-                    <IconComponent className={`h-4 w-4 ${isRecommended ? "text-cyan" : "text-foreground"}`} />
+              <Link
+                key={pack.id}
+                href={`/prompt-packs?pack=${pack.id}`}
+                className="group rounded-lg border border-border/50 bg-muted/30 overflow-hidden transition-all hover:border-cyan/30 hover:bg-muted/50"
+              >
+                {/* Generic image with title overlay */}
+                <div className="relative h-20 w-full overflow-hidden">
+                  <Image
+                    src={GENERIC_PACK_IMAGE}
+                    alt={pack.title}
+                    fill
+                    className="object-cover transition-transform group-hover:scale-105"
+                  />
+                  {/* Title overlay on image */}
+                  <div className="absolute inset-0 flex items-center justify-start bg-gradient-to-r from-black/50 to-transparent px-3">
+                    <h3 className="text-xs font-bold uppercase tracking-wide text-white drop-shadow-lg line-clamp-2" style={{ fontFamily: 'system-ui, sans-serif' }}>
+                      {pack.title}
+                    </h3>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-foreground">{pack.title}</p>
-                      <Badge variant="secondary" className="text-[9px] h-4">{pack.prompts.length} prompts</Badge>
-                      {isRecommended && (
-                        <Badge className="text-[9px] h-4 bg-cyan/20 text-cyan hover:bg-cyan/20">Recommended</Badge>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground truncate">{pack.description}</p>
+                  {/* SHIFT Logo */}
+                  <div className="absolute bottom-1 right-1">
+                    <Image
+                      src={SHIFT_LOGO}
+                      alt="SHIFT"
+                      width={16}
+                      height={16}
+                    />
                   </div>
-                  {isExpanded ? (
-                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="p-2.5">
+                  <p className="text-[10px] text-muted-foreground line-clamp-2">{pack.subtitle}</p>
+                  {pack.promptCount && (
+                    <Badge variant="secondary" className="text-[9px] h-4 mt-1.5">{pack.promptCount} prompts</Badge>
                   )}
                 </div>
-
-                {isExpanded && (
-                  <div className="p-3 space-y-2">
-                    {pack.prompts.map((prompt, idx) => {
-                      const promptId = `${pack.id}-${idx}`
-                      return (
-                        <div key={idx} className="rounded-md bg-background/50 p-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs font-medium text-foreground">{prompt.name}</p>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2 text-xs"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleCopy(prompt.template, promptId)
-                              }}
-                            >
-                              {copiedPrompt === promptId ? (
-                                <><Check className="h-3 w-3 mr-1" /> Copied</>
-                              ) : (
-                                <><Copy className="h-3 w-3 mr-1" /> Copy</>
-                              )}
-                            </Button>
-                          </div>
-                          <p className="text-[11px] text-muted-foreground font-mono leading-relaxed">
-                            {prompt.template}
-                          </p>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
+              </Link>
             )
           })}
+        </div>
+        <div className="mt-3 pt-3 border-t border-border/50">
+          <Link href="/prompt-packs" className="flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-cyan transition-colors">
+            <Sparkles className="h-3 w-3" />
+            Explore all 11 prompt packs with 200+ prompts
+            <ChevronRight className="h-3 w-3" />
+          </Link>
         </div>
       </CardContent>
     </Card>

@@ -43,55 +43,83 @@ export interface HighFive {
   createdAt: string
 }
 
-// ── MVP Spotlight ────────────────────────────────────────────────────
-export function MVPSpotlight({ performer }: { performer: TopPerformer | null }) {
-  if (!performer) return null
+// ── MVP Spotlight (Top 5 in Organization) ────────────────────────────────────
+export function MVPSpotlight({ performer, topPerformers = [] }: { performer: TopPerformer | null; topPerformers?: TopPerformer[] }) {
+  // Show top 5 performers
+  const top5 = topPerformers.slice(0, 5)
+  
+  if (!performer && top5.length === 0) return null
+  
   return (
     <Card className="relative overflow-hidden border-primary/30 bg-card/80 backdrop-blur-sm">
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent" />
       <CardContent className="relative p-5">
-        <div className="mb-3 flex items-center gap-2">
+        <div className="mb-4 flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
             <Trophy className="h-4 w-4 text-primary" />
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-primary">This Month{"'"}s MVP</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-primary">This Month{"'"}s Top Performers</p>
           </div>
         </div>
-        <div className="flex items-start gap-4">
-          <Avatar className="h-14 w-14 shrink-0 border-2 border-primary/20">
-            <AvatarFallback className="bg-primary/10 text-lg font-bold text-primary">
-              {performer.name.split(" ").map((n) => n[0]).join("")}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 flex-1">
-            <Link href={`/dashboard?viewUser=${performer.id}`} className="text-lg font-bold text-foreground">
-              {performer.name}
-            </Link>
-            <p className="text-sm text-muted-foreground">
-              {performer.company} &middot; {performer.department}
-            </p>
-            <div className="mt-2 flex items-center gap-3">
-              <Badge className="bg-primary/10 text-primary border-0">
-                <Star className="mr-1 h-3 w-3" />
-                {performer.avgScore} avg
-              </Badge>
-              <Badge variant="secondary">
-                {performer.streak} wk streak
-              </Badge>
-            </div>
-            {performer.winNarrative && (
-              <div className="mt-3 rounded-lg border border-primary/10 bg-card px-3 py-2">
-                <div className="mb-1 flex items-center gap-1">
-                  <Sparkles className="h-3 w-3 text-primary" />
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-primary">Win of the Month</p>
+        
+        {/* Top 5 List */}
+        <div className="flex flex-col gap-3">
+          {top5.map((p, index) => (
+            <div 
+              key={p.id} 
+              className={`rounded-lg border p-3 ${index === 0 ? "border-primary/30 bg-primary/5" : "border-border/50 bg-card/50"}`}
+            >
+              <div className="flex items-start gap-3">
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                  index === 0
+                    ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                    : index === 1
+                      ? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                      : index === 2
+                        ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                        : "bg-muted text-muted-foreground"
+                }`}>
+                  {index + 1}
+                </span>
+                <Avatar className={`h-10 w-10 shrink-0 ${index === 0 ? "border-2 border-primary/20" : ""}`}>
+                  <AvatarFallback className={`text-sm font-bold ${index === 0 ? "bg-primary/10 text-primary" : "bg-muted text-foreground"}`}>
+                    {p.name.split(" ").map((n) => n[0]).join("")}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <Link href={`/dashboard?viewUser=${p.id}`} className="text-sm font-semibold text-foreground">
+                    {p.name}
+                  </Link>
+                  <p className="text-xs text-muted-foreground">
+                    {p.department}
+                  </p>
+                  
+                  {/* Goal */}
+                  {p.goalNarrative && (
+                    <div className="mt-2 rounded border border-emerald-500/20 bg-emerald-500/5 px-2 py-1.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500 mb-0.5">Goal</p>
+                      <p className="text-xs text-foreground leading-snug">{p.goalNarrative}</p>
+                    </div>
+                  )}
+                  
+                  {/* Win */}
+                  {p.winNarrative && (
+                    <div className="mt-2 rounded border border-amber-500/20 bg-amber-500/5 px-2 py-1.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-500 mb-0.5">Win</p>
+                      <p className="text-xs text-foreground leading-snug italic">"{p.winNarrative}"</p>
+                    </div>
+                  )}
                 </div>
-                <p className="text-sm leading-relaxed text-foreground italic">
-                  {`"${performer.winNarrative}"`}
-                </p>
               </div>
-            )}
-          </div>
+            </div>
+          ))}
+          
+          {top5.length === 0 && (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              No top performers data available yet
+            </p>
+          )}
         </div>
       </CardContent>
     </Card>

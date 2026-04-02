@@ -2,8 +2,10 @@
 
 import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
-import { getDocument, updateDocument, getOrganizations, COLLECTIONS } from "@/lib/firestore"
+import { getDocument, updateDocument, getOrganizations, getDocuments, COLLECTIONS } from "@/lib/firestore"
+import { fetchAllResponses, type RawResponse } from "@/lib/dashboard-data"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -23,7 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { ArrowLeft, Loader2, Save, Building2, Mail, Briefcase, Phone, User } from "lucide-react"
+import { ArrowLeft, Loader2, Save, Building2, Mail, Briefcase, Phone, User, FileText, ChevronDown, ChevronUp } from "lucide-react"
 import type { User as UserType, Organization } from "@/lib/types"
 
 export default function EditUserProfilePage({ params }: { params: Promise<{ id: string }> }) {
@@ -35,6 +37,9 @@ export default function EditUserProfilePage({ params }: { params: Promise<{ id: 
   const [saving, setSaving] = useState(false)
   const [userData, setUserData] = useState<UserType | null>(null)
   const [orgs, setOrgs] = useState<Organization[]>([])
+  const [userResponses, setUserResponses] = useState<RawResponse[]>([])
+  const [templates, setTemplates] = useState<Map<string, { name: string; questions: Array<{ id: string; text: string; type: string }> }>>(new Map())
+  const [expandedResponses, setExpandedResponses] = useState<Set<string>>(new Set())
   
   // Form fields
   const [firstName, setFirstName] = useState("")
@@ -73,6 +78,26 @@ export default function EditUserProfilePage({ params }: { params: Promise<{ id: 
         } else {
           setOrgs(orgDocs)
         }
+        
+        // Fetch user's past scorecards
+        const [allResponses, templateDocs] = await Promise.all([
+          fetchAllResponses("all", "all"),
+          getDocuments(COLLECTIONS.TEMPLATES),
+        ])
+        
+        // Filter to only this user's responses and sort by date descending
+        const thisUserResponses = allResponses
+          .filter(r => r.userId === userId)
+          .sort((a, b) => (b.completedAt || "").localeCompare(a.completedAt || ""))
+        setUserResponses(thisUserResponses)
+        
+        // Build template map
+        const tMap = new Map<string, { name: string; questions: Array<{ id: string; text: string; type: string }> }>()
+        for (const t of templateDocs) {
+          const template = t as unknown as { id: string; name: string; questions: Array<{ id: string; text: string; type: string }> }
+          tMap.set(template.id, { name: template.name, questions: template.questions || [] })
+        }
+        setTemplates(tMap)
       } catch (err) {
         console.error("Failed to load user:", err)
       } finally {
@@ -159,11 +184,13 @@ export default function EditUserProfilePage({ params }: { params: Promise<{ id: 
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => router.back()}
+          asChild
           className="mb-4 -ml-2"
         >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Users
+          <Link href="/admin/users">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Users
+          </Link>
         </Button>
         <div className="flex items-center justify-between">
           <div>
@@ -391,6 +418,128 @@ export default function EditUserProfilePage({ params }: { params: Promise<{ id: 
             </CardContent>
           </Card>
         </div>
+      </div>
+
+      {/* Past Scorecards Section - Full Width Below */}
+      <div className="mt-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <FileText className="h-4 w-4" />
+              Past Scorecards ({userResponses.length})
+            </CardTitle>
+            <CardDescription>
+              View all scorecard submissions and answers for this user
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {userResponses.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                This user has not completed any scorecards yet.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {userResponses.map((response, idx) => {
+                  const responseId = (response as unknown as { id: string }).id || `${response.userId}-${idx}`
+                  const template = templates.get(response.templateId)
+                  const isExpanded = expandedResponses.has(responseId)
+                  const completedDate = response.completedAt 
+                    ? new Date(response.completedAt).toLocaleDateString("en-US", { 
+                        year: "numeric", 
+                        month: "short", 
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit"
+                      })
+                    : "Unknown date"
+                  
+                  return (
+                    <div key={responseId} className="border border-border rounded-lg overflow-hidden">
+                      <button
+                        onClick={() => {
+                          const newExpanded = new Set(expandedResponses)
+                          if (isExpanded) {
+                            newExpanded.delete(responseId)
+                          } else {
+                            newExpanded.add(responseId)
+                          }
+                          setExpandedResponses(newExpanded)
+                        }}
+                        className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors text-left"
+                      >
+                        <div className="flex flex-col gap-1">
+                          <span className="font-medium text-foreground">
+                            {template?.name || "Scorecard"}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {completedDate} {response.weekOf ? `(Week of ${response.weekOf})` : ""}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="text-xs">
+                            {Object.keys(response.answers || {}).length} answers
+                          </Badge>
+                          {isExpanded ? (
+                            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </div>
+                      </button>
+                      
+                      {isExpanded && (
+                        <div className="border-t border-border bg-muted/30 p-4">
+                          <div className="flex flex-col gap-4">
+                            {template?.questions.map((question) => {
+                              const answer = response.answers?.[question.id]
+                              if (answer === undefined || answer === null || answer === "") return null
+                              
+                              return (
+                                <div key={question.id} className="flex flex-col gap-1">
+                                  <p className="text-sm font-medium text-foreground">
+                                    {question.text}
+                                  </p>
+                                  <p className="text-sm text-muted-foreground bg-background rounded px-3 py-2">
+                                    {typeof answer === "number" ? (
+                                      <span className="font-semibold text-primary">{answer}/10</span>
+                                    ) : (
+                                      String(answer)
+                                    )}
+                                  </p>
+                                </div>
+                              )
+                            })}
+                            
+                            {/* Show any answers not in template (legacy data) */}
+                            {Object.entries(response.answers || {}).map(([qId, answer]) => {
+                              if (template?.questions.some(q => q.id === qId)) return null
+                              if (answer === undefined || answer === null || answer === "") return null
+                              
+                              return (
+                                <div key={qId} className="flex flex-col gap-1">
+                                  <p className="text-sm font-medium text-muted-foreground">
+                                    Question: {qId}
+                                  </p>
+                                  <p className="text-sm text-muted-foreground bg-background rounded px-3 py-2">
+                                    {typeof answer === "number" ? (
+                                      <span className="font-semibold text-primary">{answer}/10</span>
+                                    ) : (
+                                      String(answer)
+                                    )}
+                                  </p>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
