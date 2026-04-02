@@ -88,19 +88,20 @@ function getCurrentWeekOf() {
   return monday.toISOString().split("T")[0]
 }
 
-// Helper to convert time string to minutes
-function timeToMinutes(timeStr: string): number {
+// Helper to convert time string to HOURS (numeric value for time_saving questions)
+// These are the actual hours saved values that match the 1-10 scale
+function timeToHours(timeStr: string): number {
   if (timeStr.includes("Not using AI yet")) return 0
-  if (timeStr.includes("Under 2 minutes")) return 1
-  if (timeStr.includes("2–5 minutes")) return 3
-  if (timeStr.includes("6–10 minutes")) return 8
-  if (timeStr.includes("11–15 minutes")) return 13
-  if (timeStr.includes("16+ minutes")) return 20
-  if (timeStr.includes("30 minutes - 1 hour")) return 45
-  if (timeStr.includes("1-2 hours")) return 90
-  if (timeStr.includes("2-4 hours")) return 180
-  if (timeStr.includes("4+ hours")) return 300
-  return 30 // default
+  if (timeStr.includes("Under 2 minutes")) return 0
+  if (timeStr.includes("2–5 minutes")) return 0
+  if (timeStr.includes("6–10 minutes")) return 0
+  if (timeStr.includes("11–15 minutes")) return 0
+  if (timeStr.includes("16+ minutes")) return 0.5
+  if (timeStr.includes("30 minutes - 1 hour")) return 1
+  if (timeStr.includes("1-2 hours")) return 2
+  if (timeStr.includes("2-4 hours")) return 3
+  if (timeStr.includes("4+ hours")) return 5
+  return 1 // default
 }
 
 // Helper to convert email count string to number
