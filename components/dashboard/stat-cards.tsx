@@ -294,16 +294,34 @@ export function AdminStatCards({ data: s, targets, hoursMetrics, hourlyRate = 75
     return `$${Math.round(val).toLocaleString()}`
   }
 
+  // Helper to format change text - show "First data" if no previous data exists
+  const formatHoursChange = (change: number, lastMonth: number) => {
+    // If last month was 0, this is first data or no comparison available
+    if (lastMonth === 0) {
+      return "First data this period"
+    }
+    return change >= 0 
+      ? `+${formatHours(change)} from last month`
+      : `${formatHours(change)} from last month`
+  }
+  
+  const formatConfidenceChange = (change: number, lastMonth: number) => {
+    if (lastMonth === 0) {
+      return "First data this period"
+    }
+    return change >= 0 
+      ? `+${change.toFixed(1)} from last month`
+      : `${change.toFixed(1)} from last month`
+  }
+
   // Hours-based cards when metrics available
   const adminCards = hoursMetrics ? [
     {
       label: "Total Hours Saved",
       value: formatHours(hoursMetrics.monthlyHours),
-      change: hoursMetrics.monthOverMonthChange >= 0 
-        ? `+${formatHours(hoursMetrics.monthOverMonthChange)} from last month`
-        : `${formatHours(hoursMetrics.monthOverMonthChange)} from last month`,
+      change: formatHoursChange(hoursMetrics.monthOverMonthChange, hoursMetrics.lastMonthHours),
       icon: Clock,
-      positive: hoursMetrics.monthOverMonthChange >= 0,
+      positive: hoursMetrics.lastMonthHours === 0 || hoursMetrics.monthOverMonthChange >= 0,
       explanation: METRIC_EXPLANATIONS.totalHoursSaved,
     },
     {
@@ -325,11 +343,9 @@ export function AdminStatCards({ data: s, targets, hoursMetrics, hourlyRate = 75
     {
       label: "Avg Confidence",
       value: hoursMetrics.avgConfidence.toFixed(1),
-      change: hoursMetrics.confidenceChange >= 0 
-        ? `+${hoursMetrics.confidenceChange.toFixed(1)} from last month`
-        : `${hoursMetrics.confidenceChange.toFixed(1)} from last month`,
+      change: formatConfidenceChange(hoursMetrics.confidenceChange, hoursMetrics.lastMonthConfidence),
       icon: Target,
-      positive: hoursMetrics.confidenceChange >= 0,
+      positive: hoursMetrics.lastMonthConfidence === 0 || hoursMetrics.confidenceChange >= 0,
       explanation: METRIC_EXPLANATIONS.avgConfidence,
     },
     {

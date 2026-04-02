@@ -827,7 +827,7 @@ export function computeDepartmentVariance(responses: RawResponse[]): DepartmentV
   }).filter(Boolean).sort((a, b) => b!.stdDev - a!.stdDev) as DepartmentVariance[]
 }
 
-// ── Trend: Question correlation ───────────────────────────────────────
+// ── Trend: Question correlation ──��────────────────────────────────────
 export interface QuestionCorrelation {
   question1: string
   question2: string
@@ -1134,15 +1134,6 @@ export function computePersonalBenchmark(responses: RawResponse[], userId: strin
   // If only 1 user or no other users, they are in the top percentile (100)
   // If multiple users, calculate normally
   const percentile = allUserAvgs.length <= 1 ? 100 : Math.round((belowMe / (allUserAvgs.length - 1)) * 100)
-  
-  console.log("[v0] computePersonalBenchmark Debug:", {
-    userId,
-    myOrg,
-    allUserAvgsCount: allUserAvgs.length,
-    belowMe,
-    myAvg,
-    percentile,
-  })
 
   // My velocity
   const vel = computeScoreVelocity(myResponses)
@@ -1333,15 +1324,6 @@ export function computeUserHoursMetrics(
     ? lastMonthConfidenceScores.reduce((a, b) => a + b, 0) / lastMonthConfidenceScores.length
     : 0
   const confidenceChange = confidenceScore - lastMonthConfidence
-  
-  console.log("[v0] computeUserHoursMetrics confidence Debug:", {
-    userId,
-    confidenceIdsCount: confidenceIds.length,
-    confidenceIds,
-    confidenceScoresCount: confidenceScores.length,
-    confidenceScores,
-    confidenceScore,
-  })
   
   return {
     totalHoursSavedAllTime: Math.round(totalHours * 10) / 10,
