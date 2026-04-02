@@ -640,12 +640,18 @@ export interface NonResponder {
   lastResponseWeek: string
 }
 
-export async function computeNonResponders(responses: RawResponse[]): Promise<NonResponder[]> {
+export async function computeNonResponders(responses: RawResponse[], filterOrgId?: string): Promise<NonResponder[]> {
   const allUsersRaw = await getDocuments(COLLECTIONS.USERS)
   // Filter out users flagged as excluded from reporting (admins, non-participants)
+  // AND filter by organization if filterOrgId is provided
   const allUsers = allUsersRaw.filter((u) => {
     const data = u as Record<string, unknown>
-    return !(data.excludeFromReporting === true)
+    if (data.excludeFromReporting === true) return false
+    // If filtering by org, only include users from that org
+    if (filterOrgId && filterOrgId !== "all") {
+      return data.organizationId === filterOrgId
+    }
+    return true
   })
   const orgs = await getOrganizations()
   const orgNameMap = new Map(orgs.map((o) => [o.id, (o as Record<string, unknown>).name as string]))
@@ -1124,7 +1130,9 @@ export function computePersonalBenchmark(responses: RawResponse[], userId: strin
     avg: scores.reduce((a, b) => a + b, 0) / scores.length,
   }))
   const belowMe = allUserAvgs.filter((u) => u.avg < myAvg).length
-  const percentile = allUserAvgs.length > 1 ? Math.round((belowMe / (allUserAvgs.length - 1)) * 100) : 50
+  // If only 1 user or no other users, they are in the top percentile (100)
+  // If multiple users, calculate normally
+  const percentile = allUserAvgs.length <= 1 ? 100 : Math.round((belowMe / (allUserAvgs.length - 1)) * 100)
 
   // My velocity
   const vel = computeScoreVelocity(myResponses)
@@ -1180,7 +1188,7 @@ export interface OrgHoursMetrics {
   lastMonthResponses: number
 }
 
-// ── Helper: Find time-saving question IDs from templates ──────────����───
+// ── Helper: Find time-saving question IDs from templates ──────────�����───
 // Questions with type === "time_saving" OR questions containing "time/hours" AND "save" in text
 export async function findTimeSavingQuestionIds(): Promise<string[]> {
   const templates = await fetchTemplates()
@@ -1347,7 +1355,8 @@ export function computeOrgHoursMetrics(
   let thisMonthResponses = 0
   let lastMonthResponses = 0
   const allUsers = new Set<string>() // ALL users who ever submitted ANY scorecard
-  const confidenceScores: number[] = []
+  const allConfidenceScores: number[] = [] // ALL confidence scores ever
+  const thisMonthConfidenceScores: number[] = []
   const lastMonthConfidenceScores: number[] = []
   
   for (const r of responses) {
@@ -1376,7 +1385,8 @@ export function computeOrgHoursMetrics(
     for (const confId of confidenceIds) {
       const conf = r.answers[confId]
       if (typeof conf === "number" && conf >= 1 && conf <= 10) {
-        if (isThisMonth) confidenceScores.push(conf)
+        allConfidenceScores.push(conf) // Track ALL scores ever
+        if (isThisMonth) thisMonthConfidenceScores.push(conf)
         if (isLastMonth) lastMonthConfidenceScores.push(conf)
       }
     }
@@ -1421,14 +1431,18 @@ export function computeOrgHoursMetrics(
   const annualValue = monthlyValue * 12
   const perPersonValue = activeParticipants > 0 ? monthlyValue / activeParticipants : 0
   
-  // Confidence averages
-  const avgConfidence = confidenceScores.length > 0
-    ? confidenceScores.reduce((a, b) => a + b, 0) / confidenceScores.length
+  // Confidence averages - use ALL scores ever for the main average
+  // If we have this month's data, use that for comparison; otherwise fall back to all-time
+  const avgConfidence = allConfidenceScores.length > 0
+    ? allConfidenceScores.reduce((a, b) => a + b, 0) / allConfidenceScores.length
     : 0
+  const thisMonthConfidence = thisMonthConfidenceScores.length > 0
+    ? thisMonthConfidenceScores.reduce((a, b) => a + b, 0) / thisMonthConfidenceScores.length
+    : avgConfidence // Fall back to all-time if no this month data
   const lastMonthConfidence = lastMonthConfidenceScores.length > 0
     ? lastMonthConfidenceScores.reduce((a, b) => a + b, 0) / lastMonthConfidenceScores.length
     : 0
-  const confidenceChange = avgConfidence - lastMonthConfidence
+  const confidenceChange = thisMonthConfidence - lastMonthConfidence
   
   return {
     totalHoursSaved: Math.round(totalHours * 10) / 10,

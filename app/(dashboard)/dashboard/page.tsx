@@ -211,11 +211,11 @@ export default function DashboardPage() {
       setQuestionResults(questions)
       setRecentScorecards(recent)
 
-  // New analytics
+  // New analytics - pass selectedOrg to computeNonResponders for proper org filtering
   const [streakData, nonResp, vel, variance, dot, benchmarks, report] =
     await Promise.all([
       computeStreaks(responses),
-      computeNonResponders(responses),
+      computeNonResponders(responses, selectedOrg),
       computeScoreVelocity(responses),
       Promise.resolve(computeDepartmentVariance(responses)),
       Promise.resolve(computeDeptOverTime(responses)),
@@ -247,14 +247,16 @@ export default function DashboardPage() {
       const hoursTrend = computeWeeklyHoursTrend(responses, timeSavingIds)
       setWeeklyHoursTrend(hoursTrend)
 
-      // User-specific metrics (uses full response set for anonymized comparisons)
+      // User-specific metrics - fetch ALL responses (unfiltered) for user's personal data
+      // This ensures the user sees their own data regardless of admin filters
       if (user?.id) {
-        setPersonalStreak(computePersonalStreak(responses, user.id))
-        setPersonalTrend(computePersonalTrend(responses, user.id))
-        setPersonalBenchmark(computePersonalBenchmark(responses, user.id))
+        const allResponses = await fetchAllResponses("all", "all")
+        setPersonalStreak(computePersonalStreak(allResponses, user.id))
+        setPersonalTrend(computePersonalTrend(allResponses, user.id))
+        setPersonalBenchmark(computePersonalBenchmark(allResponses, user.id))
         
-  // Compute user-specific hours metrics (reuse timeSavingIds/confidenceIds from above)
-  const userHours = computeUserHoursMetrics(responses, user.id, timeSavingIds, confidenceIds)
+  // Compute user-specific hours metrics (use allResponses for user's data)
+  const userHours = computeUserHoursMetrics(allResponses, user.id, timeSavingIds, confidenceIds)
         setUserHoursMetrics(userHours)
 
         // Extract goals and wins from user's responses based on question types
@@ -266,7 +268,7 @@ export default function DashboardPage() {
           templateMap.set(template.id, template)
         }
         
-        const userResponses = responses.filter(r => r.userId === user.id)
+        const userResponses = allResponses.filter(r => r.userId === user.id)
         const extractedGoals: GoalEntry[] = []
         const extractedWins: WinEntry[] = []
         
@@ -658,8 +660,24 @@ export default function DashboardPage() {
 
       <div className="flex flex-col gap-6">
         {/* ── Productivity Hero (Time-Saved Metrics) ──────────────────────── */}
-        {productivityHeroData && totalResponses > 0 ? (
-          <ProductivityHero data={productivityHeroData} />
+        {totalResponses > 0 ? (
+          productivityHeroData ? (
+            <ProductivityHero data={productivityHeroData} />
+          ) : (
+            <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-card/80 to-card/80 backdrop-blur-sm">
+              <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
+              <CardContent className="relative p-6 md:p-8 text-center">
+                <Sparkles className="mx-auto h-12 w-12 text-primary mb-4" />
+                <h2 className="text-xl font-bold text-foreground">Welcome Back!</h2>
+                <p className="mt-2 text-muted-foreground max-w-md mx-auto">
+                  You&apos;ve completed {totalResponses} scorecard{totalResponses > 1 ? "s" : ""}. Keep the momentum going!
+                </p>
+                <Button className="mt-4" asChild>
+                  <a href="/scorecard">Take Another Scorecard</a>
+                </Button>
+              </CardContent>
+            </Card>
+          )
         ) : (
           <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-card/80 to-card/80 backdrop-blur-sm">
             <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
