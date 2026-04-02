@@ -1190,31 +1190,22 @@ export interface OrgHoursMetrics {
 }
 
 // ── Helper: Find time-saving question IDs from templates ──────────────────
-// Returns ONLY ONE question ID to avoid double-counting multiple time questions
+// Returns ALL questions with type === "time_saving"
+// Each question represents hours saved on a different task, so we sum them all
 export async function findTimeSavingQuestionIds(): Promise<string[]> {
   const templates = await fetchTemplates()
+  const ids: string[] = []
   
-  // First pass: look for explicit type === "time_saving" (return only first one)
+  // Collect ALL questions with explicit type === "time_saving"
   for (const t of templates) {
     for (const q of t.questions || []) {
       if (q.type === "time_saving") {
-        return [q.id] // Return immediately with just ONE question
+        ids.push(q.id)
       }
     }
   }
   
-  // Second pass: find the FIRST question that mentions time/hours saved
-  // Only return ONE to avoid summing multiple questions
-  for (const t of templates) {
-    for (const q of t.questions || []) {
-      const text = (q.text || "").toLowerCase()
-      if ((text.includes("time") || text.includes("hours")) && text.includes("save")) {
-        return [q.id] // Return immediately with just ONE question
-      }
-    }
-  }
-  
-  return []
+  return ids
 }
 
 // ── Helper: Find ALL confidence question IDs from templates ────────────────

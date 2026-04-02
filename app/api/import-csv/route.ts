@@ -201,25 +201,11 @@ export async function POST(request: Request) {
     }
 
     // 4. Helper to build answers from CSV row data
+    // Maps each time_saving question to its corresponding CSV field based on question text
     const buildAnswers = (data: typeof CSV_DATA[0]) => {
       const answers: Record<string, number | string> = {}
       
       if (!template.questions) return answers
-      
-      // Calculate total hours saved (sum of all time-saving fields)
-      // Cap at 10 for a reasonable weekly hours saved value
-      const totalHours = Math.min(10, 
-        timeToHours(data.emailTimeSaved) +
-        timeToHours(data.meetingPrepSaved) +
-        timeToHours(data.meetingFollowupSaved) +
-        timeToHours(data.docReviewSaved) +
-        timeToHours(data.docPrepSaved) +
-        timeToHours(data.researchSaved) +
-        timeToHours(data.summarizingSaved)
-      )
-
-      // Track if we've already set the time_saving value (only set it once)
-      let timeSavingSet = false
 
       for (const question of template.questions) {
         const text = (question.text || "").toLowerCase()
@@ -230,11 +216,34 @@ export async function POST(request: Request) {
           answers[question.id] = data.biggestWin
         } else if (text.includes("goal") || text.includes("next")) {
           answers[question.id] = data.nextGoal
-        } else if (!timeSavingSet && (question.type === "time_saving" || (text.includes("time") && text.includes("save")))) {
-          // For the FIRST time_saving question ONLY, set total hours saved
-          // This prevents double/triple counting if multiple time questions exist
-          answers[question.id] = Math.max(1, Math.round(totalHours))
-          timeSavingSet = true
+        } else if (question.type === "time_saving") {
+          // Map each time_saving question to its specific CSV field based on text
+          if (text.includes("email")) {
+            answers[question.id] = timeToHours(data.emailTimeSaved)
+          } else if (text.includes("meeting") && text.includes("prep")) {
+            answers[question.id] = timeToHours(data.meetingPrepSaved)
+          } else if (text.includes("meeting") && text.includes("follow")) {
+            answers[question.id] = timeToHours(data.meetingFollowupSaved)
+          } else if (text.includes("review") && text.includes("document")) {
+            answers[question.id] = timeToHours(data.docReviewSaved)
+          } else if (text.includes("prepare") && text.includes("document")) {
+            answers[question.id] = timeToHours(data.docPrepSaved)
+          } else if (text.includes("research")) {
+            answers[question.id] = timeToHours(data.researchSaved)
+          } else if (text.includes("summariz")) {
+            answers[question.id] = timeToHours(data.summarizingSaved)
+          } else {
+            // Default: use average of all time fields
+            answers[question.id] = Math.round((
+              timeToHours(data.emailTimeSaved) +
+              timeToHours(data.meetingPrepSaved) +
+              timeToHours(data.meetingFollowupSaved) +
+              timeToHours(data.docReviewSaved) +
+              timeToHours(data.docPrepSaved) +
+              timeToHours(data.researchSaved) +
+              timeToHours(data.summarizingSaved)
+            ) / 7)
+          }
         } else if (question.type === "scale" || question.type === "number") {
           // For other scale questions, use a value based on confidence
           answers[question.id] = Math.max(1, Math.min(10, data.confidence + Math.floor(Math.random() * 3) - 1))
