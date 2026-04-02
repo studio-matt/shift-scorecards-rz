@@ -23,10 +23,14 @@ export async function POST(req: Request) {
       })
     }
 
+    // Use configured from address, or fallback to Resend test domain
+    const fromEmail = process.env.RESEND_FROM_EMAIL || "Shift Scorecards <onboarding@resend.dev>"
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://scorecards.envoydesign.com"
+    
     const results = await Promise.allSettled(
       emails.map((email: string) =>
         resend.emails.send({
-          from: "Shift Scorecards <onboarding@resend.dev>",
+          from: fromEmail,
           to: email,
           subject: `You've been invited to ${orgName || "Shift Scorecards"}`,
           html: `
@@ -36,7 +40,7 @@ export async function POST(req: Request) {
                 You've been invited to join <strong>${orgName || "Shift Scorecards"}</strong>.
                 Click the link below to create your account and get started.
               </p>
-              <a href="${process.env.NEXT_PUBLIC_APP_URL || "https://shift-scorecards.vercel.app"}"
+              <a href="${appUrl}"
                  style="display: inline-block; margin-top: 20px; padding: 12px 24px; background: #111; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 500;">
                 Accept Invitation
               </a>
