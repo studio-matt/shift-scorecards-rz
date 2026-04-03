@@ -55,11 +55,16 @@ export function QuestionResults({ data }: QuestionResultsProps) {
                 <p className="flex-1 text-sm font-medium text-foreground">
                   {result.question}
                 </p>
-                <div className={`flex items-center gap-1.5 ${trendColor}`}>
-                  <TrendIcon className="h-4 w-4" />
-                  <span className="text-sm font-semibold">
-                    {isUp ? "+" : ""}{change !== 0 ? change : "—"}
+                <div className="flex items-center gap-3">
+                  <span className="text-lg font-bold text-foreground">
+                    {typeof result.score === "number" ? result.score.toFixed(1) : "—"}
                   </span>
+                  <div className={`flex items-center gap-1 ${trendColor}`}>
+                    <TrendIcon className="h-3.5 w-3.5" />
+                    <span className="text-xs font-medium">
+                      {isUp ? "+" : ""}{change !== 0 ? change.toFixed(1) : "—"}
+                    </span>
+                  </div>
                 </div>
               </div>
             )

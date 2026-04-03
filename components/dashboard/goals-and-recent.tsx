@@ -40,15 +40,46 @@ function GoalIcon({ status }: { status: string }) {
 interface GoalsCardProps {
   goals?: GoalEntry[]
   onMarkComplete?: (goalId: string) => void
+  onCycleStatus?: (goalId: string, newStatus: "completed" | "in-progress" | "not-started") => void
 }
 
-export function GoalsCard({ goals = [], onMarkComplete }: GoalsCardProps) {
+export function GoalsCard({ goals = [], onMarkComplete, onCycleStatus }: GoalsCardProps) {
   // Group by status for display - show incomplete first, then completed
   const sortedGoals = [...goals].sort((a, b) => {
     if (a.status === "completed" && b.status !== "completed") return 1
     if (a.status !== "completed" && b.status === "completed") return -1
     return 0
   })
+
+  // Cycle through statuses: not-started -> in-progress -> completed -> not-started
+  const handleStatusClick = (goal: GoalEntry) => {
+    if (onCycleStatus) {
+      const nextStatus = goal.status === "not-started" 
+        ? "in-progress" 
+        : goal.status === "in-progress" 
+          ? "completed" 
+          : "not-started"
+      onCycleStatus(goal.id, nextStatus)
+    } else if (onMarkComplete && goal.status !== "completed") {
+      onMarkComplete(goal.id)
+    }
+  }
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "completed": return "Done"
+      case "in-progress": return "In Progress"
+      default: return "Not Started"
+    }
+  }
+
+  const getStatusBadgeClasses = (status: string) => {
+    switch (status) {
+      case "completed": return "bg-emerald-500/20 text-emerald-400"
+      case "in-progress": return "bg-amber-500/20 text-amber-400"
+      default: return ""
+    }
+  }
 
   return (
     <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
@@ -58,6 +89,7 @@ export function GoalsCard({ goals = [], onMarkComplete }: GoalsCardProps) {
           <Target className="h-4 w-4 text-emerald-500" />
           Weekly Goals
         </CardTitle>
+        <p className="text-[11px] text-muted-foreground">Click the status icon to change progress</p>
       </CardHeader>
       <CardContent className="relative">
         {sortedGoals.length === 0 ? (
@@ -73,17 +105,16 @@ export function GoalsCard({ goals = [], onMarkComplete }: GoalsCardProps) {
                   "flex items-center gap-3 rounded-lg border px-3 py-2 transition-all",
                   goal.status === "completed"
                     ? "border-emerald-500/30 bg-emerald-500/10"
-                    : "border-border/50 bg-muted/30 hover:bg-muted/50"
+                    : goal.status === "in-progress"
+                      ? "border-amber-500/30 bg-amber-500/10"
+                      : "border-border/50 bg-muted/30 hover:bg-muted/50"
                 )}
               >
                 <button
                   type="button"
-                  onClick={() => goal.status !== "completed" && onMarkComplete?.(goal.id)}
-                  className={cn(
-                    "shrink-0 transition-transform",
-                    goal.status !== "completed" && "hover:scale-110 cursor-pointer"
-                  )}
-                  disabled={goal.status === "completed"}
+                  onClick={() => handleStatusClick(goal)}
+                  className="shrink-0 transition-transform hover:scale-110 cursor-pointer"
+                  title="Click to change status"
                 >
                   <GoalIcon status={goal.status} />
                 </button>
@@ -103,13 +134,14 @@ export function GoalsCard({ goals = [], onMarkComplete }: GoalsCardProps) {
                   </span>
                 </div>
                 <Badge
-                  variant={goal.status === "completed" ? "secondary" : "outline"}
+                  variant={goal.status === "completed" || goal.status === "in-progress" ? "secondary" : "outline"}
                   className={cn(
-                    "text-[10px] shrink-0",
-                    goal.status === "completed" && "bg-emerald-500/20 text-emerald-400"
+                    "text-[10px] shrink-0 cursor-pointer hover:opacity-80",
+                    getStatusBadgeClasses(goal.status)
                   )}
+                  onClick={() => handleStatusClick(goal)}
                 >
-                  {goal.status === "completed" ? "Done" : "Active"}
+                  {getStatusLabel(goal.status)}
                 </Badge>
               </div>
             ))}

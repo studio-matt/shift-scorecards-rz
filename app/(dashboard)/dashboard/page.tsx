@@ -14,17 +14,11 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Sparkles } from "lucide-react"
-import { EpicMeaningSection } from "@/components/epic-meaning"
 import {
-  SkillTierCard,
   PersonalBestsCard,
-  DepartmentRivalryCard,
-  CohortNudgeCard,
   StreakAtRiskCard,
-  WinOfTheMonthCard,
   type PersonalBest,
   type DepartmentRanking,
-  type WinEntry,
 } from "@/components/dashboard/gamification"
 import { StatCards, AdminStatCards } from "@/components/dashboard/stat-cards"
 import { TopPerformers, MVPSpotlight, HighFiveSection } from "@/components/dashboard/top-performers"
@@ -40,26 +34,18 @@ import {
 import {
   StreaksCard,
   NonRespondersCard,
-  ScoreVelocityCard,
-  DepartmentVarianceCard,
   DeptOverTimeChart,
-  OrgBenchmarkCard,
   FieldReportCard,
   AlertsCard,
 } from "@/components/dashboard/analytics-sections"
 import {
-  PersonalStreakCard,
   PersonalBenchmarkCard,
   PersonalTrendChart,
-  HoursSavedCard,
-  HighFivesReceivedCard,
   ProductivityHero,
   type ProductivityHeroData,
   PercentileDistribution,
-  PromptPacksCard,
 } from "@/components/dashboard/user-analytics"
 import { getOrganizations, getDocument, getDocuments, COLLECTIONS } from "@/lib/firestore"
-import { getPromptSettings } from "@/lib/prompt-settings"
 import {
   fetchAllResponses,
   computeAdminStats,
@@ -71,10 +57,7 @@ import {
   computeRecentScorecards,
   computeStreaks,
   computeNonResponders,
-  computeScoreVelocity,
-  computeDepartmentVariance,
   computeDeptOverTime,
-  computeOrgBenchmarks,
   computeFieldReport,
   computeAlerts,
   computePersonalStreak,
@@ -90,10 +73,7 @@ import {
   type RecentScorecard,
   type UserStreak,
   type NonResponder,
-  type ScoreVelocity,
-  type DepartmentVariance,
   type DeptOverTime,
-  type OrgBenchmark,
   type FieldReportData,
   type ThresholdAlert,
   type UserPersonalStreak,
@@ -134,10 +114,7 @@ export default function DashboardPage() {
   const [recentScorecards, setRecentScorecards] = useState<RecentScorecard[]>([])
   const [streaks, setStreaks] = useState<UserStreak[]>([])
   const [nonResponders, setNonResponders] = useState<NonResponder[]>([])
-  const [velocities, setVelocities] = useState<ScoreVelocity[]>([])
-  const [deptVariance, setDeptVariance] = useState<DepartmentVariance[]>([])
   const [deptOverTime, setDeptOverTime] = useState<DeptOverTime[]>([])
-  const [orgBenchmarks, setOrgBenchmarks] = useState<OrgBenchmark[]>([])
   const [fieldReport, setFieldReport] = useState<FieldReportData | null>(null)
   const [alerts, setAlerts] = useState<ThresholdAlert[]>([])
   const [personalStreak, setPersonalStreak] = useState<UserPersonalStreak | null>(null)
@@ -153,9 +130,7 @@ export default function DashboardPage() {
     scorecardsSent: 50,
     fieldAverage: 6.2,
   })
-  const [varianceFeedback, setVarianceFeedback] = useState<Record<string, unknown> | undefined>(undefined)
   const [userGoals, setUserGoals] = useState<GoalEntry[]>([])
-  const [userWins, setUserWins] = useState<WinEntry[]>([])
 
   // Handle marking a goal as complete
   const handleMarkGoalComplete = useCallback((goalId: string) => {
@@ -165,15 +140,25 @@ export default function DashboardPage() {
     // TODO: Persist to database
   }, [])
 
+  // Handle cycling goal status (not-started -> in-progress -> completed -> not-started)
+  const handleCycleGoalStatus = useCallback((goalId: string, newStatus: "completed" | "in-progress" | "not-started") => {
+    setUserGoals(prev => prev.map(g => 
+      g.id === goalId ? { 
+        ...g, 
+        status: newStatus, 
+        completedAt: newStatus === "completed" ? new Date().toISOString() : undefined 
+      } : g
+    ))
+    // TODO: Persist to database
+  }, [])
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      const [orgDocs, responses, targetsDoc, feedbackDoc, promptSettings] = await Promise.all([
+      const [orgDocs, responses, targetsDoc] = await Promise.all([
         getOrganizations(),
         fetchAllResponses(selectedOrg, selectedDept),
         getDocument(COLLECTIONS.SETTINGS, "dashboardTargets"),
-        getDocument(COLLECTIONS.SETTINGS, "analyticsFeedback"),
-        user?.organizationId ? getPromptSettings(user.organizationId) : Promise.resolve(null),
       ])
       if (targetsDoc) {
         const t = targetsDoc as Record<string, unknown>
@@ -184,10 +169,6 @@ export default function DashboardPage() {
           scorecardsSent: (t.scorecardsSent as number) ?? prev.scorecardsSent,
           fieldAverage: (t.fieldAverage as number) ?? prev.fieldAverage,
         }))
-      }
-      if (feedbackDoc) {
-        const f = feedbackDoc as Record<string, unknown>
-        if (f.varianceFeedback) setVarianceFeedback(f.varianceFeedback as Record<string, unknown>)
       }
       setOrgs(orgDocs as unknown as Organization[])
 
@@ -211,25 +192,19 @@ export default function DashboardPage() {
       setQuestionResults(questions)
       setRecentScorecards(recent)
 
-  // New analytics - pass selectedOrg to computeNonResponders for proper org filtering
-  const [streakData, nonResp, vel, variance, dot, benchmarks, report] =
-    await Promise.all([
-      computeStreaks(responses),
-      computeNonResponders(responses, selectedOrg),
-      computeScoreVelocity(responses),
-      Promise.resolve(computeDepartmentVariance(responses)),
-      Promise.resolve(computeDeptOverTime(responses)),
-      computeOrgBenchmarks(responses),
-      computeFieldReport(responses),
-    ])
+      // New analytics - pass selectedOrg to computeNonResponders for proper org filtering
+      const [streakData, nonResp, dot, report] =
+        await Promise.all([
+          computeStreaks(responses),
+          computeNonResponders(responses, selectedOrg),
+          Promise.resolve(computeDeptOverTime(responses)),
+          computeFieldReport(responses),
+        ])
       setStreaks(streakData)
       setNonResponders(nonResp)
-  setVelocities(vel)
-  setDeptVariance(variance)
-  setDeptOverTime(dot)
-      setOrgBenchmarks(benchmarks)
+      setDeptOverTime(dot)
       setFieldReport(report)
-      setAlerts(computeAlerts(responses, dept, vel))
+      setAlerts(computeAlerts(responses, dept, []))
 
   // Compute hours metrics for admin view (all responses or filtered by org)
   const [timeSavingIds, confidenceIds] = await Promise.all([
@@ -259,7 +234,7 @@ export default function DashboardPage() {
   const userHours = computeUserHoursMetrics(allResponses, user.id, timeSavingIds, confidenceIds)
         setUserHoursMetrics(userHours)
 
-        // Extract goals and wins from user's responses based on question types
+        // Extract goals from user's responses based on question types
         // We need to fetch templates to get question types
         const templates = await getDocuments(COLLECTIONS.TEMPLATES)
         const templateMap = new Map<string, { questions: Array<{ id: string; type: string }> }>()
@@ -270,7 +245,6 @@ export default function DashboardPage() {
         
         const userResponses = allResponses.filter(r => r.userId === user.id)
         const extractedGoals: GoalEntry[] = []
-        const extractedWins: WinEntry[] = []
         
         for (const response of userResponses) {
           const responseId = (response as unknown as { id: string }).id || `${response.userId}-${response.completedAt}`
@@ -288,22 +262,14 @@ export default function DashboardPage() {
                 weekOf: response.weekOf || response.completedAt?.slice(0, 10) || "",
                 status: "in-progress",
               })
-            } else if (question.type === "win") {
-              extractedWins.push({
-                id: `${responseId}-${question.id}`,
-                text: answer,
-                weekOf: response.weekOf || response.completedAt?.slice(0, 10) || "",
-              })
             }
           }
         }
         
         // Sort by weekOf descending (most recent first)
         extractedGoals.sort((a, b) => b.weekOf.localeCompare(a.weekOf))
-        extractedWins.sort((a, b) => b.weekOf.localeCompare(a.weekOf))
         
         setUserGoals(extractedGoals.slice(0, 10)) // Show last 10 goals
-        setUserWins(extractedWins.slice(0, 5)) // Show last 5 wins
       }
     } catch (err) {
       console.error("Failed to load dashboard data:", err)
@@ -507,27 +473,14 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* ── Hours Saved Trends ─────────────────────── */}
-          <div className="border-t border-border pt-4">
-            <h2 className="text-lg font-semibold text-foreground">Hours Saved Trends</h2>
-            <p className="mb-4 text-sm text-muted-foreground">Hours saved velocity and variance by department</p>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <ScoreVelocityCard data={velocities} />
-              <DepartmentVarianceCard data={deptVariance} feedbackSettings={varianceFeedback as Record<string, unknown> | undefined} />
-            </div>
-          </div>
-
           {/* ── Organizational Intelligence ────────────── */}
           <div className="border-t border-border pt-4">
             <h2 className="text-lg font-semibold text-foreground">Organizational Intelligence</h2>
-            <p className="mb-4 text-sm text-muted-foreground">Cross-department and cross-org comparisons</p>
-<DeptOverTimeChart data={deptOverTime} />
-<div className="mt-4">
-<OrgBenchmarkCard data={orgBenchmarks} />
-</div>
-<div className="mt-4">
-<FieldReportCard data={fieldReport} />
-</div>
+            <p className="mb-4 text-sm text-muted-foreground">Cross-department comparisons over time</p>
+            <DeptOverTimeChart data={deptOverTime} />
+            <div className="mt-4">
+              <FieldReportCard data={fieldReport} />
+            </div>
           </div>
 
           {/* ── Actionable Alerts ──────────────────────── */}
@@ -539,17 +492,10 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ── Champions ───────────────────────────�����─── */}
+          {/* ── Champions ─────────────────────────────── */}
           <div className="border-t border-border pt-4">
             <h2 className="text-lg font-semibold text-foreground">Champions</h2>
             <p className="mb-4 text-sm text-muted-foreground">Top performers, most improved, and peer recognition</p>
-
-            {/* MVP Spotlight - Top 5 */}
-            {topPerformers.length > 0 && (
-              <div className="mb-6">
-                <MVPSpotlight performer={topPerformers[0]} topPerformers={topPerformers} />
-              </div>
-            )}
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <TopPerformers showCompany data={topPerformers} />
@@ -561,15 +507,6 @@ export default function DashboardPage() {
           </div>
 
           <QuestionResults data={questionResults} />
-
-          {/* ── Prompt Packs ────────────────────────────── */}
-          <div className="border-t border-border/50 pt-4">
-            <h2 className="text-lg font-semibold text-foreground">Prompt Packs</h2>
-            <p className="mb-4 text-sm text-muted-foreground">
-              Ready-to-use AI prompt collections for your team
-            </p>
-            <PromptPacksCard />
-          </div>
         </div>
       </div>
     )
@@ -783,11 +720,12 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* ── Goals and Wins from Scorecards ─────────── */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <GoalsCard goals={userGoals} onMarkComplete={handleMarkGoalComplete} />
-          <WinOfTheMonthCard wins={userWins} />
-        </div>
+        {/* ── Goals from Scorecards ─────────── */}
+        <GoalsCard 
+          goals={userGoals} 
+          onMarkComplete={handleMarkGoalComplete} 
+          onCycleStatus={handleCycleGoalStatus}
+        />
 
         {/* ── Champions & Recognition ────────────────── */}
         <div className="border-t border-border/50 pt-4">
@@ -796,36 +734,14 @@ export default function DashboardPage() {
             Top performers and peer recognition (names shown by opt-in only)
           </p>
 
-          {/* MVP Spotlight + High Fives - consolidated to single recognition area */}
+          {/* Top 5 Performers with Wins + High Fives */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {topPerformers.length > 0 && <MVPSpotlight performer={topPerformers[0]} topPerformers={topPerformers} />}
             <HighFiveSection performers={topPerformers} currentUserName={myName || "User"} />
           </div>
-
-          {/* Leaderboard, MostImproved, HighFivesReceived - COMMENTED OUT to reduce clutter
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 mb-6">
-            <HighFivesReceivedCard count={highFiveCount} />
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <TopPerformers data={topPerformers} />
-            <div className="flex flex-col gap-6">
-              <MostImprovedCard data={mostImproved} />
-            </div>
-          </div>
-          */}
         </div>
 
         <QuestionResults data={questionResults} />
-
-        {/* ── Prompt Packs ────────────────────────────── */}
-        <div className="border-t border-border/50 pt-4">
-          <h2 className="text-lg font-semibold text-foreground">Prompt Packs</h2>
-          <p className="mb-4 text-sm text-muted-foreground">
-            Ready-to-use AI prompt collections to boost your productivity
-          </p>
-          <PromptPacksCard />
-        </div>
 
         <RecentScorecardsCard data={recentScorecards} />
       </div>
