@@ -141,13 +141,26 @@ export function StatCards({
   totalSections,
   percentile,
   hoursMetrics,
+  hourlyRate = 100,
 }: UserStatCardsProps) {
   const confidenceScore = hoursMetrics?.confidenceScore ?? avgScore
   const confidenceChange = (hoursMetrics?.confidenceScore ?? avgScore) - (hoursMetrics?.lastMonthConfidence ?? lastMonthAvg)
+  
+  // Format helpers
+  const formatHours = (hrs: number) => hrs >= 1000 ? `${(hrs / 1000).toFixed(1)}K` : hrs.toFixed(1)
+  const formatValue = (val: number) => {
+    if (val >= 1000000) return `$${(val / 1000000).toFixed(1)}M`
+    if (val >= 1000) return `$${Math.round(val / 1000)}K`
+    return `$${Math.round(val).toLocaleString()}`
+  }
+  
+  const totalHours = hoursMetrics?.totalHoursSaved ?? 0
+  const productivityPercent = hoursMetrics?.productivityPercent ?? 0
+  const dollarValue = totalHours * hourlyRate
 
   return (
     <TooltipProvider>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Completed */}
         <Card className="relative border-border/50 bg-card/80 backdrop-blur-sm">
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-500/10 via-transparent to-transparent" />
@@ -177,6 +190,70 @@ export function StatCards({
           </CardContent>
         </Card>
 
+        {/* Hours Saved */}
+        <Card className="relative border-border/50 bg-card/80 backdrop-blur-sm">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
+          <CardContent className="relative flex items-start gap-4 p-5">
+            <div className="flex flex-col items-center gap-2">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-cyan-500/15 ring-1 ring-cyan-500/20">
+                <Clock className="h-5 w-5 text-cyan-400" />
+              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button className="flex h-6 w-6 items-center justify-center rounded-full bg-muted border border-border hover:bg-muted/80 transition-colors">
+                    <Info className="h-4 w-4 text-muted-foreground" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[280px] text-xs z-50">
+                  <div className="space-y-1">
+                    <p className="font-semibold">Hours Saved</p>
+                    <p>Total hours you&apos;ve saved using AI tools this month.</p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            <div>
+              <p className="text-sm font-medium leading-snug text-muted-foreground">Hours Saved</p>
+              <p className="text-2xl font-bold text-foreground">{formatHours(totalHours)}</p>
+              <p className="mt-1 text-xs text-emerald-400">
+                {formatValue(dollarValue)} value
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Productivity Gain */}
+        <Card className="relative border-border/50 bg-card/80 backdrop-blur-sm">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-transparent to-transparent" />
+          <CardContent className="relative flex items-start gap-4 p-5">
+            <div className="flex flex-col items-center gap-2">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 ring-1 ring-emerald-500/20">
+                <Gauge className="h-5 w-5 text-emerald-400" />
+              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button className="flex h-6 w-6 items-center justify-center rounded-full bg-muted border border-border hover:bg-muted/80 transition-colors">
+                    <Info className="h-4 w-4 text-muted-foreground" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[280px] text-xs z-50">
+                  <div className="space-y-1">
+                    <p className="font-semibold">Productivity Gain</p>
+                    <p>Percentage of your work week saved through AI usage.</p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            <div>
+              <p className="text-sm font-medium leading-snug text-muted-foreground">Productivity Gain</p>
+              <p className="text-2xl font-bold text-foreground">{productivityPercent.toFixed(1)}%</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                of your work week
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Confidence */}
         <Card className="relative border-border/50 bg-card/80 backdrop-blur-sm">
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-transparent" />
@@ -201,35 +278,6 @@ export function StatCards({
               <p className="text-2xl font-bold text-foreground">{confidenceScore.toFixed(1)}</p>
               <p className={`mt-1 text-xs ${confidenceChange >= 0 ? "text-emerald-400" : "text-amber-400"}`}>
                 {confidenceChange >= 0 ? "+" : ""}{confidenceChange.toFixed(1)} vs last month
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Your Rank */}
-        <Card className="relative border-border/50 bg-card/80 backdrop-blur-sm">
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-orange-500/10 via-transparent to-transparent" />
-          <CardContent className="relative flex items-start gap-4 p-5">
-            <div className="flex flex-col items-center gap-2">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-orange-500/15 ring-1 ring-orange-500/20">
-                <Trophy className="h-5 w-5 text-orange-400" />
-              </div>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button className="flex h-6 w-6 items-center justify-center rounded-full bg-muted border border-border hover:bg-muted/80 transition-colors">
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-[280px] text-xs z-50">
-                  {METRIC_EXPLANATIONS.rank}
-                </TooltipContent>
-              </Tooltip>
-            </div>
-            <div>
-              <p className="text-sm font-medium leading-snug text-muted-foreground">Your Rank</p>
-              <p className="text-2xl font-bold text-foreground">{percentile}<span className="text-base text-muted-foreground">th</span></p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                percentile in your company
               </p>
             </div>
           </CardContent>
