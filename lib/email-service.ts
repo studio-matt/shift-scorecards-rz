@@ -136,10 +136,10 @@ export async function saveEmailTemplate(template: EmailTemplate): Promise<void> 
 }
 
 // Replace placeholders in template
-export function replacePlaceholders(
+export async function replacePlaceholders(
   content: string,
   data: Record<string, string>
-): string {
+): Promise<string> {
   let result = content
   for (const [key, value] of Object.entries(data)) {
     result = result.replace(new RegExp(key.replace(/[{}]/g, "\\$&"), "g"), value)
@@ -168,8 +168,8 @@ export async function sendEmail({
       return { success: false, error: `Template "${templateType}" is disabled` }
     }
     
-    const subject = replacePlaceholders(template.subject, data)
-    const html = replacePlaceholders(template.body, data)
+    const subject = await replacePlaceholders(template.subject, data)
+    const html = await replacePlaceholders(template.body, data)
     
     const recipients = Array.isArray(to) ? to : [to]
     
