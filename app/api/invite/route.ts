@@ -12,9 +12,6 @@ export async function POST(req: Request) {
 
     // Get API key from Firestore email settings (or fallback to env var)
     const emailSettings = await getEmailSettings()
-    console.log("[v0] emailSettings from Firestore:", emailSettings ? "found" : "not found", emailSettings?.resendApiKey ? "has API key" : "no API key")
-    console.log("[v0] RESEND_API_KEY env var:", process.env.RESEND_API_KEY ? "set" : "not set")
-    
     const apiKey = emailSettings?.resendApiKey || process.env.RESEND_API_KEY
     
     if (!apiKey) {
@@ -25,8 +22,6 @@ export async function POST(req: Request) {
         message: "Emails skipped -- Resend API key not configured",
       })
     }
-    
-    console.log("[v0] Using API key from:", emailSettings?.resendApiKey ? "Firestore" : "env var")
 
     const resend = new Resend(apiKey)
     
@@ -35,9 +30,6 @@ export async function POST(req: Request) {
       ? `${emailSettings.fromName} <${emailSettings.fromEmail}>`
       : process.env.RESEND_FROM_EMAIL || "Shift Scorecards <onboarding@resend.dev>"
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://scorecards.envoydesign.com"
-    
-    console.log("[v0] Sending to emails:", emails)
-    console.log("[v0] From address:", fromEmail)
     
     const results = await Promise.allSettled(
       emails.map((email: string) =>
@@ -65,19 +57,8 @@ export async function POST(req: Request) {
       ),
     )
 
-    // Log detailed results from Resend
-    results.forEach((result, index) => {
-      if (result.status === "fulfilled") {
-        console.log(`[v0] Email ${index + 1} result:`, JSON.stringify(result.value))
-      } else {
-        console.log(`[v0] Email ${index + 1} FAILED:`, result.reason)
-      }
-    })
-
     const sent = results.filter((r) => r.status === "fulfilled").length
     const failed = results.filter((r) => r.status === "rejected").length
-    
-    console.log(`[v0] Final: sent=${sent}, failed=${failed}, total=${emails.length}`)
 
     return NextResponse.json({ sent, failed, total: emails.length })
   } catch (err) {
