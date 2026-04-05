@@ -135,7 +135,7 @@ export async function saveEmailTemplate(template: EmailTemplate): Promise<void> 
   await setDoc(docRef, template)
 }
 
-// Replace placeholders in template
+// Replace placeholders in template (async for Server Actions compatibility)
 export async function replacePlaceholders(
   content: string,
   data: Record<string, string>
