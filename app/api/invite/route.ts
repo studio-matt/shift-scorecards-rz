@@ -25,10 +25,11 @@ export async function POST(req: Request) {
 
     const resend = new Resend(apiKey)
     
-    // Use configured from address from settings, or fallback
-    const fromEmail = emailSettings?.fromEmail && emailSettings?.fromName
-      ? `${emailSettings.fromName} <${emailSettings.fromEmail}>`
-      : process.env.RESEND_FROM_EMAIL || "Shift Scorecards <onboarding@resend.dev>"
+    // Prioritize RESEND_FROM_EMAIL env var (verified domain), then fall back to Firestore settings
+    const fromEmail = process.env.RESEND_FROM_EMAIL 
+      || (emailSettings?.fromEmail && emailSettings?.fromName
+        ? `${emailSettings.fromName} <${emailSettings.fromEmail}>`
+        : "Shift Scorecards <onboarding@resend.dev>")
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://scorecards.envoydesign.com"
     
     const results = await Promise.allSettled(
