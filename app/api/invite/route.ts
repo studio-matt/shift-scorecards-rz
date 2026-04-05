@@ -1,9 +1,6 @@
 import { Resend } from "resend"
 import { NextResponse } from "next/server"
-
-const resend = process.env.RESEND_API_KEY
-  ? new Resend(process.env.RESEND_API_KEY)
-  : null
+import { getEmailSettings } from "@/lib/email-service"
 
 export async function POST(req: Request) {
   try {
@@ -13,18 +10,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No emails provided" }, { status: 400 })
     }
 
-    if (!resend) {
-      // No API key -- log and return success so the invite records still work
-      console.warn("[invite] RESEND_API_KEY not set, skipping email delivery")
+    // Get API key from Firestore email settings (or fallback to env var)
+    const emailSettings = await getEmailSettings()
+    const apiKey = emailSettings?.resendApiKey || process.env.RESEND_API_KEY
+    
+    if (!apiKey) {
+      console.warn("[invite] No Resend API key found in settings or environment")
       return NextResponse.json({
         sent: 0,
         skipped: emails.length,
-        message: "Emails skipped -- RESEND_API_KEY not configured",
+        message: "Emails skipped -- Resend API key not configured",
       })
     }
 
-    // Use configured from address, or fallback to Resend test domain
-    const fromEmail = process.env.RESEND_FROM_EMAIL || "Shift Scorecards <onboarding@resend.dev>"
+    const resend = new Resend(apiKey)
+    
+    // Use configured from address from settings, or fallback
+    const fromEmail = emailSettings?.fromEmail && emailSettings?.fromName
+      ? `${emailSettings.fromName} <${emailSettings.fromEmail}>`
+      : process.env.RESEND_FROM_EMAIL || "Shift Scorecards <onboarding@resend.dev>"
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://scorecards.envoydesign.com"
     
     const results = await Promise.allSettled(
