@@ -176,6 +176,7 @@ export type EmailTemplateType =
   | "scorecard_reminder"
   | "scorecard_completed"
   | "weekly_digest"
+  | "member_invitation"
 
 export interface EmailTemplate {
   id: EmailTemplateType

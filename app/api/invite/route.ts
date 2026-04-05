@@ -1,6 +1,6 @@
 import { Resend } from "resend"
 import { NextResponse } from "next/server"
-import { getEmailSettings } from "@/lib/email-service"
+import { getEmailSettings, getEmailTemplate, replacePlaceholders } from "@/lib/email-service"
 
 export async function POST(req: Request) {
   try {
@@ -39,28 +39,26 @@ export async function POST(req: Request) {
         : "Shift Scorecards <noreply@envoydesign.com>"
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://scorecards.envoydesign.com"
     
+    // Get the invitation email template
+    const template = await getEmailTemplate("member_invitation")
+    const organizationName = orgName || "Shift Scorecards"
+    
+    // Prepare subject and body with placeholders replaced
+    const subject = await replacePlaceholders(template.subject, {
+      "{{organizationName}}": organizationName,
+    })
+    const html = await replacePlaceholders(template.body, {
+      "{{organizationName}}": organizationName,
+      "{{inviteLink}}": appUrl,
+    })
+    
     const results = await Promise.allSettled(
       emails.map((email: string) =>
         resend.emails.send({
           from: fromEmail,
           to: email,
-          subject: `You've been invited to ${orgName || "Shift Scorecards"}`,
-          html: `
-            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
-              <h2 style="color: #111; margin-bottom: 8px;">You're invited!</h2>
-              <p style="color: #555; line-height: 1.6;">
-                You've been invited to join <strong>${orgName || "Shift Scorecards"}</strong>.
-                Click the link below to create your account and get started.
-              </p>
-              <a href="${appUrl}"
-                 style="display: inline-block; margin-top: 20px; padding: 12px 24px; background: #111; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 500;">
-                Accept Invitation
-              </a>
-              <p style="color: #999; font-size: 13px; margin-top: 32px;">
-                If you didn't expect this invitation, you can safely ignore this email.
-              </p>
-            </div>
-          `,
+          subject,
+          html,
         }),
       ),
     )
