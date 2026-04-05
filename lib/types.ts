@@ -225,4 +225,8 @@ export const EMAIL_PLACEHOLDERS = {
     { key: "{{streak}}", description: "Current completion streak" },
     { key: "{{organizationName}}", description: "Organization name" },
   ],
+  member_invitation: [
+    { key: "{{organizationName}}", description: "Organization name" },
+    { key: "{{inviteLink}}", description: "Link to accept the invitation" },
+  ],
 } as const
