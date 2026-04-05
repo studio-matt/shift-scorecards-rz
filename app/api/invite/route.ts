@@ -1,9 +1,6 @@
 import { Resend } from "resend"
 import { NextResponse } from "next/server"
-
-const resend = process.env.RESEND_API_KEY
-  ? new Resend(process.env.RESEND_API_KEY)
-  : null
+import { getEmailSettings, getEmailTemplate, replacePlaceholders } from "@/lib/email-service"
 
 export async function POST(req: Request) {
   try {
@@ -13,42 +10,55 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No emails provided" }, { status: 400 })
     }
 
-    if (!resend) {
-      // No API key -- log and return success so the invite records still work
-      console.warn("[invite] RESEND_API_KEY not set, skipping email delivery")
+    // Get API key from Firestore email settings (or fallback to env var)
+    const emailSettings = await getEmailSettings()
+    const apiKey = emailSettings?.resendApiKey || process.env.RESEND_API_KEY
+    
+    if (!apiKey) {
+      console.warn("[invite] No Resend API key found in settings or environment")
       return NextResponse.json({
         sent: 0,
         skipped: emails.length,
-        message: "Emails skipped -- RESEND_API_KEY not configured",
+        message: "Emails skipped -- Resend API key not configured",
       })
     }
 
-    // Use configured from address, or fallback to Resend test domain
-    const fromEmail = process.env.RESEND_FROM_EMAIL || "Shift Scorecards <onboarding@resend.dev>"
+    const resend = new Resend(apiKey)
+    
+    // Determine from email - validate it looks like an email address
+    const envFromEmail = process.env.RESEND_FROM_EMAIL
+    const firestoreFromEmail = emailSettings?.fromEmail && emailSettings?.fromName
+      ? `${emailSettings.fromName} <${emailSettings.fromEmail}>`
+      : null
+    
+    // Use env var only if it contains @ (is an email), otherwise use Firestore or default
+    const fromEmail = (envFromEmail && envFromEmail.includes("@"))
+      ? envFromEmail
+      : (firestoreFromEmail && firestoreFromEmail.includes("@"))
+        ? firestoreFromEmail
+        : "Shift Scorecards <noreply@envoydesign.com>"
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://scorecards.envoydesign.com"
+    
+    // Get the invitation email template
+    const template = await getEmailTemplate("member_invitation")
+    const organizationName = orgName || "Shift Scorecards"
+    
+    // Prepare subject and body with placeholders replaced
+    const subject = await replacePlaceholders(template.subject, {
+      "{{organizationName}}": organizationName,
+    })
+    const html = await replacePlaceholders(template.body, {
+      "{{organizationName}}": organizationName,
+      "{{inviteLink}}": appUrl,
+    })
     
     const results = await Promise.allSettled(
       emails.map((email: string) =>
         resend.emails.send({
           from: fromEmail,
           to: email,
-          subject: `You've been invited to ${orgName || "Shift Scorecards"}`,
-          html: `
-            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
-              <h2 style="color: #111; margin-bottom: 8px;">You're invited!</h2>
-              <p style="color: #555; line-height: 1.6;">
-                You've been invited to join <strong>${orgName || "Shift Scorecards"}</strong>.
-                Click the link below to create your account and get started.
-              </p>
-              <a href="${appUrl}"
-                 style="display: inline-block; margin-top: 20px; padding: 12px 24px; background: #111; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 500;">
-                Accept Invitation
-              </a>
-              <p style="color: #999; font-size: 13px; margin-top: 32px;">
-                If you didn't expect this invitation, you can safely ignore this email.
-              </p>
-            </div>
-          `,
+          subject,
+          html,
         }),
       ),
     )

@@ -39,11 +39,9 @@ import {
   AlertsCard,
 } from "@/components/dashboard/analytics-sections"
 import {
-  PersonalBenchmarkCard,
   PersonalTrendChart,
   ProductivityHero,
   type ProductivityHeroData,
-  PercentileDistribution,
 } from "@/components/dashboard/user-analytics"
 import { getOrganizations, getDocument, getDocuments, COLLECTIONS } from "@/lib/firestore"
 import {
@@ -675,39 +673,20 @@ export default function DashboardPage() {
           hourlyRate={effectiveHourlyRate}
         />
 
-        {/* ── Percentile Ranking + Personal Bests ─────── */}
+        {/* ── Personal Bests ─────── */}
         <div className="border-t border-border/50 pt-4">
           <h2 className="text-lg font-semibold text-foreground">Your Performance</h2>
           <p className="mb-4 text-sm text-muted-foreground">
-            Where you stand and how you compare (all comparisons are anonymized)
+            Track your progress and achievements
           </p>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <PercentileDistribution
-              percentile={personalBenchmark?.percentile ?? 50}
-              cohortCount={10}
-              totalParticipants={850}
-            />
-            <PersonalBestsCard bests={personalBests} />
-          </div>
-          
-{personalBenchmark && (
-  <div className="mt-4">
-  <PersonalBenchmarkCard
-  data={personalBenchmark}
-  fieldAverage={targets.fieldAverage}
-  monthlyGoal={8.0}
-  thisMonthHours={userHoursMetrics?.totalHoursSaved ?? 0}
-  lastMonthHours={(userHoursMetrics?.totalHoursSaved ?? 0) * 0.85} // TODO: Track actual previous month data
-  />
-  </div>
-          )}
+          <PersonalBestsCard bests={personalBests} />
         </div>
 
-        {/* ── Your Trend ────────────────────────────────── */}
+        {/* ── Your Hours Trend ────────────────────────────────── */}
         <div className="border-t border-border/50 pt-4">
-          <h2 className="text-lg font-semibold text-foreground">Your Trend</h2>
+          <h2 className="text-lg font-semibold text-foreground">Your Hours Trend</h2>
           <p className="mb-4 text-sm text-muted-foreground">
-            Your scores over time compared to field average ({targets.fieldAverage.toFixed(1)})
+            Hours saved over time through AI adoption
           </p>
           {personalTrend.length > 0 ? (
             <PersonalTrendChart data={personalTrend} />

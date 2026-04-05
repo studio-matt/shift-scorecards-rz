@@ -176,6 +176,7 @@ export type EmailTemplateType =
   | "scorecard_reminder"
   | "scorecard_completed"
   | "weekly_digest"
+  | "member_invitation"
 
 export interface EmailTemplate {
   id: EmailTemplateType
@@ -223,5 +224,9 @@ export const EMAIL_PLACEHOLDERS = {
     { key: "{{percentileRank}}", description: "Their percentile ranking" },
     { key: "{{streak}}", description: "Current completion streak" },
     { key: "{{organizationName}}", description: "Organization name" },
+  ],
+  member_invitation: [
+    { key: "{{organizationName}}", description: "Organization name" },
+    { key: "{{inviteLink}}", description: "Link to accept the invitation" },
   ],
 } as const
