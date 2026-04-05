@@ -36,6 +36,9 @@ export async function POST(req: Request) {
       : process.env.RESEND_FROM_EMAIL || "Shift Scorecards <onboarding@resend.dev>"
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://scorecards.envoydesign.com"
     
+    console.log("[v0] Sending to emails:", emails)
+    console.log("[v0] From address:", fromEmail)
+    
     const results = await Promise.allSettled(
       emails.map((email: string) =>
         resend.emails.send({
@@ -62,8 +65,19 @@ export async function POST(req: Request) {
       ),
     )
 
+    // Log detailed results from Resend
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled") {
+        console.log(`[v0] Email ${index + 1} result:`, JSON.stringify(result.value))
+      } else {
+        console.log(`[v0] Email ${index + 1} FAILED:`, result.reason)
+      }
+    })
+
     const sent = results.filter((r) => r.status === "fulfilled").length
     const failed = results.filter((r) => r.status === "rejected").length
+    
+    console.log(`[v0] Final: sent=${sent}, failed=${failed}, total=${emails.length}`)
 
     return NextResponse.json({ sent, failed, total: emails.length })
   } catch (err) {
