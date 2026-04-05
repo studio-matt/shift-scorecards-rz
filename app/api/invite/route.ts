@@ -12,6 +12,9 @@ export async function POST(req: Request) {
 
     // Get API key from Firestore email settings (or fallback to env var)
     const emailSettings = await getEmailSettings()
+    console.log("[v0] emailSettings from Firestore:", emailSettings ? "found" : "not found", emailSettings?.resendApiKey ? "has API key" : "no API key")
+    console.log("[v0] RESEND_API_KEY env var:", process.env.RESEND_API_KEY ? "set" : "not set")
+    
     const apiKey = emailSettings?.resendApiKey || process.env.RESEND_API_KEY
     
     if (!apiKey) {
@@ -22,6 +25,8 @@ export async function POST(req: Request) {
         message: "Emails skipped -- Resend API key not configured",
       })
     }
+    
+    console.log("[v0] Using API key from:", emailSettings?.resendApiKey ? "Firestore" : "env var")
 
     const resend = new Resend(apiKey)
     
