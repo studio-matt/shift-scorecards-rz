@@ -37,7 +37,7 @@ export async function POST(req: Request) {
       : (firestoreFromEmail && firestoreFromEmail.includes("@"))
         ? firestoreFromEmail
         : "Shift Scorecards <noreply@envoydesign.com>"
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://scorecards.envoydesign.com"
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://scorecard.envoydesign.com"
     
     // Get the invitation email template
     const template = await getEmailTemplate("member_invitation")
