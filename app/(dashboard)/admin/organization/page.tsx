@@ -68,6 +68,7 @@ import {
   AlertCircle,
 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
 import type { Organization } from "@/lib/types"
 import {
   getOrganizations,
@@ -765,6 +766,7 @@ function OrgDetailView({
   const [reInviting, setReInviting] = useState(false)
   const [reInviteResult, setReInviteResult] = useState<{ sent: number; failed: number; total: number } | null>(null)
   const [reInviteConfirmOpen, setReInviteConfirmOpen] = useState(false)
+  const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set())
 
   // Branding & Settings state
   const [accentColor, setAccentColor] = useState(org.accentColor ?? "#3b82f6")
@@ -1071,13 +1073,18 @@ function OrgDetailView({
     }
   }
 
+  // Get members to reinvite (selected or all)
+  const membersToReinvite = selectedMembers.size > 0 
+    ? members.filter((m) => selectedMembers.has(m.id))
+    : members
+  
   async function handleReInviteAllConfirmed() {
-    if (members.length === 0) return
+    if (membersToReinvite.length === 0) return
     setReInviteConfirmOpen(false)
     setReInviting(true)
     setReInviteResult(null)
     try {
-      const emails = members.map((m) => m.email).filter(Boolean)
+      const emails = membersToReinvite.map((m) => m.email).filter(Boolean)
       const res = await fetch("/api/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1089,9 +1096,11 @@ function OrgDetailView({
         failed: result.failed ?? 0,
         total: emails.length,
       })
+      // Clear selection after sending
+      setSelectedMembers(new Set())
     } catch (err) {
       console.error("Failed to re-invite members:", err)
-      setReInviteResult({ sent: 0, failed: members.length, total: members.length })
+      setReInviteResult({ sent: 0, failed: membersToReinvite.length, total: membersToReinvite.length })
     } finally {
       setReInviting(false)
     }
@@ -1716,7 +1725,9 @@ function OrgDetailView({
                       ) : (
                         <Send className="mr-2 h-4 w-4" />
                       )}
-                      Re-Invite All
+                      {selectedMembers.size > 0 
+                        ? `Re-Invite ${selectedMembers.size} User${selectedMembers.size !== 1 ? "s" : ""}`
+                        : "Re-Invite All"}
                     </Button>
                   )}
                   <Button size="sm" onClick={() => setInviteDialogOpen(true)}>
@@ -1782,12 +1793,60 @@ function OrgDetailView({
                 </p>
               ) : (
                 <div className="flex flex-col gap-2">
+                  {/* Select All Header */}
+                  <div className="flex items-center gap-3 px-3 py-2 border-b border-border">
+                    <Checkbox
+                      id="select-all-members"
+                      checked={selectedMembers.size === filteredMembers.length && filteredMembers.length > 0}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedMembers(new Set(filteredMembers.map((m) => m.id)))
+                        } else {
+                          setSelectedMembers(new Set())
+                        }
+                      }}
+                    />
+                    <label 
+                      htmlFor="select-all-members" 
+                      className="text-sm text-muted-foreground cursor-pointer select-none"
+                    >
+                      {selectedMembers.size > 0 
+                        ? `${selectedMembers.size} selected`
+                        : "Select all"}
+                    </label>
+                    {selectedMembers.size > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedMembers(new Set())}
+                        className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
                   {filteredMembers.map((m) => (
                     <div
                       key={m.id}
-                      className="flex items-center justify-between rounded-lg border border-border p-3"
+                      className={`flex items-center justify-between rounded-lg border p-3 ${
+                        selectedMembers.has(m.id) 
+                          ? "border-primary/50 bg-primary/5" 
+                          : "border-border"
+                      }`}
                     >
                       <div className="flex items-center gap-3">
+                        <Checkbox
+                          id={`member-${m.id}`}
+                          checked={selectedMembers.has(m.id)}
+                          onCheckedChange={(checked) => {
+                            const newSet = new Set(selectedMembers)
+                            if (checked) {
+                              newSet.add(m.id)
+                            } else {
+                              newSet.delete(m.id)
+                            }
+                            setSelectedMembers(newSet)
+                          }}
+                        />
                         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground">
                           {m.name
                             .split(" ")
@@ -2075,27 +2134,31 @@ function OrgDetailView({
             </DialogContent>
           </Dialog>
 
-          {/* Re-Invite All Confirmation Dialog */}
+          {/* Re-Invite Confirmation Dialog */}
           <Dialog open={reInviteConfirmOpen} onOpenChange={setReInviteConfirmOpen}>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle>Re-Invite All Members</DialogTitle>
+                <DialogTitle>
+                  {selectedMembers.size > 0 
+                    ? `Re-Invite ${selectedMembers.size} Member${selectedMembers.size !== 1 ? "s" : ""}`
+                    : "Re-Invite All Members"}
+                </DialogTitle>
                 <DialogDescription>
-                  This will send invitation emails to all {members.length} members in {org.name}.
+                  This will send invitation emails to {membersToReinvite.length} member{membersToReinvite.length !== 1 ? "s" : ""} in {org.name}.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="rounded-md border border-border bg-muted/50 p-3">
-                  <p className="text-sm font-medium mb-2">Recipients ({members.length}):</p>
+                  <p className="text-sm font-medium mb-2">Recipients ({membersToReinvite.length}):</p>
                   <div className="max-h-32 overflow-y-auto space-y-1">
-                    {members.slice(0, 5).map((m) => (
+                    {membersToReinvite.slice(0, 5).map((m) => (
                       <p key={m.id} className="text-xs text-muted-foreground">
                         {m.name} &lt;{m.email}&gt;
                       </p>
                     ))}
-                    {members.length > 5 && (
+                    {membersToReinvite.length > 5 && (
                       <p className="text-xs text-muted-foreground italic">
-                        ...and {members.length - 5} more
+                        ...and {membersToReinvite.length - 5} more
                       </p>
                     )}
                   </div>
@@ -2110,7 +2173,7 @@ function OrgDetailView({
                 </Button>
                 <Button onClick={handleReInviteAllConfirmed}>
                   <Send className="mr-2 h-4 w-4" />
-                  Send {members.length} Invites
+                  Send {membersToReinvite.length} Invite{membersToReinvite.length !== 1 ? "s" : ""}
                 </Button>
               </DialogFooter>
             </DialogContent>

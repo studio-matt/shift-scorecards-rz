@@ -20,7 +20,7 @@ import {
   type User as FirebaseUser,
 } from "firebase/auth"
 import { auth } from "./firebase"
-import { getUserByAuthId, createDocument, updateDocument, COLLECTIONS } from "./firestore"
+import { getUserByAuthId, getUserByEmail, createDocument, updateDocument, COLLECTIONS } from "./firestore"
 import type { User, UserRole } from "./types"
 
 // Temp store for signup extras that get applied after profile creation
@@ -50,21 +50,45 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 /**
  * Fetch or create the Firestore user profile from a Firebase Auth user.
  * On first sign-in we auto-create a basic profile.
+ * 
+ * If a user record already exists with the same email (e.g., added by admin 
+ * before the user authenticated), we link the Firebase Auth UID to that 
+ * existing record so they inherit their organization, role, and department.
  */
 async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
-  // Check if a profile already exists
-  const existing = await getUserByAuthId(fbUser.uid)
-  if (existing) {
-    return existing as unknown as User
+  // Check if a profile already exists by authId (user has logged in before)
+  const existingByAuthId = await getUserByAuthId(fbUser.uid)
+  if (existingByAuthId) {
+    // Update last login time
+    await updateDocument(COLLECTIONS.USERS, existingByAuthId.id, {
+      lastLogin: new Date().toISOString(),
+    })
+    return existingByAuthId as unknown as User
   }
 
-  // First-time login — create a profile
+  // Check if a user record exists with this email (pre-created by admin invite)
+  const email = fbUser.email?.toLowerCase() ?? ""
+  if (email) {
+    const existingByEmail = await getUserByEmail(email)
+    if (existingByEmail) {
+      // Link the Firebase Auth UID to this existing user record
+      await updateDocument(COLLECTIONS.USERS, existingByEmail.id, {
+        authId: fbUser.uid,
+        lastLogin: new Date().toISOString(),
+        // Update avatar if they signed in with OAuth and we have one
+        ...(fbUser.photoURL ? { avatar: fbUser.photoURL } : {}),
+      })
+      return { ...existingByEmail, authId: fbUser.uid } as unknown as User
+    }
+  }
+
+  // First-time login with no pre-existing record — create a new profile
   const nameParts = (fbUser.displayName ?? "New User").split(" ")
   const firstName = nameParts[0] ?? "New"
   const lastName = nameParts.slice(1).join(" ") || "User"
 
   const profile: Record<string, unknown> = {
-    email: fbUser.email ?? "",
+    email: email,
     firstName,
     lastName,
     role: "admin", // First user is admin; future invites will default to "user"
