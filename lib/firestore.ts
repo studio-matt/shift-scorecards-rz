@@ -122,6 +122,15 @@ export async function getUserByAuthId(authId: string) {
   return users[0] ?? null
 }
 
+export async function getUserByEmail(email: string) {
+  const users = await getDocuments(
+    COLLECTIONS.USERS,
+    where("email", "==", email.toLowerCase()),
+    limit(1),
+  )
+  return users[0] ?? null
+}
+
 // ─── Template Helpers ─────────────────────────────────────────────────
 
 export async function getTemplates(orgId?: string) {
