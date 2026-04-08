@@ -917,7 +917,7 @@ export interface FieldReportData {
   totalOrganizations: number
   totalEmployees: number
   totalResponses: number
-  overallAvgScore: number
+  totalHoursSaved: number
   avgResponseRate: number
   topCategories: { question: string; avgScore: number }[]
   bottomCategories: { question: string; avgScore: number }[]
@@ -945,17 +945,15 @@ export async function computeFieldReport(responses: RawResponse[]): Promise<Fiel
   const uniqueOrgs = new Set(participantResponses.map((r) => r.organizationId))
   const uniqueUsers = new Set(participantResponses.map((r) => r.userId))
 
-  // Overall avg
-  let totalScore = 0
-  let totalCount = 0
+  // Calculate total hours saved (sum of all time_saving responses)
+  let totalHoursSaved = 0
   const questionScores = new Map<string, { total: number; count: number }>()
 
   for (const r of responses) {
     const entries = Object.entries(r.answers)
     for (const [q, v] of entries) {
       if (typeof v === "number" && v >= 1 && v <= 10) {
-        totalScore += v
-        totalCount++
+        totalHoursSaved += v
         if (!questionScores.has(q)) questionScores.set(q, { total: 0, count: 0 })
         const qe = questionScores.get(q)!
         qe.total += v
@@ -964,7 +962,8 @@ export async function computeFieldReport(responses: RawResponse[]): Promise<Fiel
     }
   }
 
-  const overallAvg = totalCount > 0 ? Math.round((totalScore / totalCount) * 10) / 10 : 0
+  // Round to 1 decimal place
+  totalHoursSaved = Math.round(totalHoursSaved * 10) / 10
 
   // Question ranking - look up actual question text from templates
   const ranked = Array.from(questionScores.entries())
@@ -998,7 +997,7 @@ export async function computeFieldReport(responses: RawResponse[]): Promise<Fiel
     totalOrganizations: uniqueOrgs.size,
     totalEmployees: users.length,
     totalResponses: responses.length,
-    overallAvgScore: overallAvg,
+    totalHoursSaved,
     avgResponseRate,
     topCategories: ranked.slice(0, 5),
     bottomCategories: ranked.slice(-5).reverse(),
