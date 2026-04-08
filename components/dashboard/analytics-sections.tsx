@@ -580,63 +580,27 @@ export function OrgBenchmarkCard({ data }: { data: OrgBenchmark[] }) {
 
 // ── Field Report ─────────────────────────────────────────────────────
 export function FieldReportCard({ data }: { data: FieldReportData | null }) {
-  const reportRef = useRef<HTMLDivElement>(null)
-
   if (!data) return null
 
-  function handleExport() {
-    if (!data) return
-    const lines: string[] = [
-      `SHIFT FIELD REPORT`,
-      `Generated: ${data.generatedAt}`,
-      `Period: ${data.periodLabel}`,
-      ``,
-      `OVERVIEW`,
-      `Across ${data.totalOrganizations} organizations and ${data.totalEmployees.toLocaleString()} employees, the overall hours saved was ${data.overallAvgScore} with a ${data.avgResponseRate}% response rate. Total responses: ${data.totalResponses.toLocaleString()}.`,
-      ``,
-      `TOP SCORING CATEGORIES`,
-      ...data.topCategories.map((c, i) => `  ${i + 1}. ${c.question} -- ${c.avgScore}/10`),
-      ``,
-      `AREAS FOR IMPROVEMENT`,
-      ...data.bottomCategories.map((c, i) => `  ${i + 1}. ${c.question} -- ${c.avgScore}/10`),
-      ``,
-      `---`,
-      `This report contains anonymized, aggregated data across all SHIFT organizations.`,
-    ]
-    const blob = new Blob([lines.join("\n")], { type: "text/plain" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `SHIFT-Field-Report-${data.generatedAt.replace(/\s/g, "-")}.txt`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
   return (
-    <Card ref={reportRef} className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
       <CardHeader className="relative pb-3">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-primary" />
-            <div>
-              <CardTitle className="text-sm font-semibold">Field Report</CardTitle>
-              <p className="text-xs text-muted-foreground">Anonymized cross-organization intelligence -- the SHIFT thought leadership asset</p>
-            </div>
+        <div className="flex items-center gap-2">
+          <FileText className="h-4 w-4 text-primary" />
+          <div>
+            <CardTitle className="text-sm font-semibold">Field Report</CardTitle>
+            <p className="text-xs text-muted-foreground">Anonymized cross-organization intelligence -- the SHIFT thought leadership asset</p>
           </div>
-          <Button variant="outline" size="sm" className="border-border/50" onClick={handleExport}>
-            <Download className="mr-1.5 h-3.5 w-3.5" />
-            Export
-          </Button>
         </div>
       </CardHeader>
       <CardContent className="relative">
         <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
           <p className="text-sm leading-relaxed text-foreground">
-            Across <span className="font-bold">{data.totalOrganizations} organizations</span> and{" "}
+            Across <span className="font-bold">{data.totalOrganizations} organization{data.totalOrganizations !== 1 ? "s" : ""}</span> and{" "}
             <span className="font-bold">{data.totalEmployees.toLocaleString()} employees</span>,
-            the overall hours saved was{" "}
-            <span className="font-bold text-primary">{data.overallAvgScore} hrs</span> with a{" "}
+            the total hours saved was{" "}
+            <span className="font-bold text-primary">{data.totalHoursSaved.toLocaleString()} hrs</span> with a{" "}
             <span className="font-bold">{data.avgResponseRate}%</span> response rate.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
