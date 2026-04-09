@@ -256,19 +256,34 @@ export async function computeTopPerformers(
     if (doc) adminNarratives = (doc as Record<string, unknown>).narratives as Record<string, string> ?? {}
   } catch { /* ignore */ }
 
-  return Array.from(userMap.entries())
-    .map(([userId, { name, orgId, dept, total, count, weeks, winAnswers, goalAnswers }]) => ({
-      id: userId,
-      name,
-      company: orgNameMap.get(orgId) ?? orgId,
-      companyId: orgId,
-      department: dept,
-      avgScore: Math.round((total / count) * 10) / 10,
-      streak: weeks.size,
-      // Prefer admin-set narrative, then most recent win answer
-      winNarrative: adminNarratives[userId] || winAnswers[winAnswers.length - 1] || undefined,
-      goalNarrative: goalAnswers[goalAnswers.length - 1] || undefined,
-    }))
+  // Calculate field average (all users' average scores)
+  const userEntries = Array.from(userMap.entries())
+  const allAvgScores = userEntries.map(([, { total, count }]) => total / count)
+  const fieldAverage = allAvgScores.length > 0 
+    ? allAvgScores.reduce((a, b) => a + b, 0) / allAvgScores.length 
+    : 0
+
+  return userEntries
+    .map(([userId, { name, orgId, dept, total, count, weeks, winAnswers, goalAnswers }]) => {
+      const avgScore = Math.round((total / count) * 10) / 10
+      // Calculate % above/below field average
+      const percentVsField = fieldAverage > 0 
+        ? Math.round(((avgScore - fieldAverage) / fieldAverage) * 100) 
+        : 0
+      return {
+        id: userId,
+        name,
+        company: orgNameMap.get(orgId) ?? orgId,
+        companyId: orgId,
+        department: dept,
+        avgScore,
+        percentVsField,
+        streak: weeks.size,
+        // Prefer admin-set narrative, then most recent win answer
+        winNarrative: adminNarratives[userId] || winAnswers[winAnswers.length - 1] || undefined,
+        goalNarrative: goalAnswers[goalAnswers.length - 1] || undefined,
+      }
+    })
     .sort((a, b) => b.avgScore - a.avgScore)
     .slice(0, limit)
 }
@@ -827,7 +842,7 @@ export function computeDepartmentVariance(responses: RawResponse[]): DepartmentV
   }).filter(Boolean).sort((a, b) => b!.stdDev - a!.stdDev) as DepartmentVariance[]
 }
 
-// ── Trend: Question correlation ──��────────────────────────────────────
+// ── Trend: Question correlation ──���────────────────────────────────────
 export interface QuestionCorrelation {
   question1: string
   question2: string
