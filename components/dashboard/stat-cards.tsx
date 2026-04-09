@@ -365,7 +365,7 @@ export function AdminStatCards({ data: s, targets, hoursMetrics, hourlyRate = 75
   // Hours-based cards when metrics available
   const adminCards = hoursMetrics ? [
     {
-      label: "Total Hours Saved",
+      label: "Hours Saved This Period",
       value: formatHours(hoursMetrics.monthlyHours),
       change: formatHoursChange(hoursMetrics.monthOverMonthChange, hoursMetrics.lastMonthHours),
       icon: Clock,

@@ -617,7 +617,7 @@ export function FieldReportCard({ data }: { data: FieldReportData | null }) {
               {data.topCategories.map((c, i) => (
                 <div key={i} className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-1.5">
                   <span className="truncate text-xs text-foreground">{c.question}</span>
-                  <span className="ml-2 shrink-0 text-xs font-bold text-success">{c.avgScore}</span>
+                  <span className="ml-2 shrink-0 text-xs font-bold text-success">{c.avgScore} hrs</span>
                 </div>
               ))}
             </div>
@@ -630,7 +630,7 @@ export function FieldReportCard({ data }: { data: FieldReportData | null }) {
               {data.bottomCategories.map((c, i) => (
                 <div key={i} className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-1.5">
                   <span className="truncate text-xs text-foreground">{c.question}</span>
-                  <span className="ml-2 shrink-0 text-xs font-bold text-orange-600">{c.avgScore}</span>
+                  <span className="ml-2 shrink-0 text-xs font-bold text-orange-600">{c.avgScore} hrs</span>
                 </div>
               ))}
             </div>

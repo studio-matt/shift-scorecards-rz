@@ -19,16 +19,9 @@ function isTimeSavingQuestion(question: string): boolean {
   return (lowerQ.includes("time") || lowerQ.includes("hours")) && lowerQ.includes("save")
 }
 
-// Convert average score (1-5 scale mapped to hour ranges) to display text
-// Based on typical answer options: A=0hrs, B=30min-1hr, C=1-2hrs, D=2-4hrs, E=4+hrs
+// Format hours score - scores are 1-10 representing actual hours saved
 function formatHoursFromScore(score: number): string {
-  // Score is typically 1-5 or 1-10 representing the answer choice
-  // Map to approximate hours
-  if (score <= 1.5) return "< 30 min"
-  if (score <= 2.5) return "30 min - 1 hr"
-  if (score <= 3.5) return "1-2 hrs"
-  if (score <= 4.5) return "2-4 hrs"
-  return "4+ hrs"
+  return `${score.toFixed(1)} hrs`
 }
 
 export function QuestionResults({ data }: QuestionResultsProps) {
