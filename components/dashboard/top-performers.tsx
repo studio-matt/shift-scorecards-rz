@@ -138,6 +138,7 @@ export function HighFiveSection({
   const [sending, setSending] = useState<string | null>(null) // userId being high-fived
   const [message, setMessage] = useState("")
   const [loadedFives, setLoadedFives] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
 
   const loadHighFives = useCallback(async () => {
     if (loadedFives) return
@@ -170,6 +171,7 @@ export function HighFiveSection({
     setHighFives(updated)
     setSending(null)
     setMessage("")
+    setSearchQuery("")
     try {
       await setDocument(COLLECTIONS.SETTINGS, "highFives", { items: updated, updatedAt: Timestamp.now() })
     } catch {
@@ -177,12 +179,20 @@ export function HighFiveSection({
     }
   }
 
-  const recentFives = highFives.slice(0, 6)
+  const recentFives = highFives.slice(0, 4)
+  
+  // Filter performers based on search
+  const filteredPerformers = searchQuery.trim()
+    ? performers.filter((p) => 
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.department?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : performers.slice(0, 6)
 
   return (
     <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-500/5 via-transparent to-transparent" />
-      <CardHeader className="relative pb-3">
+      <CardHeader className="relative pb-2">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
           <Hand className="h-4 w-4 text-amber-400" />
           High Fives
@@ -190,12 +200,25 @@ export function HighFiveSection({
         <p className="text-xs text-muted-foreground">Give recognition to your colleagues</p>
       </CardHeader>
       <CardContent className="relative">
-        {/* Quick send buttons */}
-        <div className="mb-3 flex flex-wrap gap-1.5">
-          {performers.slice(0, 8).map((p) => (
+        {/* Search input */}
+        <div className="mb-3">
+          <Input
+            placeholder="Search colleagues..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-8 text-sm"
+          />
+        </div>
+        
+        {/* Colleague buttons */}
+        <div className="mb-3 flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+          {filteredPerformers.map((p) => (
             <button
               key={p.id}
-              onClick={() => setSending(sending === p.id ? null : p.id)}
+              onClick={() => {
+                setSending(sending === p.id ? null : p.id)
+                if (sending !== p.id) setSearchQuery("")
+              }}
               className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
                 sending === p.id
                   ? "bg-primary text-primary-foreground"
@@ -206,11 +229,14 @@ export function HighFiveSection({
               {p.name.split(" ")[0]}
             </button>
           ))}
+          {filteredPerformers.length === 0 && searchQuery && (
+            <p className="text-xs text-muted-foreground py-1">No matches found</p>
+          )}
         </div>
 
         {/* Send form */}
         {sending && (
-          <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-3">
+          <div className="mb-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-xs font-medium text-foreground">
                 High five to {performers.find((p) => p.id === sending)?.name}
@@ -248,18 +274,18 @@ export function HighFiveSection({
 
         {/* Recent high fives */}
         {recentFives.length === 0 ? (
-          <p className="py-3 text-center text-xs text-muted-foreground">No high fives yet. Be the first!</p>
+          <p className="py-2 text-center text-xs text-muted-foreground">No high fives yet. Be the first!</p>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1.5">
             {recentFives.map((hf) => (
-              <div key={hf.id} className="flex items-start gap-2 rounded-md bg-muted/30 px-3 py-2">
-                <Hand className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <div key={hf.id} className="flex items-start gap-2 rounded-md bg-muted/30 px-2.5 py-1.5">
+                <Hand className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
                 <div className="min-w-0">
-                  <p className="text-xs text-foreground">
+                  <p className="text-[11px] text-foreground">
                     <span className="font-semibold">{hf.fromName}</span>
                     {" gave "}<span className="font-semibold">{hf.toName}</span>{" a high five"}
                   </p>
-                  <p className="mt-0.5 text-xs text-muted-foreground italic">{`"${hf.message}"`}</p>
+                  <p className="text-[10px] text-muted-foreground italic truncate">{`"${hf.message}"`}</p>
                 </div>
               </div>
             ))}
@@ -362,10 +388,10 @@ export function TopPerformers({ showCompany = false, data }: TopPerformersProps)
                   )}
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-sm font-bold text-foreground">
-                    {performer.avgScore}
+                  <p className={`text-sm font-bold ${performer.percentVsField >= 0 ? "text-emerald-500" : "text-orange-500"}`}>
+                    {performer.percentVsField >= 0 ? "+" : ""}{performer.percentVsField}%
                   </p>
-                  <p className="text-xs text-muted-foreground">Hrs Saved</p>
+                  <p className="text-xs text-muted-foreground">{performer.avgScore} hrs saved</p>
                 </div>
                 <Badge variant="secondary" className="shrink-0 text-xs">
                   {performer.streak} wk streak

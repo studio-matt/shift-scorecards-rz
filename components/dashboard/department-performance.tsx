@@ -113,9 +113,9 @@ export function DepartmentPerformanceChart({ data, fieldAverage = 6.2 }: Departm
                 <span className="font-medium text-foreground">
                   {dept.department}
                 </span>
-                <span className="font-bold text-foreground">{dept.avgScore}</span>
+                <span className="font-bold text-foreground">{dept.avgScore} hrs</span>
                 <span className={`text-xs font-medium ${vsField >= 0 ? "text-green-600" : "text-red-500"}`}>
-                  {vsField >= 0 ? "+" : ""}{vsField.toFixed(1)} vs field
+                  {vsField >= 0 ? "+" : ""}{vsField.toFixed(1)} hrs vs field
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {dept.participants} participants

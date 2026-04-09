@@ -203,6 +203,24 @@ export default function DashboardPage() {
       setDeptOverTime(dot)
       setFieldReport(report)
       setAlerts(computeAlerts(responses, dept, []))
+      
+      // Compute real field average from all responses
+      if (responses.length > 0) {
+        let totalScore = 0
+        let totalCount = 0
+        for (const r of responses) {
+          for (const v of Object.values(r.answers)) {
+            if (typeof v === "number" && v >= 1 && v <= 10) {
+              totalScore += v
+              totalCount++
+            }
+          }
+        }
+        if (totalCount > 0) {
+          const realFieldAvg = Math.round((totalScore / totalCount) * 10) / 10
+          setTargets((prev) => ({ ...prev, fieldAverage: realFieldAvg }))
+        }
+      }
 
   // Compute hours metrics for admin view (all responses or filtered by org)
   const [timeSavingIds, confidenceIds] = await Promise.all([

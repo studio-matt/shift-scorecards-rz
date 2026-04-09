@@ -120,6 +120,7 @@ export interface TopPerformer {
   companyId: string
   department: string
   avgScore: number
+  percentVsField: number // % above/below field average
   streak: number
   winNarrative?: string
   goalNarrative?: string
