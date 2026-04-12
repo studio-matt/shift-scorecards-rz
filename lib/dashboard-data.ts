@@ -134,13 +134,25 @@ export function computeWeeklyTrend(responses: RawResponse[]): WeeklyTrend[] {
 }
 
 // ── Department performance ────────────────────────────────────────────
-export function computeDepartmentPerformance(
+export async function computeDepartmentPerformance(
   responses: RawResponse[],
-): DepartmentPerformance[] {
+): Promise<DepartmentPerformance[]> {
+  // Fetch all users to get their current department assignments
+  const allUsers = await getDocuments(COLLECTIONS.USERS)
+  const userDeptMap = new Map<string, string>()
+  for (const u of allUsers) {
+    const userData = u as Record<string, unknown>
+    const dept = (userData.department as string) || ""
+    if (dept) {
+      userDeptMap.set(u.id, dept)
+    }
+  }
+
   const deptMap = new Map<string, { total: number; count: number; users: Set<string> }>()
 
   for (const r of responses) {
-    const dept = r.department || "Unknown"
+    // Look up department from user profile first, fall back to response, then "Unknown"
+    const dept = userDeptMap.get(r.userId) || r.department || "Unknown"
     if (!deptMap.has(dept)) {
       deptMap.set(dept, { total: 0, count: 0, users: new Set() })
     }
@@ -804,11 +816,23 @@ export interface DepartmentVariance {
   totalUsers: number
 }
 
-export function computeDepartmentVariance(responses: RawResponse[]): DepartmentVariance[] {
+export async function computeDepartmentVariance(responses: RawResponse[]): Promise<DepartmentVariance[]> {
+  // Fetch all users to get their current department assignments
+  const allUsers = await getDocuments(COLLECTIONS.USERS)
+  const userDeptMap = new Map<string, string>()
+  for (const u of allUsers) {
+    const userData = u as Record<string, unknown>
+    const dept = (userData.department as string) || ""
+    if (dept) {
+      userDeptMap.set(u.id, dept)
+    }
+  }
+
   // Group scores per user per department
   const deptUserScores = new Map<string, Map<string, number[]>>()
   for (const r of responses) {
-    const dept = r.department || "Unknown"
+    // Look up department from user profile first, fall back to response, then "Unknown"
+    const dept = userDeptMap.get(r.userId) || r.department || "Unknown"
     if (!deptUserScores.has(dept)) deptUserScores.set(dept, new Map())
     const userMap = deptUserScores.get(dept)!
     if (!userMap.has(r.userId)) userMap.set(r.userId, [])
@@ -880,11 +904,23 @@ export async function computeQuestionCorrelations(responses: RawResponse[]): Pro
 // ── Org Intelligence: Dept over time ──────────────────────────────────
 export interface DeptOverTime { week: string; [department: string]: string | number }
 
-export function computeDeptOverTime(responses: RawResponse[]): DeptOverTime[] {
+export async function computeDeptOverTime(responses: RawResponse[]): Promise<DeptOverTime[]> {
+  // Fetch all users to get their current department assignments
+  const allUsers = await getDocuments(COLLECTIONS.USERS)
+  const userDeptMap = new Map<string, string>()
+  for (const u of allUsers) {
+    const userData = u as Record<string, unknown>
+    const dept = (userData.department as string) || ""
+    if (dept) {
+      userDeptMap.set(u.id, dept)
+    }
+  }
+
   const weekDeptMap = new Map<string, Map<string, { total: number; count: number }>>()
   const allDepts = new Set<string>()
   for (const r of responses) {
-    const dept = r.department || "Unknown"
+    // Look up department from user profile first, fall back to response, then "Unknown"
+    const dept = userDeptMap.get(r.userId) || r.department || "Unknown"
     allDepts.add(dept)
     if (!weekDeptMap.has(r.weekOf)) weekDeptMap.set(r.weekOf, new Map())
     const deptMap = weekDeptMap.get(r.weekOf)!
