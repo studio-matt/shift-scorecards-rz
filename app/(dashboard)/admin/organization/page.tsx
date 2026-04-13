@@ -1023,10 +1023,14 @@ function OrgDetailView({
         
         // Also fetch from INVITES collection (legacy invites stored separately)
         const inviteDocs = await getDocuments(COLLECTIONS.INVITES)
+        console.log("[v0] Fetched invites:", inviteDocs.length, "for org:", org.id)
+        console.log("[v0] Invite docs:", inviteDocs.map(d => ({ id: d.id, ...(d as Record<string, unknown>) })))
         const inviteMembers = inviteDocs
           .filter((d) => {
             const data = d as Record<string, unknown>
-            return (data.organizationId as string) === org.id
+            const matches = (data.organizationId as string) === org.id
+            console.log("[v0] Checking invite:", data.email, "orgId:", data.organizationId, "matches:", matches)
+            return matches
           })
           .map((d) => {
             const data = d as Record<string, unknown>
@@ -1048,10 +1052,13 @@ function OrgDetailView({
         
         // Merge, avoiding duplicates by email
         const userEmails = new Set(userMembers.map((m) => m.email.toLowerCase()))
+        console.log("[v0] User emails:", Array.from(userEmails))
+        console.log("[v0] Invite members after filter:", inviteMembers.length, inviteMembers.map(m => m.email))
         const mergedMembers = [
           ...userMembers,
           ...inviteMembers.filter((m) => !userEmails.has(m.email.toLowerCase())),
         ]
+        console.log("[v0] Final merged members:", mergedMembers.length, mergedMembers.map(m => ({ email: m.email, authId: m.authId })))
         
         setMembers(mergedMembers)
       } catch (err) {
