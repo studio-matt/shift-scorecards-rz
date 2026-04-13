@@ -1023,14 +1023,10 @@ function OrgDetailView({
         
         // Also fetch from INVITES collection (legacy invites stored separately)
         const inviteDocs = await getDocuments(COLLECTIONS.INVITES)
-        console.log("[v0] Fetched invites:", inviteDocs.length, "for org:", org.id)
-        console.log("[v0] Invite docs:", inviteDocs.map(d => ({ id: d.id, ...(d as Record<string, unknown>) })))
         const inviteMembers = inviteDocs
           .filter((d) => {
             const data = d as Record<string, unknown>
-            const matches = (data.organizationId as string) === org.id
-            console.log("[v0] Checking invite:", data.email, "orgId:", data.organizationId, "matches:", matches)
-            return matches
+            return (data.organizationId as string) === org.id
           })
           .map((d) => {
             const data = d as Record<string, unknown>
@@ -1052,13 +1048,10 @@ function OrgDetailView({
         
         // Merge, avoiding duplicates by email
         const userEmails = new Set(userMembers.map((m) => m.email.toLowerCase()))
-        console.log("[v0] User emails:", Array.from(userEmails))
-        console.log("[v0] Invite members after filter:", inviteMembers.length, inviteMembers.map(m => m.email))
         const mergedMembers = [
           ...userMembers,
           ...inviteMembers.filter((m) => !userEmails.has(m.email.toLowerCase())),
         ]
-        console.log("[v0] Final merged members:", mergedMembers.length, mergedMembers.map(m => ({ email: m.email, authId: m.authId })))
         
         setMembers(mergedMembers)
       } catch (err) {
@@ -1923,89 +1916,94 @@ function OrgDetailView({
                   {filteredMembers.map((m) => (
                     <div
                       key={m.id}
-                      className={`flex items-center justify-between rounded-lg border p-3 ${
+                      className={`flex flex-col gap-2 rounded-lg border p-3 ${
                         selectedMembers.has(m.id) 
                           ? "border-primary/50 bg-primary/5" 
                           : "border-border"
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <Checkbox
-                          id={`member-${m.id}`}
-                          checked={selectedMembers.has(m.id)}
-                          onCheckedChange={(checked) => {
-                            const newSet = new Set(selectedMembers)
-                            if (checked) {
-                              newSet.add(m.id)
-                            } else {
-                              newSet.delete(m.id)
-                            }
-                            setSelectedMembers(newSet)
-                          }}
-                        />
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground">
-                          {m.name
-                            .split(" ")
-                            .map((n) => n[0])
-                            .join("")
-                            .slice(0, 2)
-                            .toUpperCase()}
+                      {/* Top row: checkbox, avatar, name/email, and action buttons */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <Checkbox
+                            id={`member-${m.id}`}
+                            checked={selectedMembers.has(m.id)}
+                            onCheckedChange={(checked) => {
+                              const newSet = new Set(selectedMembers)
+                              if (checked) {
+                                newSet.add(m.id)
+                              } else {
+                                newSet.delete(m.id)
+                              }
+                              setSelectedMembers(newSet)
+                            }}
+                          />
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground">
+                            {m.name
+                              .split(" ")
+                              .map((n) => n[0])
+                              .join("")
+                              .slice(0, 2)
+                              .toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-foreground truncate">{m.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">{m.email}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-medium text-foreground">{m.name}</p>
-                          <p className="text-xs text-muted-foreground">{m.email}</p>
+                        {/* Action buttons - always visible */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          {!m.authId && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => handleReinviteMember(m)}
+                              disabled={reinvitingMember === m.id}
+                            >
+                              {reinvitingMember === m.id ? (
+                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              ) : (
+                                <Send className="mr-1 h-3 w-3" />
+                              )}
+                              Re-invite
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0"
+                            onClick={() =>
+                              setEditingMember({
+                                id: m.id,
+                                firstName: m.firstName,
+                                lastName: m.lastName,
+                                email: m.email,
+                                department: m.department,
+                                role: m.role,
+                              })
+                            }
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            <span className="sr-only">Edit {m.name}</span>
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {/* Show Invited badge for pending users (no authId means they haven't logged in yet) */}
+                      {/* Bottom row: badges */}
+                      <div className="flex items-center gap-2 flex-wrap pl-[52px]">
                         {!m.authId && (
                           <Badge variant="outline" className="text-xs border-amber-500/50 text-amber-500 bg-amber-500/10">
                             Invited
                           </Badge>
                         )}
                         {m.department && (
-                          <Badge variant="secondary" className="text-xs">
+                          <Badge variant="secondary" className="text-xs max-w-[200px] truncate">
                             {m.department}
                           </Badge>
                         )}
                         <Badge variant="outline" className="capitalize text-xs">
                           {m.role}
                         </Badge>
-                        {/* Re-invite button for pending users */}
-                        {!m.authId && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                            onClick={() => handleReinviteMember(m)}
-                            disabled={reinvitingMember === m.id}
-                          >
-                            {reinvitingMember === m.id ? (
-                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            ) : (
-                              <Send className="mr-1 h-3 w-3" />
-                            )}
-                            Re-invite
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() =>
-                            setEditingMember({
-                              id: m.id,
-                              firstName: m.firstName,
-                              lastName: m.lastName,
-                              email: m.email,
-                              department: m.department,
-                              role: m.role,
-                            })
-                          }
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                          <span className="sr-only">Edit {m.name}</span>
-                        </Button>
                       </div>
                     </div>
                   ))}
