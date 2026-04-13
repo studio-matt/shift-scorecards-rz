@@ -758,10 +758,11 @@ function OrgDetailView({
   const [newDepartment, setNewDepartment] = useState("")
   const [selectedKnownDept, setSelectedKnownDept] = useState("")
   const [saving, setSaving] = useState(false)
-  const [members, setMembers] = useState<{ id: string; firstName: string; lastName: string; name: string; email: string; department: string; role: string }[]>([])
+  const [members, setMembers] = useState<{ id: string; firstName: string; lastName: string; name: string; email: string; department: string; role: string; status?: string; authId?: string }[]>([])
   const [membersLoading, setMembersLoading] = useState(true)
   const [memberSearch, setMemberSearch] = useState("")
   const [editingMember, setEditingMember] = useState<{ id: string; firstName: string; lastName: string; email: string; department: string; role: string } | null>(null)
+  const [reinvitingMember, setReinvitingMember] = useState<string | null>(null)
   const [editSaving, setEditSaving] = useState(false)
   const [reInviting, setReInviting] = useState(false)
   const [reInviteResult, setReInviteResult] = useState<{ sent: number; failed: number; total: number } | null>(null)
@@ -941,10 +942,29 @@ function OrgDetailView({
             email: (data.email as string) ?? "",
             department: (data.department as string) ?? "",
             role: (data.role as string) ?? "user",
+            status: (data.status as string) ?? undefined,
+            authId: (data.authId as string) ?? undefined,
           }
         }),
       )
     } catch { /* ignore */ }
+  }
+
+  // Re-invite a single member
+  async function handleReinviteMember(member: { id: string; email: string }) {
+    if (!member.email) return
+    setReinvitingMember(member.id)
+    try {
+      await fetch("/api/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails: [member.email], orgName: orgName }),
+      })
+    } catch (err) {
+      console.error("Failed to re-invite member:", err)
+    } finally {
+      setReinvitingMember(null)
+    }
   }
 
   useEffect(() => {
@@ -965,6 +985,8 @@ function OrgDetailView({
               email: (data.email as string) ?? "",
               department: (data.department as string) ?? "",
               role: (data.role as string) ?? "user",
+              status: (data.status as string) ?? undefined,
+              authId: (data.authId as string) ?? undefined,
             }
           }),
         )
@@ -1073,10 +1095,13 @@ function OrgDetailView({
     }
   }
 
-  // Get members to reinvite (selected or all)
+  // Get pending members (those without authId - haven't logged in yet)
+  const pendingMembers = members.filter((m) => !m.authId)
+  
+  // Get members to reinvite (selected pending or all pending)
   const membersToReinvite = selectedMembers.size > 0 
-    ? members.filter((m) => selectedMembers.has(m.id))
-    : members
+    ? members.filter((m) => selectedMembers.has(m.id) && !m.authId)
+    : pendingMembers
   
   async function handleReInviteAllConfirmed() {
     if (membersToReinvite.length === 0) return
@@ -1713,21 +1738,21 @@ function OrgDetailView({
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
-                  {members.length > 0 && (
+                  {pendingMembers.length > 0 && (
                     <Button 
                       size="sm" 
                       variant="outline"
                       onClick={() => setReInviteConfirmOpen(true)}
-                      disabled={reInviting}
+                      disabled={reInviting || membersToReinvite.length === 0}
                     >
                       {reInviting ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       ) : (
                         <Send className="mr-2 h-4 w-4" />
                       )}
-                      {selectedMembers.size > 0 
-                        ? `Re-Invite ${selectedMembers.size} User${selectedMembers.size !== 1 ? "s" : ""}`
-                        : "Re-Invite All"}
+                      {membersToReinvite.length > 0 
+                        ? `Re-Invite ${membersToReinvite.length} Pending`
+                        : "No Pending Invites"}
                     </Button>
                   )}
                   <Button size="sm" onClick={() => setInviteDialogOpen(true)}>
@@ -1861,6 +1886,12 @@ function OrgDetailView({
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        {/* Show Invited badge for pending users (no authId means they haven't logged in yet) */}
+                        {!m.authId && (
+                          <Badge variant="outline" className="text-xs border-amber-500/50 text-amber-500 bg-amber-500/10">
+                            Invited
+                          </Badge>
+                        )}
                         {m.department && (
                           <Badge variant="secondary" className="text-xs">
                             {m.department}
@@ -1869,6 +1900,23 @@ function OrgDetailView({
                         <Badge variant="outline" className="capitalize text-xs">
                           {m.role}
                         </Badge>
+                        {/* Re-invite button for pending users */}
+                        {!m.authId && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                            onClick={() => handleReinviteMember(m)}
+                            disabled={reinvitingMember === m.id}
+                          >
+                            {reinvitingMember === m.id ? (
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            ) : (
+                              <Send className="mr-1 h-3 w-3" />
+                            )}
+                            Re-invite
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"
