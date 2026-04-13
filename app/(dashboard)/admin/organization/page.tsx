@@ -763,6 +763,9 @@ function OrgDetailView({
   const [memberSearch, setMemberSearch] = useState("")
   const [editingMember, setEditingMember] = useState<{ id: string; firstName: string; lastName: string; email: string; department: string; role: string } | null>(null)
   const [reinvitingMember, setReinvitingMember] = useState<string | null>(null)
+  const [deletingMember, setDeletingMember] = useState<string | null>(null)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false)
   const [editSaving, setEditSaving] = useState(false)
   const [reInviting, setReInviting] = useState(false)
   const [reInviteResult, setReInviteResult] = useState<{ sent: number; failed: number; total: number } | null>(null)
@@ -864,6 +867,14 @@ function OrgDetailView({
   async function handleInvite() {
     setInviteSending(true)
     const emailsToSend: string[] = []
+    const skippedEmails: string[] = []
+    
+    // Get existing emails to prevent duplicates
+    const existingUsers = await getUsersByOrg(org.id)
+    const existingEmails = new Set(
+      existingUsers.map((u) => ((u as Record<string, unknown>).email as string)?.toLowerCase() ?? "")
+    )
+    
     try {
       if (inviteCsvFile) {
         const text = await inviteCsvFile.text()
@@ -882,6 +893,11 @@ function OrgDetailView({
           const lastName = colIdx.lastName >= 0 ? properCase(parts[colIdx.lastName] ?? "") : ""
           const dept = inviteCsvDepartment || (colIdx.department >= 0 ? parts[colIdx.department] : "") || ""
           if (email && email.includes("@")) {
+            // Skip if user already exists
+            if (existingEmails.has(email)) {
+              skippedEmails.push(email)
+              continue
+            }
             // Create user record directly so they appear in members list
             await createDocument(COLLECTIONS.USERS, {
               email,
@@ -893,22 +909,29 @@ function OrgDetailView({
               status: "pending",
               createdAt: new Date().toISOString(),
             })
+            existingEmails.add(email) // Track to prevent duplicates within same CSV
             emailsToSend.push(email)
           }
         }
       } else if (inviteEmail) {
-        // Create user record directly so they appear in members list
-        await createDocument(COLLECTIONS.USERS, {
-          email: inviteEmail.toLowerCase(),
-          firstName: "",
-          lastName: "",
-          department: inviteDepartment,
-          organizationId: org.id,
-          role: inviteRole,
-          status: "pending",
-          createdAt: new Date().toISOString(),
-        })
-        emailsToSend.push(inviteEmail)
+        const emailLower = inviteEmail.toLowerCase()
+        // Skip if user already exists
+        if (existingEmails.has(emailLower)) {
+          skippedEmails.push(inviteEmail)
+        } else {
+          // Create user record directly so they appear in members list
+          await createDocument(COLLECTIONS.USERS, {
+            email: emailLower,
+            firstName: "",
+            lastName: "",
+            department: inviteDepartment,
+            organizationId: org.id,
+            role: inviteRole,
+            status: "pending",
+            createdAt: new Date().toISOString(),
+          })
+          emailsToSend.push(inviteEmail)
+        }
       }
       if (emailsToSend.length > 0) {
         try {
@@ -995,6 +1018,41 @@ function OrgDetailView({
       console.error("Failed to re-invite member:", err)
     } finally {
       setReinvitingMember(null)
+    }
+  }
+
+  // Delete a single member
+  async function handleDeleteMember(memberId: string) {
+    setDeletingMember(memberId)
+    try {
+      await deleteDocument(COLLECTIONS.USERS, memberId)
+      setMembers((prev) => prev.filter((m) => m.id !== memberId))
+      setSelectedMembers((prev) => {
+        const newSet = new Set(prev)
+        newSet.delete(memberId)
+        return newSet
+      })
+    } catch (err) {
+      console.error("Failed to delete member:", err)
+    } finally {
+      setDeletingMember(null)
+      setDeleteConfirmOpen(false)
+    }
+  }
+
+  // Bulk delete selected members
+  async function handleBulkDelete() {
+    try {
+      const idsToDelete = Array.from(selectedMembers)
+      for (const id of idsToDelete) {
+        await deleteDocument(COLLECTIONS.USERS, id)
+      }
+      setMembers((prev) => prev.filter((m) => !selectedMembers.has(m.id)))
+      setSelectedMembers(new Set())
+    } catch (err) {
+      console.error("Failed to bulk delete members:", err)
+    } finally {
+      setBulkDeleteConfirmOpen(false)
     }
   }
 
@@ -1802,6 +1860,17 @@ function OrgDetailView({
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
+                  {selectedMembers.size > 0 && (
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                      onClick={() => setBulkDeleteConfirmOpen(true)}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete {selectedMembers.size} Selected
+                    </Button>
+                  )}
                   {pendingMembers.length > 0 && (
                     <Button 
                       size="sm" 
@@ -1987,6 +2056,18 @@ function OrgDetailView({
                             <Pencil className="h-3.5 w-3.5" />
                             <span className="sr-only">Edit {m.name}</span>
                           </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => {
+                              setDeletingMember(m.id)
+                              setDeleteConfirmOpen(true)
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span className="sr-only">Delete {m.name}</span>
+                          </Button>
                         </div>
                       </div>
                       {/* Bottom row: badges */}
@@ -2011,6 +2092,49 @@ function OrgDetailView({
               )}
             </CardContent>
           </Card>
+
+          {/* Delete Single Member Confirmation Dialog */}
+          <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Delete Member</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to delete this member? This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  variant="destructive" 
+                  onClick={() => deletingMember && handleDeleteMember(deletingMember)}
+                >
+                  Delete Member
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Bulk Delete Confirmation Dialog */}
+          <Dialog open={bulkDeleteConfirmOpen} onOpenChange={setBulkDeleteConfirmOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Delete {selectedMembers.size} Members</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to delete {selectedMembers.size} selected member{selectedMembers.size !== 1 ? "s" : ""}? This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setBulkDeleteConfirmOpen(false)}>
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={handleBulkDelete}>
+                  Delete {selectedMembers.size} Member{selectedMembers.size !== 1 ? "s" : ""}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {/* Edit Member Dialog */}
           <Dialog

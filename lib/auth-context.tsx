@@ -87,9 +87,9 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
   }
 
   // SECURITY: No pre-existing record found - user was not invited
-  // Sign them out and throw an error
+  // Sign them out and throw an error with the email they tried to use
   await signOut(auth)
-  throw new Error("ACCESS_DENIED: You must be invited by an administrator to access this application.")
+  throw new Error(`ACCESS_DENIED: The email "${email}" is not registered in this system. You must use the same email address that your invitation was sent to. If you believe this is an error, please contact your organization administrator.`)
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -113,7 +113,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.error("Failed to resolve user profile:", err)
           // Check if this is an access denied error
           if (err instanceof Error && err.message.includes("ACCESS_DENIED")) {
-            setAuthError("You must be invited by an administrator to access this application. Please contact your organization admin.")
+            // Extract the message after "ACCESS_DENIED: "
+            const message = err.message.replace("ACCESS_DENIED: ", "")
+            setAuthError(message)
           }
           setUser(null)
           setFirebaseUser(null)
