@@ -77,6 +77,7 @@ export default function WebinarDecksPage() {
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
@@ -370,10 +371,47 @@ export default function WebinarDecksPage() {
                   </Button>
                 </div>
               ) : (
-                <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border bg-muted/20 p-6 transition-colors hover:border-primary/50 hover:bg-muted/40">
-                  <Upload className="mb-2 h-8 w-8 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">
-                    Click to upload PDF
+                <label 
+                  className={cn(
+                    "flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 transition-colors",
+                    isDragging 
+                      ? "border-primary bg-primary/10" 
+                      : "border-border bg-muted/20 hover:border-primary/50 hover:bg-muted/40"
+                  )}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setIsDragging(true)
+                  }}
+                  onDragEnter={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setIsDragging(true)
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setIsDragging(false)
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setIsDragging(false)
+                    const file = e.dataTransfer.files?.[0]
+                    if (file && file.type === "application/pdf") {
+                      setPdfFile(file)
+                    }
+                  }}
+                >
+                  <Upload className={cn(
+                    "mb-2 h-8 w-8 transition-colors",
+                    isDragging ? "text-primary" : "text-muted-foreground"
+                  )} />
+                  <span className={cn(
+                    "text-sm transition-colors",
+                    isDragging ? "text-primary font-medium" : "text-muted-foreground"
+                  )}>
+                    {isDragging ? "Drop PDF here" : "Drag & drop or click to upload PDF"}
                   </span>
                   <input
                     type="file"
