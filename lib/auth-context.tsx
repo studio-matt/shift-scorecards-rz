@@ -102,8 +102,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Listen to Firebase Auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      setAuthError(null)
       if (fbUser) {
+        // Only clear error when a new login attempt starts (user is present)
+        setAuthError(null)
         setFirebaseUser(fbUser)
         try {
           const profile = await resolveUserProfile(fbUser)
@@ -121,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setFirebaseUser(null)
         }
       } else {
+        // User signed out - don't clear authError here, it may have just been set
         setFirebaseUser(null)
         setUser(null)
         setOriginalRole(null)

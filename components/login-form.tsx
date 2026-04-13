@@ -90,6 +90,10 @@ export default function LoginForm() {
     setLoading(true)
     try {
       await loginWithProvider(provider)
+      // Note: loading will be reset by authError useEffect if access is denied
+      // or by the redirect if login succeeds. But we set a timeout fallback
+      // in case something goes wrong with the auth flow.
+      setTimeout(() => setLoading(false), 5000)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Login failed"
       if (msg.includes("popup-closed")) {
