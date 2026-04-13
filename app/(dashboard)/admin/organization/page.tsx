@@ -64,6 +64,7 @@ import {
   ChevronRight,
   DollarSign,
   Send,
+  Check,
   CheckCircle,
   AlertCircle,
 } from "lucide-react"
@@ -763,6 +764,7 @@ function OrgDetailView({
   const [memberSearch, setMemberSearch] = useState("")
   const [editingMember, setEditingMember] = useState<{ id: string; firstName: string; lastName: string; email: string; department: string; role: string } | null>(null)
   const [reinvitingMember, setReinvitingMember] = useState<string | null>(null)
+  const [reinvitedMembers, setReinvitedMembers] = useState<Set<string>>(new Set())
   const [deletingMember, setDeletingMember] = useState<string | null>(null)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false)
@@ -1014,6 +1016,8 @@ function OrgDetailView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ emails: [member.email], orgName: orgName }),
       })
+      // Mark as successfully re-invited
+      setReinvitedMembers((prev) => new Set(prev).add(member.id))
     } catch (err) {
       console.error("Failed to re-invite member:", err)
     } finally {
@@ -2023,20 +2027,32 @@ function OrgDetailView({
                         {/* Action buttons - always visible */}
                         <div className="flex items-center gap-1 shrink-0">
                           {!m.authId && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                              onClick={() => handleReinviteMember(m)}
-                              disabled={reinvitingMember === m.id}
-                            >
-                              {reinvitingMember === m.id ? (
-                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                              ) : (
-                                <Send className="mr-1 h-3 w-3" />
-                              )}
-                              Re-invite
-                            </Button>
+                            reinvitedMembers.has(m.id) ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-green-500 hover:text-green-500 cursor-default"
+                                disabled
+                              >
+                                <Check className="mr-1 h-3 w-3" />
+                                Re-Invited
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                onClick={() => handleReinviteMember(m)}
+                                disabled={reinvitingMember === m.id}
+                              >
+                                {reinvitingMember === m.id ? (
+                                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Send className="mr-1 h-3 w-3" />
+                                )}
+                                Re-invite
+                              </Button>
+                            )
                           )}
                           <Button
                             variant="ghost"
