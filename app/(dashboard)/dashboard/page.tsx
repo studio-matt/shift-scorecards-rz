@@ -98,7 +98,7 @@ export default function DashboardPage() {
   // Admin filter state
   const [selectedOrg, setSelectedOrg] = useState("all")
   const [selectedDept, setSelectedDept] = useState("all")
-  const [timePeriod, setTimePeriod] = useState("this-week")
+  const [timePeriod, setTimePeriod] = useState("this-month") // Default to monthly since scorecards are monthly
 
   // Data state
   const [orgs, setOrgs] = useState<Organization[]>([])
@@ -150,14 +150,60 @@ export default function DashboardPage() {
     // TODO: Persist to database
   }, [])
 
+  // Helper to filter responses by time period
+  const filterByTimePeriod = useCallback((responses: Awaited<ReturnType<typeof fetchAllResponses>>, period: string) => {
+    const now = new Date()
+    let startDate: Date
+    
+    switch (period) {
+      case "this-month": {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+        break
+      }
+      case "last-30": {
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+        break
+      }
+      case "this-quarter": {
+        const quarter = Math.floor(now.getMonth() / 3)
+        startDate = new Date(now.getFullYear(), quarter * 3, 1)
+        break
+      }
+      case "last-quarter": {
+        const quarter = Math.floor(now.getMonth() / 3)
+        const lastQuarterStart = quarter === 0 
+          ? new Date(now.getFullYear() - 1, 9, 1)  // Q4 of last year
+          : new Date(now.getFullYear(), (quarter - 1) * 3, 1)
+        const lastQuarterEnd = quarter === 0
+          ? new Date(now.getFullYear(), 0, 1)
+          : new Date(now.getFullYear(), quarter * 3, 1)
+        return responses.filter((r) => {
+          const date = new Date(r.completedAt)
+          return date >= lastQuarterStart && date < lastQuarterEnd
+        })
+      }
+      case "ytd": {
+        startDate = new Date(now.getFullYear(), 0, 1)
+        break
+      }
+      default:
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1) // Default to this month
+    }
+    
+    return responses.filter((r) => new Date(r.completedAt) >= startDate)
+  }, [])
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      const [orgDocs, responses, targetsDoc] = await Promise.all([
+      const [orgDocs, allResponses, targetsDoc] = await Promise.all([
         getOrganizations(),
         fetchAllResponses(selectedOrg, selectedDept),
         getDocument(COLLECTIONS.SETTINGS, "dashboardTargets"),
       ])
+      
+      // Filter responses by selected time period
+      const responses = filterByTimePeriod(allResponses, timePeriod)
       if (targetsDoc) {
         const t = targetsDoc as Record<string, unknown>
         setTargets((prev) => ({
@@ -292,7 +338,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }, [selectedOrg, selectedDept, user])
+  }, [selectedOrg, selectedDept, user, timePeriod, filterByTimePeriod])
 
   useEffect(() => {
     loadData()
@@ -339,16 +385,29 @@ export default function DashboardPage() {
     }
   }, [isSuperAdmin, activeOrg?.backgroundColor, activeOrg?.buttonColor, activeOrg?.buttonFontColor, activeOrg?.accentColor, selectedOrg, setSelectedOrgColor, setSelectedOrgButtonColor, setSelectedOrgButtonFontColor, setSelectedOrgAccentColor])
   
+  // Get departments from both the org config AND from the department performance data
+  // This ensures the dropdown matches what's shown in the Department Performance chart
   const departments = useMemo(() => {
+    const allDepts = new Set<string>()
+    
+    // Add departments from org config
     if (selectedOrg === "all") {
-      const allDepts = new Set<string>()
       orgs.forEach((org) =>
         (org.departments || []).forEach((d: string) => allDepts.add(d)),
       )
-      return Array.from(allDepts).sort()
+    } else if (activeOrg?.departments) {
+      (activeOrg.departments as string[]).forEach((d: string) => allDepts.add(d))
     }
-    return activeOrg?.departments ?? []
-  }, [selectedOrg, activeOrg, orgs])
+    
+    // Also add departments from the performance data (these come from actual user responses)
+    deptPerformance.forEach((dp) => {
+      if (dp.name && dp.name !== "Unknown") {
+        allDepts.add(dp.name)
+      }
+    })
+    
+    return Array.from(allDepts).sort()
+  }, [selectedOrg, activeOrg, orgs, deptPerformance])
 
   const filterLabel = useMemo(() => {
     const parts: string[] = []
@@ -363,9 +422,8 @@ export default function DashboardPage() {
     return parts.join(" / ")
   }, [selectedOrg, selectedDept, activeOrg])
 
+  // Scorecards are monthly, so weekly options don't make sense
   const timePeriodLabel: Record<string, string> = {
-    "this-week": "This Week",
-    "last-week": "Last Week",
     "this-month": "This Month",
     "last-30": "Last 30 Days",
     "this-quarter": "This Quarter",
@@ -454,15 +512,13 @@ export default function DashboardPage() {
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Time Period" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="this-week">This Week</SelectItem>
-                <SelectItem value="last-week">Last Week</SelectItem>
+                <SelectContent>
                 <SelectItem value="this-month">This Month</SelectItem>
                 <SelectItem value="last-30">Last 30 Days</SelectItem>
                 <SelectItem value="this-quarter">This Quarter</SelectItem>
                 <SelectItem value="last-quarter">Last Quarter</SelectItem>
                 <SelectItem value="ytd">Year to Date</SelectItem>
-              </SelectContent>
+                </SelectContent>
             </Select>
 
             <Badge variant="secondary" className="ml-auto text-xs">

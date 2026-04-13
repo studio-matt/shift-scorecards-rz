@@ -27,6 +27,7 @@ export const COLLECTIONS = {
   INVITES: "invites",
   SCHEDULES: "schedules",
   SETTINGS: "settings",
+  WEBINARS: "webinars",
 } as const
 
 // ─── Generic Helpers ──────────────────────────────────────────────────

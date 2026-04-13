@@ -1722,13 +1722,13 @@ function OrgDetailView({
                           <input
                             id="org-logo-file"
                             type="file"
-                            accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                            accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
                             className="sr-only"
                             onChange={handleLogoUpload}
                             disabled={logoUploading}
                           />
                           <p className="text-[11px] text-muted-foreground">
-                            PNG, JPG, SVG, or WebP. Max 2MB.
+                            PNG, JPG, GIF, or WebP. Max 2MB.
                           </p>
                           {logoUrl && (
                             <button

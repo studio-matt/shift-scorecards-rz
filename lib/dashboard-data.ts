@@ -6,6 +6,49 @@ import type {
   QuestionResult,
 } from "./types"
 
+/**
+ * Parse a time value that could be:
+ * - A number (hours directly)
+ * - A string like "2-4 hours" or "2-4" (use midpoint = 3)
+ * - A string like "0-1 hours" or "8+ hours"
+ * Returns the hours value as a number.
+ */
+export function parseTimeValue(value: number | string): number {
+  if (typeof value === "number") {
+    return value
+  }
+  
+  const str = String(value).toLowerCase().trim()
+  
+  // Match patterns like "2-4", "2-4 hours", "2 - 4 hrs"
+  const rangeMatch = str.match(/(\d+(?:\.\d+)?)\s*[-–to]+\s*(\d+(?:\.\d+)?)/)
+  if (rangeMatch) {
+    const low = parseFloat(rangeMatch[1])
+    const high = parseFloat(rangeMatch[2])
+    return (low + high) / 2 // Use midpoint
+  }
+  
+  // Match "8+" or "8+ hours" patterns
+  const plusMatch = str.match(/(\d+(?:\.\d+)?)\s*\+/)
+  if (plusMatch) {
+    return parseFloat(plusMatch[1]) + 2 // Assume "8+" means ~10 hours
+  }
+  
+  // Match plain numbers like "5" or "5 hours"
+  const numberMatch = str.match(/^(\d+(?:\.\d+)?)/)
+  if (numberMatch) {
+    return parseFloat(numberMatch[1])
+  }
+  
+  return 0
+}
+
+/**
+ * Multiplier for converting weekly responses to monthly estimates.
+ * If an organization uses weekly scorecards, multiply by 4 for monthly totals.
+ */
+export const WEEKLY_TO_MONTHLY_MULTIPLIER = 4
+
 // ── Raw response shape from Firestore ─────────────────────────────────
 interface RawResponse {
   id: string
@@ -545,15 +588,15 @@ export async function computeRecentScorecards(
   }
 
   // Helper to calculate total HOURS saved from ONLY time_saving type questions
-  // Values are in HOURS directly (1-10 scale = 1-10 hours)
+  // Use parseTimeValue to handle both numeric values and text ranges like "2-4 hours"
   const calculateHoursSaved = (answers: Record<string, unknown>, templateId: string): number => {
     const timeSavingIds = templateTimeSavingIds.get(templateId) || new Set()
     let totalHours = 0
     for (const [qId, val] of Object.entries(answers)) {
       // ONLY include time_saving type questions
       if (!timeSavingIds.has(qId)) continue
-      if (typeof val === "number" && val >= 0) {
-        totalHours += val
+      if (val !== undefined && val !== null && val !== "") {
+        totalHours += parseTimeValue(val as number | string)
       }
     }
     return totalHours
@@ -1320,13 +1363,17 @@ export function computeUserHoursMetrics(
     const isThisMonth = responseDate >= thisMonthStart
     const isLastMonth = responseDate >= lastMonthStart && responseDate <= lastMonthEnd
     
-    // Sum all time-saving question answers - values ARE hours directly (not minutes)
+    // Sum all time-saving question answers
+    // Use parseTimeValue to handle both numeric values and text ranges like "2-4 hours"
     for (const qId of timeSavingIds) {
       const val = r.answers[qId]
-      if (typeof val === "number" && val > 0) {
-        totalHoursVal += val
-        if (isThisMonth) thisMonthHoursVal += val
-        if (isLastMonth) lastMonthHoursVal += val
+      if (val !== undefined && val !== null && val !== "") {
+        const hours = parseTimeValue(val)
+        if (hours > 0) {
+          totalHoursVal += hours
+          if (isThisMonth) thisMonthHoursVal += hours
+          if (isLastMonth) lastMonthHoursVal += hours
+        }
       }
     }
     
@@ -1420,13 +1467,17 @@ export function computeOrgHoursMetrics(
     if (isThisMonth) thisMonthResponses++
     if (isLastMonth) lastMonthResponses++
     
-    // Sum all time-saving question answers - values ARE hours directly (not minutes)
+    // Sum all time-saving question answers
+    // Use parseTimeValue to handle both numeric values and text ranges like "2-4 hours"
     for (const qId of timeSavingIds) {
       const val = r.answers[qId]
-      if (typeof val === "number" && val > 0) {
-        totalHoursVal += val
-        if (isThisMonth) thisMonthHoursVal += val
-        if (isLastMonth) lastMonthHoursVal += val
+      if (val !== undefined && val !== null && val !== "") {
+        const hours = parseTimeValue(val)
+        if (hours > 0) {
+          totalHoursVal += hours
+          if (isThisMonth) thisMonthHoursVal += hours
+          if (isLastMonth) lastMonthHoursVal += hours
+        }
       }
     }
     
@@ -1441,7 +1492,7 @@ export function computeOrgHoursMetrics(
     }
   }
   
-  // Values are already in hours - no conversion needed
+  // Values parsed as hours - no additional conversion needed
   const totalHours = totalHoursVal
   const thisMonthHoursRaw = thisMonthHoursVal
   const lastMonthHoursRaw = lastMonthHoursVal
@@ -1525,19 +1576,19 @@ export function computeWeeklyHoursTrend(
   responses: RawResponse[],
   timeSavingIds: string[],
 ): WeeklyHoursTrend[] {
-  // Values are already in HOURS (not minutes) - users enter hours directly (1-10 scale)
+  // Use parseTimeValue to handle both numeric values and text ranges like "2-4 hours"
   const weekMap = new Map<string, { hours: number; count: number; date: string }>()
   
   for (const r of responses) {
     const week = r.weekOf || "Unknown"
     const date = r.weekDate || r.completedAt
     
-    // Sum hours directly - values ARE hours (not minutes)
+    // Sum hours - parseTimeValue handles numeric and range strings
     let responseHours = 0
     for (const qId of timeSavingIds) {
       const val = r.answers[qId]
-      if (typeof val === "number" && val > 0) {
-        responseHours += val
+      if (val !== undefined && val !== null && val !== "") {
+        responseHours += parseTimeValue(val)
       }
     }
     
@@ -1584,12 +1635,12 @@ export function computePersonalHoursTrend(
     const week = r.weekOf
     const date = r.weekDate || r.completedAt
     
-    // Sum hours directly - values ARE hours (not minutes)
+    // Sum hours - parseTimeValue handles numeric and range strings
     let responseHours = 0
     for (const qId of timeSavingIds) {
       const val = r.answers[qId]
-      if (typeof val === "number" && val > 0) {
-        responseHours += val
+      if (val !== undefined && val !== null && val !== "") {
+        responseHours += parseTimeValue(val)
       }
     }
     
@@ -1599,9 +1650,9 @@ export function computePersonalHoursTrend(
     const entry = weekMap.get(week)!
     
     if (r.userId === userId) {
-      entry.my = responseHours // Already in hours, no division needed
+      entry.my = responseHours
     }
-    entry.org.push(responseHours) // Already in hours
+    entry.org.push(responseHours)
   }
   
   return Array.from(weekMap.entries())

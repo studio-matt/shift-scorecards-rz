@@ -75,6 +75,7 @@ export default function ScorecardPage() {
   const [answers, setAnswers] = useState<Record<string, string | number>>({})
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   // Remaining time countdown
   const [remainingMs, setRemainingMs] = useState(0)
@@ -173,15 +174,29 @@ export default function ScorecardPage() {
   const handleAnswer = useCallback(
     (questionId: string, value: string | number) => {
       setAnswers((prev) => ({ ...prev, [questionId]: value }))
+      setValidationError(null) // Clear validation error when answering
     },
     [],
   )
 
   const handleNext = useCallback(() => {
+    // Validate current question is answered
+    const currentQ = questions[currentQuestion]
+    if (currentQ && answers[currentQ.id] === undefined) {
+      setValidationError("This question is required. Please provide an answer before continuing.")
+      return
+    }
+    // Check for empty string answers (for text fields)
+    const answer = currentQ ? answers[currentQ.id] : undefined
+    if (currentQ && typeof answer === "string" && !answer.trim()) {
+      setValidationError("This question is required. Please provide an answer before continuing.")
+      return
+    }
+    setValidationError(null)
     if (currentQuestion < totalQuestions - 1) {
       setCurrentQuestion((prev) => prev + 1)
     }
-  }, [currentQuestion, totalQuestions])
+  }, [currentQuestion, totalQuestions, questions, answers])
 
   const handleSubmit = useCallback(async () => {
     if (!release || !template || !user) return
@@ -372,9 +387,20 @@ export default function ScorecardPage() {
                       )}
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-foreground">
-                        {q.text}
-                      </p>
+                      <div className="flex items-start gap-2">
+                        <p className="text-sm font-medium text-foreground">
+                          {q.text}
+                        </p>
+                        <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-muted-foreground border-muted-foreground/30">
+                          Required
+                        </Badge>
+                      </div>
+                      {isActive && validationError && !isAnswered && (
+                        <div className="mt-2 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                          <AlertTriangle className="h-4 w-4 shrink-0" />
+                          {validationError}
+                        </div>
+                      )}
                       {isActive && (
                         <div className="mt-3" ref={activeInputRef}>
                           {q.type === "number" && (
@@ -582,9 +608,14 @@ export default function ScorecardPage() {
             </CardHeader>
             <CardContent>
               <Progress value={progress} className="mb-3 h-2" />
-              <p className="mb-6 text-sm text-muted-foreground">
+              <p className="mb-2 text-sm text-muted-foreground">
                 {completedCount} of {totalQuestions} completed
               </p>
+              {completedCount < totalQuestions && (
+                <p className="mb-4 text-xs text-amber-500">
+                  All {totalQuestions} questions are required to submit
+                </p>
+              )}
               <div className="flex flex-col gap-2">
                 <Button variant="outline" className="w-full bg-transparent">
                   <Save className="mr-2 h-4 w-4" />

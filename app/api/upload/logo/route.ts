@@ -1,5 +1,14 @@
-import { put, del } from "@vercel/blob"
 import { type NextRequest, NextResponse } from "next/server"
+import { uploadOrgLogo, deleteFile } from "@/lib/storage"
+
+// Accepted image types
+const ACCEPTED_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/gif",
+  "image/webp",
+]
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,8 +21,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
-    if (!file.type.startsWith("image/")) {
-      return NextResponse.json({ error: "File must be an image" }, { status: 400 })
+    if (!orgId) {
+      return NextResponse.json({ error: "No organization ID provided" }, { status: 400 })
+    }
+
+    // Check file type
+    if (!ACCEPTED_TYPES.includes(file.type)) {
+      return NextResponse.json(
+        { error: "File must be PNG, JPG, GIF, or WEBP" },
+        { status: 400 }
+      )
     }
 
     // Max 2MB
@@ -21,20 +38,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "File must be under 2MB" }, { status: 400 })
     }
 
-    // Delete old logo if replacing
+    // Delete old logo if replacing (best effort - don't fail if this errors)
     if (previousUrl) {
       try {
-        await del(previousUrl)
+        // Extract path from Firebase Storage URL if it's a Firebase URL
+        const match = previousUrl.match(/logos%2F[^?]+/)
+        if (match) {
+          const path = decodeURIComponent(match[0])
+          await deleteFile(path)
+        }
       } catch {
         // Ignore delete errors for old files
+        console.log("Could not delete previous logo, continuing with upload")
       }
     }
 
-    const blob = await put(`logos/${orgId}/${file.name}`, file, {
-      access: "public",
-    })
+    // Upload to Firebase Storage
+    const url = await uploadOrgLogo(orgId, file)
 
-    return NextResponse.json({ url: blob.url })
+    return NextResponse.json({ url })
   } catch (error) {
     console.error("Logo upload error:", error)
     return NextResponse.json({ error: "Upload failed" }, { status: 500 })

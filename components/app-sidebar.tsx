@@ -26,6 +26,7 @@ import {
   BookOpen,
   Menu,
   X,
+  Presentation,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
@@ -50,6 +51,7 @@ import {
 const userNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/prompt-packs", label: "Prompt Packs", icon: BookOpen },
+  { href: "/webinar-decks", label: "Webinar Decks", icon: Presentation },
   { href: "/faq", label: "FAQ", icon: HelpCircle },
   { href: "/settings", label: "Settings", icon: Settings },
 ]
