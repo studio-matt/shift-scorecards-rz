@@ -37,23 +37,27 @@ interface AuthContextType {
   isSuperAdmin: boolean // true only for global admin
   isCompanyAdmin: boolean // true only for company_admin (org-scoped)
   isActuallySuperAdmin: boolean // true if the user's real DB role is admin (not affected by switchRole)
+  authError: string | null // Error message for unauthorized access attempts
   login: (email: string, password: string) => Promise<void>
   signup: (email: string, password: string, name: string, company?: string, department?: string) => Promise<void>
   loginWithProvider: (provider: "google" | "microsoft") => Promise<void>
   logout: () => void
   switchRole: (role: UserRole) => void
+  clearAuthError: () => void
   ready: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 /**
- * Fetch or create the Firestore user profile from a Firebase Auth user.
- * On first sign-in we auto-create a basic profile.
+ * Fetch the Firestore user profile from a Firebase Auth user.
  * 
- * If a user record already exists with the same email (e.g., added by admin 
- * before the user authenticated), we link the Firebase Auth UID to that 
- * existing record so they inherit their organization, role, and department.
+ * SECURITY: Users must be pre-invited (exist in users collection) before they 
+ * can authenticate. This prevents unauthorized access by random emails.
+ * 
+ * If a user record already exists with the same email (added by admin invite),
+ * we link the Firebase Auth UID to that existing record so they inherit their 
+ * organization, role, and department.
  */
 async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
   // Check if a profile already exists by authId (user has logged in before)
@@ -82,42 +86,10 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
     }
   }
 
-  // First-time login with no pre-existing record — create a new profile
-  const nameParts = (fbUser.displayName ?? "New User").split(" ")
-  const firstName = nameParts[0] ?? "New"
-  const lastName = nameParts.slice(1).join(" ") || "User"
-
-  const profile: Record<string, unknown> = {
-    email: email,
-    firstName,
-    lastName,
-    role: "admin", // First user is admin; future invites will default to "user"
-    department: "",
-    jobTitle: "",
-    phone: "",
-    organizationId: "",
-    createdAt: new Date().toISOString(),
-    lastLogin: new Date().toISOString(),
-    authId: fbUser.uid,
-  }
-  // Only include avatar if a real URL exists (Firestore rejects undefined)
-  if (fbUser.photoURL) {
-    profile.avatar = fbUser.photoURL
-  }
-
-  // Apply any pending signup extras (company/department)
-  if (pendingSignupExtras) {
-    if (pendingSignupExtras.company) {
-      profile.organizationId = pendingSignupExtras.company
-    }
-    if (pendingSignupExtras.department) {
-      profile.department = pendingSignupExtras.department
-    }
-    pendingSignupExtras = null
-  }
-
-  const docId = await createDocument(COLLECTIONS.USERS, profile)
-  return { id: docId, ...profile } as unknown as User
+  // SECURITY: No pre-existing record found - user was not invited
+  // Sign them out and throw an error
+  await signOut(auth)
+  throw new Error("ACCESS_DENIED: You must be invited by an administrator to access this application.")
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -125,10 +97,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null)
   const [ready, setReady] = useState(false)
   const [originalRole, setOriginalRole] = useState<UserRole | null>(null) // Track the real DB role
+  const [authError, setAuthError] = useState<string | null>(null)
 
   // Listen to Firebase Auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      setAuthError(null)
       if (fbUser) {
         setFirebaseUser(fbUser)
         try {
@@ -137,7 +111,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setOriginalRole(profile.role) // Store the real role from DB
         } catch (err) {
           console.error("Failed to resolve user profile:", err)
+          // Check if this is an access denied error
+          if (err instanceof Error && err.message.includes("ACCESS_DENIED")) {
+            setAuthError("You must be invited by an administrator to access this application. Please contact your organization admin.")
+          }
           setUser(null)
+          setFirebaseUser(null)
         }
       } else {
         setFirebaseUser(null)
@@ -172,6 +151,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signOut(auth)
     setUser(null)
     setFirebaseUser(null)
+    setAuthError(null)
+  }, [])
+
+  const clearAuthError = useCallback(() => {
+    setAuthError(null)
   }, [])
 
   // Dev-only: toggle role for testing both views
@@ -200,11 +184,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isSuperAdmin,
         isCompanyAdmin,
         isActuallySuperAdmin,
+        authError,
         login,
         signup,
         loginWithProvider,
         logout,
         switchRole,
+        clearAuthError,
         ready,
       }}
     >
