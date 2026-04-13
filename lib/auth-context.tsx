@@ -20,7 +20,7 @@ import {
   type User as FirebaseUser,
 } from "firebase/auth"
 import { auth } from "./firebase"
-import { getUserByAuthId, getUserByEmail, createDocument, updateDocument, COLLECTIONS } from "./firestore"
+import { getUserByAuthId, getUserByEmail, createDocument, updateDocument, deleteDocument, getDocuments, COLLECTIONS } from "./firestore"
 import type { User, UserRole } from "./types"
 
 // Temp store for signup extras that get applied after profile creation
@@ -83,6 +83,38 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
         ...(fbUser.photoURL ? { avatar: fbUser.photoURL } : {}),
       })
       return { ...existingByEmail, authId: fbUser.uid } as unknown as User
+    }
+    
+    // Also check INVITES collection (legacy invites stored separately)
+    const invites = await getDocuments(COLLECTIONS.INVITES)
+    const matchingInvite = invites.find((inv) => {
+      const data = inv as Record<string, unknown>
+      return (data.email as string)?.toLowerCase() === email
+    })
+    if (matchingInvite) {
+      const inviteData = matchingInvite as Record<string, unknown>
+      // Migrate invite to USERS collection
+      const newUserData = {
+        email,
+        firstName: (inviteData.firstName as string) ?? "",
+        lastName: (inviteData.lastName as string) ?? "",
+        department: (inviteData.department as string) ?? "",
+        organizationId: (inviteData.organizationId as string) ?? "",
+        role: (inviteData.role as string) ?? "user",
+        status: "active",
+        authId: fbUser.uid,
+        createdAt: (inviteData.createdAt as string) ?? new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
+        ...(fbUser.photoURL ? { avatar: fbUser.photoURL } : {}),
+        ...(fbUser.displayName ? { 
+          firstName: fbUser.displayName.split(" ")[0] ?? "",
+          lastName: fbUser.displayName.split(" ").slice(1).join(" ") ?? "",
+        } : {}),
+      }
+      const docId = await createDocument(COLLECTIONS.USERS, newUserData)
+      // Delete the old invite
+      await deleteDocument(COLLECTIONS.INVITES, matchingInvite.id)
+      return { id: docId, ...newUserData } as unknown as User
     }
   }
 

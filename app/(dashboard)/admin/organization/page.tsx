@@ -759,7 +759,7 @@ function OrgDetailView({
   const [newDepartment, setNewDepartment] = useState("")
   const [selectedKnownDept, setSelectedKnownDept] = useState("")
   const [saving, setSaving] = useState(false)
-  const [members, setMembers] = useState<{ id: string; firstName: string; lastName: string; name: string; email: string; department: string; role: string; status?: string; authId?: string }[]>([])
+  const [members, setMembers] = useState<{ id: string; firstName: string; lastName: string; name: string; email: string; department: string; role: string; status?: string; authId?: string; source?: "users" | "invites" }[]>([])
   const [membersLoading, setMembersLoading] = useState(true)
   const [memberSearch, setMemberSearch] = useState("")
   const [editingMember, setEditingMember] = useState<{ id: string; firstName: string; lastName: string; email: string; department: string; role: string } | null>(null)
@@ -972,6 +972,7 @@ function OrgDetailView({
           role: (data.role as string) ?? "user",
           status: (data.status as string) ?? undefined,
           authId: (data.authId as string) ?? undefined,
+          source: "users" as const,
         }
       })
       // Also check INVITES collection
@@ -996,6 +997,7 @@ function OrgDetailView({
             role: (data.role as string) ?? "user",
             status: "pending" as string | undefined,
             authId: undefined as string | undefined,
+            source: "invites" as const,
           }
         })
       const userEmails = new Set(userMembers.map((m) => m.email.toLowerCase()))
@@ -1029,7 +1031,10 @@ function OrgDetailView({
   async function handleDeleteMember(memberId: string) {
     setDeletingMember(memberId)
     try {
-      await deleteDocument(COLLECTIONS.USERS, memberId)
+      // Find the member to determine which collection to delete from
+      const member = members.find((m) => m.id === memberId)
+      const collection = member?.source === "invites" ? COLLECTIONS.INVITES : COLLECTIONS.USERS
+      await deleteDocument(collection, memberId)
       setMembers((prev) => prev.filter((m) => m.id !== memberId))
       setSelectedMembers((prev) => {
         const newSet = new Set(prev)
@@ -1049,7 +1054,10 @@ function OrgDetailView({
     try {
       const idsToDelete = Array.from(selectedMembers)
       for (const id of idsToDelete) {
-        await deleteDocument(COLLECTIONS.USERS, id)
+        // Find the member to determine which collection to delete from
+        const member = members.find((m) => m.id === id)
+        const collection = member?.source === "invites" ? COLLECTIONS.INVITES : COLLECTIONS.USERS
+        await deleteDocument(collection, id)
       }
       setMembers((prev) => prev.filter((m) => !selectedMembers.has(m.id)))
       setSelectedMembers(new Set())
@@ -1080,6 +1088,7 @@ function OrgDetailView({
             role: (data.role as string) ?? "user",
             status: (data.status as string) ?? undefined,
             authId: (data.authId as string) ?? undefined,
+            source: "users" as const,
           }
         })
         
@@ -1105,6 +1114,7 @@ function OrgDetailView({
               role: (data.role as string) ?? "user",
               status: "pending" as string | undefined, // All invites are pending
               authId: undefined as string | undefined, // Invites never have authId
+              source: "invites" as const,
             }
           })
         
