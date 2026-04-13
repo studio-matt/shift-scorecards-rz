@@ -930,27 +930,54 @@ function OrgDetailView({
     setInviteCsvCount(0)
     setInviteCsvDepartment("")
     setInviteSending(false)
-    // Re-fetch members to show newly invited users
+    // Re-fetch members to show newly invited users (from both USERS and INVITES collections)
     try {
-      const docs = await getUsersByOrg(org.id)
-      setMembers(
-        docs.map((d) => {
+      const userDocs = await getUsersByOrg(org.id)
+      const userMembers = userDocs.map((d) => {
+        const data = d as Record<string, unknown>
+        const first = (data.firstName as string) ?? ""
+        const last = (data.lastName as string) ?? ""
+        return {
+          id: d.id,
+          firstName: first,
+          lastName: last,
+          name: `${first} ${last}`.trim() || ((data.email as string) ?? "Unknown"),
+          email: (data.email as string) ?? "",
+          department: (data.department as string) ?? "",
+          role: (data.role as string) ?? "user",
+          status: (data.status as string) ?? undefined,
+          authId: (data.authId as string) ?? undefined,
+        }
+      })
+      // Also check INVITES collection
+      const inviteDocs = await getDocuments(COLLECTIONS.INVITES)
+      const inviteMembers = inviteDocs
+        .filter((d) => {
+          const data = d as Record<string, unknown>
+          return (data.organizationId as string) === org.id
+        })
+        .map((d) => {
           const data = d as Record<string, unknown>
           const first = (data.firstName as string) ?? ""
           const last = (data.lastName as string) ?? ""
+          const email = (data.email as string) ?? ""
           return {
             id: d.id,
             firstName: first,
             lastName: last,
-            name: `${first} ${last}`.trim() || ((data.email as string) ?? "Unknown"),
-            email: (data.email as string) ?? "",
+            name: `${first} ${last}`.trim() || email || "Unknown",
+            email,
             department: (data.department as string) ?? "",
             role: (data.role as string) ?? "user",
-            status: (data.status as string) ?? undefined,
-            authId: (data.authId as string) ?? undefined,
+            status: "pending" as string | undefined,
+            authId: undefined as string | undefined,
           }
-        }),
-      )
+        })
+      const userEmails = new Set(userMembers.map((m) => m.email.toLowerCase()))
+      setMembers([
+        ...userMembers,
+        ...inviteMembers.filter((m) => !userEmails.has(m.email.toLowerCase())),
+      ])
     } catch { /* ignore */ }
   }
 
@@ -975,25 +1002,58 @@ function OrgDetailView({
     async function fetchMembers() {
       try {
         setMembersLoading(true)
-        const docs = await getUsersByOrg(org.id)
-        setMembers(
-          docs.map((d) => {
+        // Fetch from USERS collection
+        const userDocs = await getUsersByOrg(org.id)
+        const userMembers = userDocs.map((d) => {
+          const data = d as Record<string, unknown>
+          const first = (data.firstName as string) ?? ""
+          const last = (data.lastName as string) ?? ""
+          return {
+            id: d.id,
+            firstName: first,
+            lastName: last,
+            name: `${first} ${last}`.trim() || ((data.email as string) ?? "Unknown"),
+            email: (data.email as string) ?? "",
+            department: (data.department as string) ?? "",
+            role: (data.role as string) ?? "user",
+            status: (data.status as string) ?? undefined,
+            authId: (data.authId as string) ?? undefined,
+          }
+        })
+        
+        // Also fetch from INVITES collection (legacy invites stored separately)
+        const inviteDocs = await getDocuments(COLLECTIONS.INVITES)
+        const inviteMembers = inviteDocs
+          .filter((d) => {
+            const data = d as Record<string, unknown>
+            return (data.organizationId as string) === org.id
+          })
+          .map((d) => {
             const data = d as Record<string, unknown>
             const first = (data.firstName as string) ?? ""
             const last = (data.lastName as string) ?? ""
+            const email = (data.email as string) ?? ""
             return {
               id: d.id,
               firstName: first,
               lastName: last,
-              name: `${first} ${last}`.trim() || ((data.email as string) ?? "Unknown"),
-              email: (data.email as string) ?? "",
+              name: `${first} ${last}`.trim() || email || "Unknown",
+              email,
               department: (data.department as string) ?? "",
               role: (data.role as string) ?? "user",
-              status: (data.status as string) ?? undefined,
-              authId: (data.authId as string) ?? undefined,
+              status: "pending" as string | undefined, // All invites are pending
+              authId: undefined as string | undefined, // Invites never have authId
             }
-          }),
-        )
+          })
+        
+        // Merge, avoiding duplicates by email
+        const userEmails = new Set(userMembers.map((m) => m.email.toLowerCase()))
+        const mergedMembers = [
+          ...userMembers,
+          ...inviteMembers.filter((m) => !userEmails.has(m.email.toLowerCase())),
+        ]
+        
+        setMembers(mergedMembers)
       } catch (err) {
         console.error("Failed to fetch members:", err)
       } finally {
