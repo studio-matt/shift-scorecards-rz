@@ -10,6 +10,8 @@ import {
   ExternalLink,
   Loader2,
   Trash2,
+  Search,
+  Building2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
@@ -70,6 +72,10 @@ export default function WebinarDecksPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [webinarToDelete, setWebinarToDelete] = useState<WebinarDeck | null>(null)
+
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState("")
+  const [filterOrgId, setFilterOrgId] = useState("all")
 
   // Form state
   const [selectedOrgId, setSelectedOrgId] = useState("")
@@ -174,6 +180,27 @@ export default function WebinarDecksPage() {
     })
   }
 
+  // Filter webinars based on search query and company filter
+  const filteredWebinars = webinars.filter((w) => {
+    // Company filter (for super admin only - regular users already filtered by loadData)
+    if (isSuperAdmin && filterOrgId !== "all" && w.organizationId !== filterOrgId) {
+      return false
+    }
+    
+    // Text search - match title, organization name, or date
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      const matchesTitle = w.title.toLowerCase().includes(query)
+      const matchesOrg = w.organizationName.toLowerCase().includes(query)
+      const matchesDate = formatDate(w.date).toLowerCase().includes(query)
+      if (!matchesTitle && !matchesOrg && !matchesDate) {
+        return false
+      }
+    }
+    
+    return true
+  })
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -212,9 +239,53 @@ export default function WebinarDecksPage() {
         </p>
       </div>
 
+      {/* Search and Filter Bar */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        {/* Text Search */}
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search by title, company, or date..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        
+        {/* Company Filter - Super Admin only */}
+        {isSuperAdmin && (
+          <div className="w-full sm:w-64">
+            <Select value={filterOrgId} onValueChange={setFilterOrgId}>
+              <SelectTrigger>
+                <Building2 className="mr-2 h-4 w-4 text-muted-foreground" />
+                <SelectValue placeholder="Filter by company" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Companies</SelectItem>
+                {organizations.map((org) => (
+                  <SelectItem key={org.id} value={org.id}>
+                    {org.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
+
+      {/* Results count when filtering */}
+      {(searchQuery || (isSuperAdmin && filterOrgId !== "all")) && (
+        <p className="text-sm text-muted-foreground">
+          Showing {filteredWebinars.length} of {webinars.length} webinar{webinars.length !== 1 ? "s" : ""}
+          {filterOrgId !== "all" && organizations.find(o => o.id === filterOrgId) && (
+            <span> for <span className="font-medium text-foreground">{organizations.find(o => o.id === filterOrgId)?.name}</span></span>
+          )}
+        </p>
+      )}
+
       {/* Webinar Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {webinars.map((webinar) => (
+        {filteredWebinars.map((webinar) => (
           <div
             key={webinar.id}
             className="group relative flex flex-col overflow-hidden rounded-xl border border-border bg-card transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5"
@@ -298,19 +369,37 @@ export default function WebinarDecksPage() {
         ))}
       </div>
 
-      {webinars.length === 0 && (
+      {filteredWebinars.length === 0 && (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-12">
           <FileText className="mb-4 h-12 w-12 text-muted-foreground/50" />
-          <p className="text-muted-foreground">No webinar decks available yet</p>
-          {isSuperAdmin && (
-            <Button 
-              variant="outline" 
-              className="mt-4"
-              onClick={() => setCreateDialogOpen(true)}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Create First Entry
-            </Button>
+          {webinars.length === 0 ? (
+            <>
+              <p className="text-muted-foreground">No webinar decks available yet</p>
+              {isSuperAdmin && (
+                <Button 
+                  variant="outline" 
+                  className="mt-4"
+                  onClick={() => setCreateDialogOpen(true)}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create First Entry
+                </Button>
+              )}
+            </>
+          ) : (
+            <>
+              <p className="text-muted-foreground">No webinars match your search</p>
+              <Button 
+                variant="outline" 
+                className="mt-4"
+                onClick={() => {
+                  setSearchQuery("")
+                  setFilterOrgId("all")
+                }}
+              >
+                Clear Filters
+              </Button>
+            </>
           )}
         </div>
       )}
