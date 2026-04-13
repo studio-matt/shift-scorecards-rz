@@ -781,6 +781,7 @@ function OrgDetailView({
   const [buttonFontColor, setButtonFontColor] = useState(org.buttonFontColor ?? "#ffffff")
   const [logoUrl, setLogoUrl] = useState(org.logoUrl ?? "")
   const [logoUploading, setLogoUploading] = useState(false)
+  const [logoDragging, setLogoDragging] = useState(false)
   // Financial settings
   const [hourlyRate, setHourlyRate] = useState(org.hourlyRate ?? 100)
 
@@ -803,9 +804,10 @@ function OrgDetailView({
   }, [backgroundColor, buttonColor, buttonFontColor, accentColor, setPreviewColor, setPreviewButtonColor, setPreviewButtonFontColor, setPreviewAccentColor])
   const [anonymizeByDefault, setAnonymizeByDefault] = useState(org.reportingPreferences?.anonymizeByDefault ?? true)
 
-  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+  // Core upload function that handles the actual upload
+  async function uploadLogoFile(file: File) {
+    // Save scroll position before upload
+    const scrollY = window.scrollY
     setLogoUploading(true)
     try {
       const formData = new FormData()
@@ -822,8 +824,28 @@ function OrgDetailView({
       console.error("Logo upload error:", err)
     }
     setLogoUploading(false)
+    // Restore scroll position after upload completes
+    requestAnimationFrame(() => window.scrollTo(0, scrollY))
+  }
+
+  // Handle file input change
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    await uploadLogoFile(file)
     // Reset the input so the same file can be re-selected
     e.target.value = ""
+  }
+
+  // Handle drag and drop
+  function handleLogoDrop(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    setLogoDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file && file.type.startsWith("image/")) {
+      uploadLogoFile(file)
+    }
   }
   const [includeInBenchmarking, setIncludeInBenchmarking] = useState(org.reportingPreferences?.includeInBenchmarking ?? true)
   const [scorecardCadence, setScorecardCadence] = useState<"weekly" | "biweekly" | "monthly">(org.reportingPreferences?.scorecardCadence ?? "monthly")
@@ -1695,14 +1717,39 @@ function OrgDetailView({
                     <div className="flex flex-col gap-2">
                       <Label>Organization Logo</Label>
                       <div className="flex items-center gap-3">
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-dashed border-border bg-card overflow-hidden">
-                          {logoUrl ? (
+                        <div 
+                          className={cn(
+                            "flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border-2 border-dashed bg-card overflow-hidden transition-colors",
+                            logoDragging 
+                              ? "border-primary bg-primary/10" 
+                              : "border-border"
+                          )}
+                          onDragOver={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            setLogoDragging(true)
+                          }}
+                          onDragEnter={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            setLogoDragging(true)
+                          }}
+                          onDragLeave={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            setLogoDragging(false)
+                          }}
+                          onDrop={handleLogoDrop}
+                        >
+                          {logoUrl && !logoDragging ? (
                             <img
                               src={logoUrl}
                               alt="Org logo"
                               className="h-full w-full object-contain"
                               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                             />
+                          ) : logoDragging ? (
+                            <Upload className="h-5 w-5 text-primary" />
                           ) : (
                             <Image className="h-5 w-5 text-muted-foreground" />
                           )}
@@ -1710,7 +1757,10 @@ function OrgDetailView({
                         <div className="flex flex-col gap-1.5">
                           <label
                             htmlFor="org-logo-file"
-                            className={`inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted ${logoUploading ? "pointer-events-none opacity-60" : ""}`}
+                            className={cn(
+                              "inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted",
+                              logoUploading && "pointer-events-none opacity-60"
+                            )}
                           >
                             {logoUploading ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
@@ -1728,7 +1778,7 @@ function OrgDetailView({
                             disabled={logoUploading}
                           />
                           <p className="text-[11px] text-muted-foreground">
-                            PNG, JPG, GIF, or WebP. Max 2MB.
+                            Drag & drop or click. PNG, JPG, GIF, WebP. Max 2MB.
                           </p>
                           {logoUrl && (
                             <button
