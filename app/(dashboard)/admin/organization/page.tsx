@@ -877,12 +877,13 @@ function OrgDetailView({
         }
         for (let i = 1; i < lines.length; i++) {
           const parts = lines[i].split(",").map((s) => s.trim())
-          const email = parts[colIdx.email] ?? ""
+          const email = (parts[colIdx.email] ?? "").toLowerCase()
           const firstName = colIdx.firstName >= 0 ? properCase(parts[colIdx.firstName] ?? "") : ""
           const lastName = colIdx.lastName >= 0 ? properCase(parts[colIdx.lastName] ?? "") : ""
           const dept = inviteCsvDepartment || (colIdx.department >= 0 ? parts[colIdx.department] : "") || ""
           if (email && email.includes("@")) {
-            await createDocument(COLLECTIONS.INVITES, {
+            // Create user record directly so they appear in members list
+            await createDocument(COLLECTIONS.USERS, {
               email,
               firstName,
               lastName,
@@ -896,8 +897,11 @@ function OrgDetailView({
           }
         }
       } else if (inviteEmail) {
-        await createDocument(COLLECTIONS.INVITES, {
-          email: inviteEmail,
+        // Create user record directly so they appear in members list
+        await createDocument(COLLECTIONS.USERS, {
+          email: inviteEmail.toLowerCase(),
+          firstName: "",
+          lastName: "",
           department: inviteDepartment,
           organizationId: org.id,
           role: inviteRole,
