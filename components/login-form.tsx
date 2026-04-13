@@ -26,8 +26,17 @@ export default function LoginForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [mode, setMode] = useState<"login" | "signup">("login")
-  const { login, signup, loginWithProvider, isAuthenticated, ready } = useAuth()
+  const { login, signup, loginWithProvider, isAuthenticated, ready, authError, clearAuthError } = useAuth()
   const router = useRouter()
+
+  // Show auth error from context (e.g., uninvited user trying to sign in)
+  useEffect(() => {
+    if (authError) {
+      setError(authError)
+      clearAuthError()
+      setLoading(false)
+    }
+  }, [authError, clearAuthError])
 
   useEffect(() => {
     if (ready && isAuthenticated) {
