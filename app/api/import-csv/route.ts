@@ -36,11 +36,31 @@ function timeToHours(timeStr: string): number {
 }
 
 // The actual data from the CSV - only keeping the most recent response per person
-// Columns: ID, Name, Email, Emails/day, Time saved emails, Before AI minutes, After AI minutes, 
+// Columns: ID, Name, Email, Department, Emails/day, Time saved emails, Before AI minutes, After AI minutes, 
 // Edit time, Meetings/week, Time saved meeting prep, Time saved meeting followup,
 // Time saved doc review, Time saved doc prep, Time saved research, Time saved summarizing,
 // Biggest win, Next goal, Confidence, Response Type, Start Date, Stage Date, Submit Date, Network ID, Tags, Ending
-const CSV_DATA = [
+// 
+// Department: Optional field - if not provided, will be inferred from email domain or job title
+// Submit Date: Optional field - if provided, will be used as the response completedAt date
+interface CSVRow {
+  name: string
+  email: string
+  department?: string      // NEW: Department from CSV
+  submitDate?: string      // NEW: Submit date from CSV (ISO format: YYYY-MM-DD)
+  emailTimeSaved: string
+  meetingPrepSaved: string
+  meetingFollowupSaved: string
+  docReviewSaved: string
+  docPrepSaved: string
+  researchSaved: string
+  summarizingSaved: string
+  biggestWin: string
+  nextGoal: string
+  confidence: number
+}
+
+const CSV_DATA: CSVRow[] = [
   { name: "Paula", email: "pbanos@roblevine.com", emailTimeSaved: "1-2 hours", meetingPrepSaved: "30 minutes - 1 hour", meetingFollowupSaved: "30 minutes - 1 hour", docReviewSaved: "2-4 hours", docPrepSaved: "30 minutes - 1 hour", researchSaved: "30 minutes - 1 hour", summarizingSaved: "30 minutes - 1 hour", biggestWin: "My biggest AI win this month was being able to edit AI-generated emails.", nextGoal: "Generate brief agendas with feedback examples to show my team during the open hours I have weekly with them.", confidence: 9 },
   { name: "Felipe Cardenas", email: "fcardenas@roblevine.com", emailTimeSaved: "1-2 hours", meetingPrepSaved: "30 minutes - 1 hour", meetingFollowupSaved: "30 minutes - 1 hour", docReviewSaved: "30 minutes - 1 hour", docPrepSaved: "30 minutes - 1 hour", researchSaved: "1-2 hours", summarizingSaved: "30 minutes - 1 hour", biggestWin: "Meeting follow ups, pending lists", nextGoal: "Automation, quicker follow ups, better meeting, and deliverables coverage", confidence: 10 },
   { name: "Jena-Lynn Forcino", email: "JForcino@roblevine.com", emailTimeSaved: "1-2 hours", meetingPrepSaved: "30 minutes - 1 hour", meetingFollowupSaved: "30 minutes - 1 hour", docReviewSaved: "Not using AI yet (0 hours)", docPrepSaved: "Not using AI yet (0 hours)", researchSaved: "30 minutes - 1 hour", summarizingSaved: "Not using AI yet (0 hours)", biggestWin: "Structuring my departments goals and time management", nextGoal: "Using AI to create reports and meeting plans", confidence: 4 },
@@ -254,14 +274,47 @@ export async function POST(request: Request) {
     }
 
     // 5. Create Rob Levine users and responses
-    const weekOf = getCurrentWeekOf()
+    const defaultWeekOf = getCurrentWeekOf()
     const now = new Date().toISOString()
+    
+    // Helper to get weekOf from a date
+    const getWeekOfFromDate = (dateStr: string) => {
+      const date = new Date(dateStr)
+      const dayOfWeek = date.getDay()
+      const monday = new Date(date)
+      monday.setDate(date.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
+      monday.setHours(0, 0, 0, 0)
+      return monday.toISOString().split("T")[0]
+    }
+    
+    // Helper to infer department from email domain or fallback to random
+    const inferDepartment = (email: string): string => {
+      const domain = email.toLowerCase().split("@")[1] || ""
+      // Infer based on email patterns (can be customized)
+      if (domain.includes("legalsolutions")) return "Legal Solutions"
+      if (email.toLowerCase().includes("legal")) return "Legal"
+      if (email.toLowerCase().includes("hr")) return "Human Resources"
+      if (email.toLowerCase().includes("it")) return "IT"
+      if (email.toLowerCase().includes("marketing")) return "Marketing"
+      // Fallback to random from DEPARTMENTS list
+      return DEPARTMENTS[Math.floor(Math.random() * DEPARTMENTS.length)]
+    }
 
     for (const csvRow of CSV_DATA) {
       const nameParts = csvRow.name.split(" ")
       const firstName = nameParts[0]
       const lastName = nameParts.slice(1).join(" ") || ""
-      const department = DEPARTMENTS[Math.floor(Math.random() * DEPARTMENTS.length)]
+      
+      // Use department from CSV if provided, otherwise infer from email
+      const department = csvRow.department || inferDepartment(csvRow.email)
+      
+      // Use submitDate from CSV if provided, otherwise use current date
+      const completedAt = csvRow.submitDate 
+        ? new Date(csvRow.submitDate).toISOString() 
+        : now
+      const weekOf = csvRow.submitDate 
+        ? getWeekOfFromDate(csvRow.submitDate) 
+        : defaultWeekOf
 
       if (!dryRun) {
         // Check if user already exists
@@ -290,17 +343,23 @@ export async function POST(request: Request) {
             updatedAt: now,
           })
           userId = userRef.id
+        } else {
+          // Update department for existing user if CSV provides one
+          if (csvRow.department) {
+            const userDocRef = doc(db, "users", existingUserId)
+            await setDoc(userDocRef, { department, updatedAt: now }, { merge: true })
+          }
         }
 
-        // Create response
+        // Create response with actual submitDate
         const answers = buildAnswers(csvRow)
         await addDoc(collection(db, "responses"), {
           templateId: template.id,
           userId,
           organizationId: results.robLevineOrgId,
           answers,
-          completedAt: now,
-          weekOf,
+          completedAt,  // Use actual submit date from CSV
+          weekOf,       // Week calculated from submit date
           createdAt: now,
         })
         results.responsesCreated++

@@ -48,3 +48,26 @@ export async function deleteFile(path: string): Promise<void> {
   const storageRef = ref(storage, path)
   await deleteObject(storageRef)
 }
+
+/**
+ * Upload a webinar deck PDF for an organization.
+ */
+export async function uploadWebinarPdf(
+  orgId: string,
+  file: File,
+): Promise<string> {
+  const timestamp = Date.now()
+  const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_")
+  return uploadFile(`webinars/${orgId}/${timestamp}-${safeName}`, file)
+}
+
+/**
+ * Upload an organization logo.
+ */
+export async function uploadOrgLogo(
+  orgId: string,
+  file: File,
+): Promise<string> {
+  const ext = file.name.split(".").pop() ?? "png"
+  return uploadFile(`logos/${orgId}/logo.${ext}`, file)
+}
