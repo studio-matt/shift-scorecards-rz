@@ -117,6 +117,8 @@ export default function PreviousScorecardsPage() {
   const [importOrg, setImportOrg] = useState("")
   const [importTemplate, setImportTemplate] = useState("")
   const [importWeekOf, setImportWeekOf] = useState("")
+  const [importStartDate, setImportStartDate] = useState("")
+  const [importEndDate, setImportEndDate] = useState("")
   const [importing, setImporting] = useState(false)
   const [showLegend, setShowLegend] = useState(false)
 
@@ -413,6 +415,8 @@ export default function PreviousScorecardsPage() {
         organizationName: selectedOrgData?.name || "",
         userId: user?.id || "import",
         weekOf: importWeekOf,
+        startDate: importStartDate || importWeekOf, // Default to weekOf if not provided
+        endDate: importEndDate || "",
         completedAt: new Date().toISOString(),
         answers,
         importedAt: new Date().toISOString(),
@@ -423,6 +427,8 @@ export default function PreviousScorecardsPage() {
       setImportOrg("")
       setImportTemplate("")
       setImportWeekOf("")
+      setImportStartDate("")
+      setImportEndDate("")
       setImportModalOpen(false)
       fetchScorecards()
       alert("Scorecard imported successfully!")
@@ -696,6 +702,28 @@ export default function PreviousScorecardsPage() {
                   value={importWeekOf}
                   onChange={(e) => setImportWeekOf(e.target.value)}
                 />
+              </div>
+              
+              {/* Start/End Dates */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-2">
+                  <Label>Scorecard Start Date</Label>
+                  <Input
+                    type="date"
+                    value={importStartDate}
+                    onChange={(e) => setImportStartDate(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">When this scorecard period begins</p>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label>Scorecard End Date</Label>
+                  <Input
+                    type="date"
+                    value={importEndDate}
+                    onChange={(e) => setImportEndDate(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">When this scorecard expires</p>
+                </div>
               </div>
               
               {/* CSV Upload */}
