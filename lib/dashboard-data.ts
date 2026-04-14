@@ -1330,10 +1330,15 @@ export async function findTimeSavingQuestionIds(): Promise<string[]> {
   const templates = await fetchTemplates()
   const ids: string[] = []
   
+  console.log("[v0] findTimeSavingQuestionIds: Found", templates.length, "templates")
+  
   for (const t of templates) {
+    console.log("[v0] Template:", t.name, "- Questions:", t.questions?.length || 0)
     for (const q of t.questions || []) {
+      console.log("[v0]   Q:", q.id, "type:", q.type, "text:", q.text?.substring(0, 50))
       // First check for explicit time_saving type
       if (q.type === "time_saving") {
+        console.log("[v0]   -> MATCHED by type")
         ids.push(q.id)
         continue
       }
@@ -1347,11 +1352,13 @@ export async function findTimeSavingQuestionIds(): Promise<string[]> {
         text.includes("time saving") ||
         text.includes("minutes saved")
       ) {
+        console.log("[v0]   -> MATCHED by keyword")
         ids.push(q.id)
       }
     }
   }
   
+  console.log("[v0] findTimeSavingQuestionIds: Returning", ids.length, "IDs:", ids)
   return ids
 }
 
@@ -1499,10 +1506,18 @@ export function computeOrgHoursMetrics(
   confidenceIds: string[], // Changed to array to support multiple confidence questions
   hourlyRate: number = 100,
 ): OrgHoursMetrics {
+  console.log("[v0] computeOrgHoursMetrics called with", responses.length, "responses, timeSavingIds:", timeSavingIds)
+  
   // Sum hours from ALL passed-in responses (already filtered by caller's time period)
   let periodHoursVal = 0
   const allUsers = new Set<string>()
   const allConfidenceScores: number[] = []
+  
+  // Debug: log first response's answers
+  if (responses.length > 0) {
+    console.log("[v0] First response answers keys:", Object.keys(responses[0].answers))
+    console.log("[v0] First response answers:", responses[0].answers)
+  }
   
   for (const r of responses) {
     // Track ALL users who submitted scorecards in this period
@@ -1514,6 +1529,7 @@ export function computeOrgHoursMetrics(
       const val = r.answers[qId]
       if (val !== undefined && val !== null && val !== "") {
         const hours = parseTimeValue(val)
+        console.log("[v0] qId:", qId, "val:", val, "-> hours:", hours)
         if (hours > 0) {
           periodHoursVal += hours
         }
