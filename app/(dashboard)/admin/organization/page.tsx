@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { cn } from "@/lib/utils"
 import { useBackground } from "@/lib/background-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
