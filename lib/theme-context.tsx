@@ -23,22 +23,35 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("dark")
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    const stored = localStorage.getItem(THEME_KEY) as Theme | null
-    if (stored === "dark" || stored === "light") {
-      setThemeState(stored)
-      document.documentElement.classList.toggle("dark", stored === "dark")
-    } else {
-      // Default to dark premium theme
+    setMounted(true)
+    try {
+      const stored = localStorage.getItem(THEME_KEY) as Theme | null
+      if (stored === "dark" || stored === "light") {
+        setThemeState(stored)
+        document.documentElement.classList.toggle("dark", stored === "dark")
+      } else {
+        // Default to dark premium theme
+        document.documentElement.classList.add("dark")
+      }
+    } catch {
+      // localStorage not available (SSR or private browsing)
       document.documentElement.classList.add("dark")
     }
   }, [])
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next)
-    localStorage.setItem(THEME_KEY, next)
-    document.documentElement.classList.toggle("dark", next === "dark")
+    try {
+      localStorage.setItem(THEME_KEY, next)
+    } catch {
+      // localStorage not available
+    }
+    if (typeof document !== "undefined") {
+      document.documentElement.classList.toggle("dark", next === "dark")
+    }
   }, [])
 
   const toggleTheme = useCallback(() => {
