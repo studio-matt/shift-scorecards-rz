@@ -915,6 +915,8 @@ function OrgDetailView({
           firstName: headers.indexOf("firstname"),
           lastName: headers.indexOf("lastname"),
           department: headers.indexOf("department"),
+          startDate: headers.indexOf("startdate"),
+          endDate: headers.indexOf("enddate"),
         }
         for (let i = 1; i < lines.length; i++) {
           const parts = lines[i].split(",").map((s) => s.trim())
@@ -922,6 +924,8 @@ function OrgDetailView({
           const firstName = colIdx.firstName >= 0 ? properCase(parts[colIdx.firstName] ?? "") : ""
           const lastName = colIdx.lastName >= 0 ? properCase(parts[colIdx.lastName] ?? "") : ""
           const dept = inviteCsvDepartment || (colIdx.department >= 0 ? parts[colIdx.department] : "") || ""
+          const startDate = colIdx.startDate >= 0 ? parts[colIdx.startDate] ?? "" : ""
+          const endDate = colIdx.endDate >= 0 ? parts[colIdx.endDate] ?? "" : ""
           
           // Track new departments that don't exist in org yet
           if (dept && !existingDepts.has(dept)) {
@@ -935,7 +939,7 @@ function OrgDetailView({
               continue
             }
             // Create user record directly so they appear in members list
-            await createDocument(COLLECTIONS.USERS, {
+            const userData: Record<string, unknown> = {
               email,
               firstName,
               lastName,
@@ -944,7 +948,12 @@ function OrgDetailView({
               role: "user",
               status: "pending",
               createdAt: new Date().toISOString(),
-            })
+            }
+            // Add scorecard period dates if provided
+            if (startDate) userData.scorecardStartDate = startDate
+            if (endDate) userData.scorecardEndDate = endDate
+            
+            await createDocument(COLLECTIONS.USERS, userData)
             existingEmails.add(email) // Track to prevent duplicates within same CSV
             emailsToSend.push(email)
           }
