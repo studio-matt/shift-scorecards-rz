@@ -424,11 +424,13 @@ export default function DashboardPage() {
     }
     
     // Add departments from users in the selected org (most reliable source)
-    orgUserDepartments.forEach((d) => allDepts.add(d))
+    orgUserDepartments.forEach((d) => {
+      if (d && d.trim()) allDepts.add(d)
+    })
     
     // Also add departments from the performance data (these come from actual user responses)
     deptPerformance.forEach((dp) => {
-      if (dp.department && dp.department !== "Unknown") {
+      if (dp?.department && dp.department !== "Unknown") {
         allDepts.add(dp.department)
       }
     })
@@ -527,7 +529,7 @@ export default function DashboardPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Departments</SelectItem>
-                {departments.map((dept) => (
+                {departments.filter(Boolean).map((dept) => (
                   <SelectItem key={dept} value={dept}>
                     {dept}
                   </SelectItem>

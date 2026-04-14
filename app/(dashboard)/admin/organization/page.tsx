@@ -783,6 +783,7 @@ function OrgDetailView({
   const [logoUrl, setLogoUrl] = useState(org.logoUrl ?? "")
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoDragging, setLogoDragging] = useState(false)
+  const [csvDragging, setCsvDragging] = useState(false)
   // Financial settings
   const [hourlyRate, setHourlyRate] = useState(org.hourlyRate ?? 100)
 
@@ -2414,10 +2415,43 @@ function OrgDetailView({
                   </div>
                   <label
                     htmlFor="org-csv-upload"
-                    className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+                    className={cn(
+                      "flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-3 text-sm transition-colors",
+                      csvDragging
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:border-primary hover:bg-primary/5 hover:text-primary"
+                    )}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setCsvDragging(true)
+                    }}
+                    onDragEnter={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setCsvDragging(true)
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setCsvDragging(false)
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setCsvDragging(false)
+                      const file = e.dataTransfer.files?.[0]
+                      if (file && (file.name.endsWith(".csv") || file.type === "text/csv")) {
+                        // Create a fake event to reuse the existing handler
+                        const fakeEvent = { target: { files: [file] } } as unknown as React.ChangeEvent<HTMLInputElement>
+                        handleInviteCsvUpload(fakeEvent)
+                      }
+                    }}
                   >
                     <Upload className="h-4 w-4" />
-                    {inviteCsvFile ? (
+                    {csvDragging ? (
+                      "Drop CSV file here"
+                    ) : inviteCsvFile ? (
                       <span className="font-medium text-foreground">
                         {inviteCsvFile.name}{" "}
                         <span className="text-muted-foreground">
@@ -2425,7 +2459,7 @@ function OrgDetailView({
                         </span>
                       </span>
                     ) : (
-                      "Upload CSV file"
+                      "Drop CSV or click to upload"
                     )}
                   </label>
                   <input
