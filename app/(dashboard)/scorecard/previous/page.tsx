@@ -10,7 +10,17 @@ import {
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, CalendarDays, CheckCircle2, Loader2, Trash2, Building2, Clock, Search } from "lucide-react"
+import { ArrowLeft, CalendarDays, CheckCircle2, Loader2, Trash2, Building2, Clock, Search, Upload, FileDown, Info, X } from "lucide-react"
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { createDocument } from "@/lib/firestore"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -99,6 +109,16 @@ export default function PreviousScorecardsPage() {
   const [timePeriod, setTimePeriod] = useState("all")
   const [orgs, setOrgs] = useState<Array<{ id: string; name: string }>>([])
   const [departments, setDepartments] = useState<string[]>([])
+  const [templates, setTemplates] = useState<Array<{ id: string; name: string; questions: TemplateQuestion[] }>>([])
+  
+  // Import state
+  const [importModalOpen, setImportModalOpen] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importOrg, setImportOrg] = useState("")
+  const [importTemplate, setImportTemplate] = useState("")
+  const [importWeekOf, setImportWeekOf] = useState("")
+  const [importing, setImporting] = useState(false)
+  const [showLegend, setShowLegend] = useState(false)
 
   const fetchScorecards = useCallback(async () => {
     if (!user) return
@@ -139,11 +159,18 @@ export default function PreviousScorecardsPage() {
       
       // Build template question map for finding time_saving questions
       const templateQuestionMap = new Map<string, TemplateQuestion[]>()
+      const templatesList: Array<{ id: string; name: string; questions: TemplateQuestion[] }> = []
       for (const tmpl of templateDocs) {
         const data = tmpl as Record<string, unknown>
         const qs = (data.questions as TemplateQuestion[]) || []
         templateQuestionMap.set(tmpl.id, qs)
+        templatesList.push({
+          id: tmpl.id,
+          name: (data.name as string) || "Unnamed Template",
+          questions: qs,
+        })
       }
+      setTemplates(templatesList)
       
       // Parse responses
       const responses: RawResponse[] = responseDocs.map((d) => {
@@ -272,6 +299,140 @@ export default function PreviousScorecardsPage() {
   }
 
   const selected = scorecards.find((s) => s.key === selectedKey)
+  
+  // Download scorecard import template
+  function handleDownloadTemplate() {
+    const selectedTmpl = templates.find((t) => t.id === importTemplate)
+    if (!selectedTmpl) {
+      // Generic template with example structure
+      const csv = `question,questionType,value
+"How many hours did AI save you this week?",time_saving,"1-2 hours"
+"Rate your confidence in AI tools",confidence,8
+"What tools did you use?",text,"ChatGPT, Copilot"
+"Additional comments",text,"AI helped with research"`
+      const blob = new Blob([csv], { type: "text/csv" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = "scorecard-import-template.csv"
+      a.click()
+      URL.revokeObjectURL(url)
+      return
+    }
+    
+    // Generate template based on selected template's questions
+    const rows = ["question,questionType,value"]
+    for (const q of selectedTmpl.questions) {
+      const qType = q.type || "text"
+      let exampleValue = ""
+      if (qType === "time_saving") exampleValue = "1-2 hours"
+      else if (qType === "confidence" || qType === "slider") exampleValue = "7"
+      else exampleValue = "Example response"
+      rows.push(`"${q.text.replace(/"/g, '""')}",${qType},"${exampleValue}"`)
+    }
+    const csv = rows.join("\n")
+    const blob = new Blob([csv], { type: "text/csv" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `scorecard-import-${selectedTmpl.name.replace(/\s+/g, "-").toLowerCase()}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+  
+  // Handle CSV file selection
+  function handleImportFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) setImportFile(file)
+  }
+  
+  // Import scorecard responses from CSV
+  async function handleImport() {
+    if (!importFile || !importOrg || !importTemplate || !importWeekOf) {
+      alert("Please fill in all fields and select a CSV file.")
+      return
+    }
+    
+    setImporting(true)
+    try {
+      const text = await importFile.text()
+      const lines = text.split("\n").filter((l) => l.trim())
+      const headers = lines[0].toLowerCase().split(",").map((h) => h.trim().replace(/^"|"$/g, ""))
+      
+      const colIdx = {
+        question: headers.findIndex((h) => h.includes("question") && !h.includes("type")),
+        questionType: headers.findIndex((h) => h.includes("type")),
+        value: headers.findIndex((h) => h.includes("value")),
+      }
+      
+      if (colIdx.question === -1 || colIdx.value === -1) {
+        alert("CSV must have 'question' and 'value' columns.")
+        setImporting(false)
+        return
+      }
+      
+      const selectedTmpl = templates.find((t) => t.id === importTemplate)
+      if (!selectedTmpl) {
+        alert("Selected template not found.")
+        setImporting(false)
+        return
+      }
+      
+      // Build answers object by matching question text to template question IDs
+      const answers: Record<string, number | string> = {}
+      for (let i = 1; i < lines.length; i++) {
+        // Parse CSV line handling quoted values
+        const parts = lines[i].match(/("([^"]|"")*"|[^,]*)(,("([^"]|"")*"|[^,]*))*$/g)?.[0]?.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/) || []
+        const cleanParts = parts.map((p) => p.trim().replace(/^"|"$/g, "").replace(/""/g, '"'))
+        
+        const questionText = cleanParts[colIdx.question] || ""
+        const value = cleanParts[colIdx.value] || ""
+        
+        // Find matching template question
+        const matchingQ = selectedTmpl.questions.find((q) => 
+          q.text.toLowerCase().trim() === questionText.toLowerCase().trim()
+        )
+        
+        if (matchingQ && value) {
+          // Parse value based on question type
+          const qType = matchingQ.type || "text"
+          if (qType === "slider" || qType === "confidence") {
+            answers[matchingQ.id] = parseFloat(value) || 0
+          } else {
+            answers[matchingQ.id] = value
+          }
+        }
+      }
+      
+      // Create response document
+      const selectedOrgData = orgs.find((o) => o.id === importOrg)
+      await createDocument(COLLECTIONS.RESPONSES, {
+        templateId: importTemplate,
+        templateName: selectedTmpl.name,
+        organizationId: importOrg,
+        organizationName: selectedOrgData?.name || "",
+        userId: user?.id || "import",
+        weekOf: importWeekOf,
+        completedAt: new Date().toISOString(),
+        answers,
+        importedAt: new Date().toISOString(),
+      })
+      
+      // Reset and refresh
+      setImportFile(null)
+      setImportOrg("")
+      setImportTemplate("")
+      setImportWeekOf("")
+      setImportModalOpen(false)
+      fetchScorecards()
+      alert("Scorecard imported successfully!")
+    } catch (err) {
+      console.error("Import error:", err)
+      alert("Failed to import scorecard. Please check the CSV format.")
+    } finally {
+      setImporting(false)
+    }
+  }
   
   // Filter scorecards by search query, org, department, and time period
   const filteredScorecards = scorecards.filter((sc) => {
@@ -470,13 +631,161 @@ export default function PreviousScorecardsPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground">
-          Previous Scorecards
-        </h1>
-        <p className="mt-1 text-muted-foreground">
-          View past scorecard submissions and results by organization.
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">
+            Previous Scorecards
+          </h1>
+          <p className="mt-1 text-muted-foreground">
+            View past scorecard submissions and results by organization.
+          </p>
+        </div>
+        
+        {/* Import Button */}
+        <Dialog open={importModalOpen} onOpenChange={setImportModalOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="gap-2">
+              <Upload className="h-4 w-4" />
+              Import Scorecard
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Import Scorecard from CSV</DialogTitle>
+              <DialogDescription>
+                Upload a CSV file with scorecard responses. Match questions by their exact text.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="flex flex-col gap-4 py-4">
+              {/* Organization */}
+              <div className="flex flex-col gap-2">
+                <Label>Organization</Label>
+                <Select value={importOrg} onValueChange={setImportOrg}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select organization" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {orgs.map((org) => (
+                      <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Template */}
+              <div className="flex flex-col gap-2">
+                <Label>Template</Label>
+                <Select value={importTemplate} onValueChange={setImportTemplate}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templates.map((tmpl) => (
+                      <SelectItem key={tmpl.id} value={tmpl.id}>{tmpl.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Week Of */}
+              <div className="flex flex-col gap-2">
+                <Label>Week Of (Scorecard Date)</Label>
+                <Input
+                  type="date"
+                  value={importWeekOf}
+                  onChange={(e) => setImportWeekOf(e.target.value)}
+                />
+              </div>
+              
+              {/* CSV Upload */}
+              <div className="flex flex-col gap-2">
+                <Label>CSV File</Label>
+                <label
+                  htmlFor="scorecard-csv-upload"
+                  className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border px-4 py-6 text-sm text-muted-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+                >
+                  <Upload className="h-4 w-4" />
+                  {importFile ? (
+                    <span className="font-medium text-foreground">{importFile.name}</span>
+                  ) : (
+                    "Click to upload CSV file"
+                  )}
+                </label>
+                <input
+                  id="scorecard-csv-upload"
+                  type="file"
+                  accept=".csv"
+                  className="sr-only"
+                  onChange={handleImportFileChange}
+                />
+              </div>
+              
+              {/* Download Template & Legend */}
+              <div className="flex items-center justify-between border-t border-border pt-4">
+                <button
+                  type="button"
+                  onClick={handleDownloadTemplate}
+                  className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                >
+                  <FileDown className="h-4 w-4" />
+                  Download CSV Template
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowLegend(!showLegend)}
+                  className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  <Info className="h-4 w-4" />
+                  {showLegend ? "Hide" : "Show"} Value Legend
+                </button>
+              </div>
+              
+              {/* Legend */}
+              {showLegend && (
+                <div className="rounded-lg border border-border bg-muted/50 p-4">
+                  <h4 className="mb-3 font-medium text-foreground">Question Types & Valid Values</h4>
+                  <div className="space-y-3 text-sm">
+                    <div>
+                      <p className="font-medium text-foreground">time_saving (Hours Saved)</p>
+                      <ul className="ml-4 mt-1 list-disc text-muted-foreground">
+                        <li>&quot;Not using AI yet&quot; or &quot;0 hours&quot; = 0 hrs</li>
+                        <li>&quot;30 minutes - 1 hour&quot; = 0.75 hrs</li>
+                        <li>&quot;1-2 hours&quot; = 1.5 hrs</li>
+                        <li>&quot;2-4 hours&quot; = 3 hrs</li>
+                        <li>&quot;4+ hours&quot; = 5.5 hrs</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">confidence / slider</p>
+                      <p className="ml-4 text-muted-foreground">Number 0-10 (e.g., &quot;7&quot; or &quot;8.5&quot;)</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">text</p>
+                      <p className="ml-4 text-muted-foreground">Any text response</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Import Button */}
+              <Button
+                onClick={handleImport}
+                disabled={importing || !importFile || !importOrg || !importTemplate || !importWeekOf}
+                className="w-full"
+              >
+                {importing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Importing...
+                  </>
+                ) : (
+                  "Import Scorecard"
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Filter bar */}
