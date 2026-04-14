@@ -20,18 +20,44 @@ export function parseTimeValue(value: number | string): number {
   
   const str = String(value).toLowerCase().trim()
   
-  // Match patterns like "2-4", "2-4 hours", "2 - 4 hrs"
+  // Standard formula used since November:
+  // - Not using AI yet (0 hours) = 0 hours
+  // - 30 minutes - 1 hour = 0.75 hours
+  // - 1-2 hours = 1.5 hours
+  // - 2-4 hours = 3 hours
+  // - 4+ hours = 5.5 hours
+  
+  // Check for "not using" or "0 hours" patterns
+  if (str.includes("not using") || str === "0" || str === "0 hours") {
+    return 0
+  }
+  
+  // Check for "30 min" to "1 hour" range (0.75 hours)
+  if (str.includes("30 min") || str.match(/30\s*m/i) || str.match(/0\.5\s*[-–to]+\s*1/) || str.match(/\.5\s*[-–to]+\s*1/)) {
+    return 0.75
+  }
+  
+  // Match specific ranges with our formula
   const rangeMatch = str.match(/(\d+(?:\.\d+)?)\s*[-–to]+\s*(\d+(?:\.\d+)?)/)
   if (rangeMatch) {
     const low = parseFloat(rangeMatch[1])
     const high = parseFloat(rangeMatch[2])
-    return (low + high) / 2 // Use midpoint
+    
+    // Apply specific formula based on range
+    if (low <= 1 && high <= 2) return 1.5      // 1-2 hours
+    if (low <= 2 && high <= 4) return 3        // 2-4 hours
+    if (low <= 4 && high <= 8) return 5.5      // 4-8 hours (same as 4+)
+    
+    // Fallback to midpoint for other ranges
+    return (low + high) / 2
   }
   
-  // Match "8+" or "8+ hours" patterns
+  // Match "4+" or "4+ hours" patterns = 5.5 hours
   const plusMatch = str.match(/(\d+(?:\.\d+)?)\s*\+/)
   if (plusMatch) {
-    return parseFloat(plusMatch[1]) + 2 // Assume "8+" means ~10 hours
+    const base = parseFloat(plusMatch[1])
+    if (base >= 4) return 5.5
+    return base + 1.5 // For smaller "+" values
   }
   
   // Match plain numbers like "5" or "5 hours"
