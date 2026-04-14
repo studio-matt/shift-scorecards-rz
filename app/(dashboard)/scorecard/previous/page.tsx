@@ -12,6 +12,13 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, CalendarDays, CheckCircle2, Loader2, Trash2, Building2, Clock, Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { getDocuments, getDocument, deleteDocument, COLLECTIONS } from "@/lib/firestore"
 import { useAuth } from "@/lib/auth-context"
@@ -40,6 +47,7 @@ interface AggregatedScorecard {
   totalHours: number
   responseCount: number
   avgHours: number
+  departments: Set<string> // Track unique departments for filtering
 }
 
 interface TemplateQuestion {
@@ -86,25 +94,48 @@ export default function PreviousScorecardsPage() {
   const [questionsLoading, setQuestionsLoading] = useState(false)
   const [selectedResponses, setSelectedResponses] = useState<RawResponse[]>([])
   const [searchQuery, setSearchQuery] = useState("")
+  const [selectedOrg, setSelectedOrg] = useState("all")
+  const [selectedDept, setSelectedDept] = useState("all")
+  const [timePeriod, setTimePeriod] = useState("all")
+  const [orgs, setOrgs] = useState<Array<{ id: string; name: string }>>([])
+  const [departments, setDepartments] = useState<string[]>([])
 
   const fetchScorecards = useCallback(async () => {
     if (!user) return
     try {
       setLoading(true)
       
-      // Fetch responses and organizations
-      const [responseDocs, orgDocs, templateDocs] = await Promise.all([
+      // Fetch responses, organizations, templates, and users
+      const [responseDocs, orgDocs, templateDocs, userDocs] = await Promise.all([
         getDocuments(COLLECTIONS.RESPONSES),
         getDocuments(COLLECTIONS.ORGANIZATIONS),
         getDocuments(COLLECTIONS.TEMPLATES),
+        getDocuments(COLLECTIONS.USERS),
       ])
       
-      // Build org name map
+      // Build org name map and populate orgs list
       const orgNameMap = new Map<string, string>()
+      const orgsList: Array<{ id: string; name: string }> = []
       for (const org of orgDocs) {
         const data = org as Record<string, unknown>
-        orgNameMap.set(org.id, (data.name as string) || "Unknown Organization")
+        const name = (data.name as string) || "Unknown Organization"
+        orgNameMap.set(org.id, name)
+        orgsList.push({ id: org.id, name })
       }
+      setOrgs(orgsList.sort((a, b) => a.name.localeCompare(b.name)))
+      
+      // Build user department map and collect unique departments
+      const userDeptMap = new Map<string, string>()
+      const deptSet = new Set<string>()
+      for (const u of userDocs) {
+        const data = u as Record<string, unknown>
+        const dept = (data.department as string) || ""
+        if (dept) {
+          userDeptMap.set(u.id, dept)
+          deptSet.add(dept)
+        }
+      }
+      setDepartments(Array.from(deptSet).sort())
       
       // Build template question map for finding time_saving questions
       const templateQuestionMap = new Map<string, TemplateQuestion[]>()
@@ -134,6 +165,7 @@ export default function PreviousScorecardsPage() {
       
       for (const r of responses) {
         const key = `${r.organizationId}__${r.weekOf}`
+        const userDept = userDeptMap.get(r.userId) || ""
         
         // Calculate hours from time_saving questions
         let hours = 0
@@ -148,6 +180,8 @@ export default function PreviousScorecardsPage() {
         }
         
         if (!grouped.has(key)) {
+          const deptSet = new Set<string>()
+          if (userDept) deptSet.add(userDept)
           grouped.set(key, {
             key,
             organizationId: r.organizationId,
@@ -160,6 +194,7 @@ export default function PreviousScorecardsPage() {
             totalHours: hours,
             responseCount: 1,
             avgHours: hours,
+            departments: deptSet,
           })
         } else {
           const existing = grouped.get(key)!
@@ -167,6 +202,7 @@ export default function PreviousScorecardsPage() {
           existing.totalHours += hours
           existing.responseCount += 1
           existing.avgHours = Math.round((existing.totalHours / existing.responseCount) * 10) / 10
+          if (userDept) existing.departments.add(userDept)
           // Track latest completion
           if (new Date(r.completedAt) > new Date(existing.latestCompletedAt)) {
             existing.latestCompletedAt = r.completedAt
@@ -230,15 +266,57 @@ export default function PreviousScorecardsPage() {
 
   const selected = scorecards.find((s) => s.key === selectedKey)
   
-  // Filter scorecards by search query
+  // Filter scorecards by search query, org, department, and time period
   const filteredScorecards = scorecards.filter((sc) => {
-    if (!searchQuery.trim()) return true
-    const query = searchQuery.toLowerCase()
-    return (
-      sc.organizationName.toLowerCase().includes(query) ||
-      sc.templateName.toLowerCase().includes(query) ||
-      sc.weekOf.toLowerCase().includes(query)
-    )
+    // Org filter
+    if (selectedOrg !== "all" && sc.organizationId !== selectedOrg) return false
+    
+    // Department filter - scorecard has responses from this department
+    if (selectedDept !== "all" && !sc.departments.has(selectedDept)) return false
+    
+    // Time period filter
+    if (timePeriod !== "all") {
+      const completedDate = new Date(sc.latestCompletedAt)
+      const now = new Date()
+      const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+      const thisQuarter = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1)
+      const lastQuarterStart = new Date(thisQuarter)
+      lastQuarterStart.setMonth(lastQuarterStart.getMonth() - 3)
+      const lastQuarterEnd = new Date(thisQuarter)
+      lastQuarterEnd.setDate(lastQuarterEnd.getDate() - 1)
+      const yearStart = new Date(now.getFullYear(), 0, 1)
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+      switch (timePeriod) {
+        case "this-month":
+          if (completedDate < thisMonth) return false
+          break
+        case "last-30":
+          if (completedDate < thirtyDaysAgo) return false
+          break
+        case "this-quarter":
+          if (completedDate < thisQuarter) return false
+          break
+        case "last-quarter":
+          if (completedDate < lastQuarterStart || completedDate > lastQuarterEnd) return false
+          break
+        case "ytd":
+          if (completedDate < yearStart) return false
+          break
+      }
+    }
+    
+    // Text search
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      return (
+        sc.organizationName.toLowerCase().includes(query) ||
+        sc.templateName.toLowerCase().includes(query) ||
+        sc.weekOf.toLowerCase().includes(query)
+      )
+    }
+    
+    return true
   })
 
   async function handleDelete(e: React.MouseEvent, sc: AggregatedScorecard) {
@@ -394,16 +472,70 @@ export default function PreviousScorecardsPage() {
         </p>
       </div>
 
-      {/* Search/Filter */}
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search by company, template, or date..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9"
-          autoComplete="off"
-        />
+      {/* Filter bar */}
+      <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-3">
+        {/* Search */}
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+            autoComplete="off"
+          />
+        </div>
+
+        {/* Company dropdown */}
+        <Select
+          value={selectedOrg}
+          onValueChange={(val) => {
+            setSelectedOrg(val)
+            setSelectedDept("all") // Reset dept when org changes
+          }}
+        >
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="All Companies" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Companies</SelectItem>
+            {orgs.map((org) => (
+              <SelectItem key={org.id} value={org.id}>
+                {org.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Department dropdown */}
+        <Select value={selectedDept} onValueChange={setSelectedDept}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="All Departments" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Departments</SelectItem>
+            {departments.filter(Boolean).map((dept) => (
+              <SelectItem key={dept} value={dept}>
+                {dept}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Time period dropdown */}
+        <Select value={timePeriod} onValueChange={setTimePeriod}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="Time Period" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Time</SelectItem>
+            <SelectItem value="this-month">This Month</SelectItem>
+            <SelectItem value="last-30">Last 30 Days</SelectItem>
+            <SelectItem value="this-quarter">This Quarter</SelectItem>
+            <SelectItem value="last-quarter">Last Quarter</SelectItem>
+            <SelectItem value="ytd">Year to Date</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="flex flex-col gap-3">
