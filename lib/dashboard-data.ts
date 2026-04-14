@@ -1324,16 +1324,29 @@ export interface OrgHoursMetrics {
 }
 
 // ── Helper: Find time-saving question IDs from templates ──────────────────
-// Returns ALL questions with type === "time_saving"
+// Returns ALL questions that measure time/hours saved
 // Each question represents hours saved on a different task, so we sum them all
 export async function findTimeSavingQuestionIds(): Promise<string[]> {
   const templates = await fetchTemplates()
   const ids: string[] = []
   
-  // Collect ALL questions with explicit type === "time_saving"
   for (const t of templates) {
     for (const q of t.questions || []) {
+      // First check for explicit time_saving type
       if (q.type === "time_saving") {
+        ids.push(q.id)
+        continue
+      }
+      
+      // Fallback: Match questions containing time/hours keywords in text
+      // This catches questions like "How many hours did AI save you this week?"
+      const text = (q.text || "").toLowerCase()
+      if (
+        text.includes("hour") ||
+        text.includes("time saved") ||
+        text.includes("time saving") ||
+        text.includes("minutes saved")
+      ) {
         ids.push(q.id)
       }
     }

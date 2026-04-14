@@ -167,11 +167,18 @@ export default function PreviousScorecardsPage() {
         const key = `${r.organizationId}__${r.weekOf}`
         const userDept = userDeptMap.get(r.userId) || ""
         
-        // Calculate hours from time_saving questions
+        // Calculate hours from time_saving questions or questions with hour/time keywords
         let hours = 0
         const templateQuestions = templateQuestionMap.get(r.templateId) || []
         for (const q of templateQuestions) {
-          if (q.type === "time_saving") {
+          const text = (q.text || "").toLowerCase()
+          const isTimeSaving = q.type === "time_saving" ||
+            text.includes("hour") ||
+            text.includes("time saved") ||
+            text.includes("time saving") ||
+            text.includes("minutes saved")
+          
+          if (isTimeSaving) {
             const val = r.answers[q.id]
             if (val !== undefined && val !== null && val !== "") {
               hours += parseTimeValue(val)
