@@ -10,7 +10,8 @@ import {
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, CalendarDays, CheckCircle2, Loader2, Trash2, Building2, Clock } from "lucide-react"
+import { ArrowLeft, CalendarDays, CheckCircle2, Loader2, Trash2, Building2, Clock, Search } from "lucide-react"
+import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { getDocuments, getDocument, deleteDocument, COLLECTIONS } from "@/lib/firestore"
 import { useAuth } from "@/lib/auth-context"
@@ -84,6 +85,7 @@ export default function PreviousScorecardsPage() {
   const [questions, setQuestions] = useState<TemplateQuestion[]>([])
   const [questionsLoading, setQuestionsLoading] = useState(false)
   const [selectedResponses, setSelectedResponses] = useState<RawResponse[]>([])
+  const [searchQuery, setSearchQuery] = useState("")
 
   const fetchScorecards = useCallback(async () => {
     if (!user) return
@@ -227,6 +229,17 @@ export default function PreviousScorecardsPage() {
   }
 
   const selected = scorecards.find((s) => s.key === selectedKey)
+  
+  // Filter scorecards by search query
+  const filteredScorecards = scorecards.filter((sc) => {
+    if (!searchQuery.trim()) return true
+    const query = searchQuery.toLowerCase()
+    return (
+      sc.organizationName.toLowerCase().includes(query) ||
+      sc.templateName.toLowerCase().includes(query) ||
+      sc.weekOf.toLowerCase().includes(query)
+    )
+  })
 
   async function handleDelete(e: React.MouseEvent, sc: AggregatedScorecard) {
     e.stopPropagation()
@@ -372,7 +385,7 @@ export default function PreviousScorecardsPage() {
 
   return (
     <div>
-      <div className="mb-8">
+      <div className="mb-6">
         <h1 className="text-2xl font-bold text-foreground">
           Previous Scorecards
         </h1>
@@ -381,8 +394,20 @@ export default function PreviousScorecardsPage() {
         </p>
       </div>
 
+      {/* Search/Filter */}
+      <div className="relative mb-6">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search by company, template, or date..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+          autoComplete="off"
+        />
+      </div>
+
       <div className="flex flex-col gap-3">
-        {scorecards.map((sc) => (
+        {filteredScorecards.map((sc) => (
           <Card
             key={sc.key}
             className="cursor-pointer transition-all hover:ring-2 hover:ring-primary/50"
@@ -423,15 +448,15 @@ export default function PreviousScorecardsPage() {
         ))}
       </div>
 
-      {scorecards.length === 0 && (
+      {filteredScorecards.length === 0 && (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <CalendarDays className="mb-4 h-10 w-10 text-muted-foreground" />
             <p className="text-lg font-medium text-foreground">
-              No previous scorecards
+              {searchQuery ? "No matching scorecards" : "No previous scorecards"}
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Completed scorecards will appear here.
+              {searchQuery ? "Try a different search term." : "Completed scorecards will appear here."}
             </p>
           </CardContent>
         </Card>
