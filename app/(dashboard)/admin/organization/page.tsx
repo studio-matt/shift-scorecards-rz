@@ -2017,6 +2017,11 @@ function OrgDetailView({
                     value={memberSearch}
                     onChange={(e) => setMemberSearch(e.target.value)}
                     className="pl-9"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    name="member-search-field"
                   />
                 </div>
               )}

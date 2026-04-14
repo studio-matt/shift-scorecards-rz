@@ -203,20 +203,8 @@ export default function DashboardPage() {
         getDocument(COLLECTIONS.SETTINGS, "dashboardTargets"),
       ])
       
-      // Debug: Log what responses we have
-      console.log("[v0] Total responses fetched:", allResponses.length)
-      if (allResponses.length > 0) {
-        console.log("[v0] Sample response completedAt:", allResponses[0].completedAt)
-        console.log("[v0] Response dates range:", 
-          allResponses.map(r => r.completedAt).sort()[0], 
-          "to", 
-          allResponses.map(r => r.completedAt).sort().pop()
-        )
-      }
-      
       // Filter responses by selected time period
       const responses = filterByTimePeriod(allResponses, timePeriod)
-      console.log("[v0] After time filter (" + timePeriod + "):", responses.length, "responses")
       if (targetsDoc) {
         const t = targetsDoc as Record<string, unknown>
         setTargets((prev) => ({
@@ -291,6 +279,7 @@ export default function DashboardPage() {
     findTimeSavingQuestionIds(),
     findConfidenceQuestionIds(),
   ])
+
       
       // For admin: compute org hours based on current filter
       const selectedOrgDoc = orgDocs.find((o) => o.id === selectedOrg) as unknown as Organization | undefined
@@ -363,7 +352,6 @@ export default function DashboardPage() {
           }
         }
         setOrgUserDepartments(Array.from(userDepts).sort())
-        console.log("[v0] Departments from users in org:", Array.from(userDepts))
       } else {
         setOrgUserDepartments([])
       }
@@ -440,8 +428,8 @@ export default function DashboardPage() {
     
     // Also add departments from the performance data (these come from actual user responses)
     deptPerformance.forEach((dp) => {
-      if (dp.name && dp.name !== "Unknown") {
-        allDepts.add(dp.name)
+      if (dp.department && dp.department !== "Unknown") {
+        allDepts.add(dp.department)
       }
     })
     

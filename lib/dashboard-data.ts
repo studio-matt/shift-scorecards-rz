@@ -1436,36 +1436,23 @@ export function computeUserHoursMetrics(
 }
 
 // ── Compute hours metrics for an organization ─────────────────────────
+// NOTE: This function now computes metrics from ALL passed-in responses
+// The responses should already be filtered by the desired time period (month, quarter, YTD, etc.)
+// by the caller. This function sums up hours from ALL responses passed to it.
 export function computeOrgHoursMetrics(
   responses: RawResponse[],
   timeSavingIds: string[],
   confidenceIds: string[], // Changed to array to support multiple confidence questions
   hourlyRate: number = 100,
 ): OrgHoursMetrics {
-  const { thisMonthStart, lastMonthStart, lastMonthEnd } = getMonthBoundaries()
-  
-  // Values are already in HOURS (not minutes) - users enter hours directly (1-10 scale = 1-10 hours)
-  let totalHoursVal = 0
-  let thisMonthHoursVal = 0
-  let lastMonthHoursVal = 0
-  let thisMonthResponses = 0
-  let lastMonthResponses = 0
-  const allUsers = new Set<string>() // ALL users who ever submitted ANY scorecard
-  const allConfidenceScores: number[] = [] // ALL confidence scores ever
-  const thisMonthConfidenceScores: number[] = []
-  const lastMonthConfidenceScores: number[] = []
+  // Sum hours from ALL passed-in responses (already filtered by caller's time period)
+  let periodHoursVal = 0
+  const allUsers = new Set<string>()
+  const allConfidenceScores: number[] = []
   
   for (const r of responses) {
-    const responseDate = new Date(r.completedAt)
-    const isThisMonth = responseDate >= thisMonthStart
-    const isLastMonth = responseDate >= lastMonthStart && responseDate <= lastMonthEnd
-    
-    // Track ALL users who have ever submitted any scorecard (Active Participants)
+    // Track ALL users who submitted scorecards in this period
     allUsers.add(r.userId)
-    
-    // Count responses by month
-    if (isThisMonth) thisMonthResponses++
-    if (isLastMonth) lastMonthResponses++
     
     // Sum all time-saving question answers
     // Use parseTimeValue to handle both numeric values and text ranges like "2-4 hours"
@@ -1474,9 +1461,7 @@ export function computeOrgHoursMetrics(
       if (val !== undefined && val !== null && val !== "") {
         const hours = parseTimeValue(val)
         if (hours > 0) {
-          totalHoursVal += hours
-          if (isThisMonth) thisMonthHoursVal += hours
-          if (isLastMonth) lastMonthHoursVal += hours
+          periodHoursVal += hours
         }
       }
     }
@@ -1485,83 +1470,59 @@ export function computeOrgHoursMetrics(
     for (const confId of confidenceIds) {
       const conf = r.answers[confId]
       if (typeof conf === "number" && conf >= 1 && conf <= 10) {
-        allConfidenceScores.push(conf) // Track ALL scores ever
-        if (isThisMonth) thisMonthConfidenceScores.push(conf)
-        if (isLastMonth) lastMonthConfidenceScores.push(conf)
+        allConfidenceScores.push(conf)
       }
     }
   }
   
-  // Values parsed as hours - no additional conversion needed
-  const totalHours = totalHoursVal
-  const thisMonthHoursRaw = thisMonthHoursVal
-  const lastMonthHoursRaw = lastMonthHoursVal
+  // Use total hours from the period (already filtered by caller)
+  const periodHours = periodHoursVal
   
-  // If no data this month, use last month as "current" for display purposes
-  // This prevents showing all zeros at the start of a new month
-  const hasThisMonthData = thisMonthHoursVal > 0
-  const monthlyHours = hasThisMonthData ? thisMonthHoursRaw : lastMonthHoursRaw
-  const lastMonthHours = hasThisMonthData ? lastMonthHoursRaw : 0 // No comparison if showing last month
-  
-  // MoM change (only meaningful if we have this month's data)
-  const monthOverMonthChange = hasThisMonthData ? (monthlyHours - lastMonthHoursRaw) : 0
-  const monthOverMonthPercent = hasThisMonthData && lastMonthHoursRaw > 0
-    ? ((monthlyHours - lastMonthHoursRaw) / lastMonthHoursRaw) * 100
-    : 0
-  
-  // Active participants = ALL users who have EVER submitted ANY scorecard
+  // Active participants = users in this filtered period
   const activeParticipants = allUsers.size
   
   // Calculate productivity as percentage of total work capacity saved
   // Total work capacity for all participants = activeParticipants * 160 hours/month
   // Productivity = hours saved / total work capacity * 100
   const totalWorkCapacity = activeParticipants > 0 ? activeParticipants * 160 : 160
-  const avgProductivityPercent = (monthlyHours / totalWorkCapacity) * 100
+  const avgProductivityPercent = (periodHours / totalWorkCapacity) * 100
   
 
   
   // FTE equivalent (160 hours = 1 FTE per month) - this is the company total, not per person
-  const fteEquivalent = monthlyHours / 160
+  const fteEquivalent = periodHours / 160
   
-  // Annual projections
-  const annualRunRate = monthlyHours * 12
+  // Annual projections (extrapolate from period data)
+  const annualRunRate = periodHours * 12
   
   // Dollar values
-  const monthlyValue = monthlyHours * hourlyRate
-  const annualValue = monthlyValue * 12
-  const perPersonValue = activeParticipants > 0 ? monthlyValue / activeParticipants : 0
+  const periodValue = periodHours * hourlyRate
+  const annualValue = periodValue * 12
+  const perPersonValue = activeParticipants > 0 ? periodValue / activeParticipants : 0
   
-  // Confidence averages - use ALL scores ever for the main average
-  // If we have this month's data, use that for comparison; otherwise fall back to all-time
+  // Confidence average from all responses in the period
   const avgConfidence = allConfidenceScores.length > 0
     ? allConfidenceScores.reduce((a, b) => a + b, 0) / allConfidenceScores.length
     : 0
-  const thisMonthConfidence = thisMonthConfidenceScores.length > 0
-    ? thisMonthConfidenceScores.reduce((a, b) => a + b, 0) / thisMonthConfidenceScores.length
-    : avgConfidence // Fall back to all-time if no this month data
-  const lastMonthConfidence = lastMonthConfidenceScores.length > 0
-    ? lastMonthConfidenceScores.reduce((a, b) => a + b, 0) / lastMonthConfidenceScores.length
-    : 0
-  const confidenceChange = thisMonthConfidence - lastMonthConfidence
   
   return {
-    totalHoursSaved: Math.round(totalHours * 10) / 10,
-    monthlyHours: Math.round(monthlyHours * 10) / 10,
-    lastMonthHours: Math.round(lastMonthHours * 10) / 10,
-    monthOverMonthChange: Math.round(monthOverMonthChange * 10) / 10,
-    monthOverMonthPercent: Math.round(monthOverMonthPercent * 10) / 10,
+    totalHoursSaved: Math.round(periodHours * 10) / 10,
+    monthlyHours: Math.round(periodHours * 10) / 10, // Now represents "period hours"
+    lastMonthHours: 0, // No longer computed - period is pre-filtered
+    monthOverMonthChange: 0,
+    monthOverMonthPercent: 0,
     avgProductivityPercent: Math.round(avgProductivityPercent * 10) / 10,
     avgConfidence: Math.round(avgConfidence * 10) / 10,
-    lastMonthConfidence: Math.round(lastMonthConfidence * 10) / 10,
-    confidenceChange: Math.round(confidenceChange * 10) / 10,
+    lastMonthConfidence: 0,
+    confidenceChange: 0,
     fteEquivalent: Math.round(fteEquivalent * 10) / 10,
     annualRunRate: Math.round(annualRunRate),
-    monthlyValue: Math.round(monthlyValue),
+    monthlyValue: Math.round(periodValue),
     annualValue: Math.round(annualValue),
     perPersonValue: Math.round(perPersonValue),
     activeParticipants,
-    thisMonthResponses,
-    lastMonthResponses,
+    thisMonthResponses: responses.length,
+    lastMonthResponses: 0,
   }
 }
 
