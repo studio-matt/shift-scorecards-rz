@@ -10,9 +10,9 @@ import {
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, CalendarDays, CheckCircle2, Loader2 } from "lucide-react"
+import { ArrowLeft, CalendarDays, CheckCircle2, Loader2, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { getDocuments, getDocument, COLLECTIONS } from "@/lib/firestore"
+import { getDocuments, getDocument, deleteDocument, COLLECTIONS } from "@/lib/firestore"
 import { useAuth } from "@/lib/auth-context"
 
 interface PastScorecard {
@@ -132,6 +132,20 @@ export default function PreviousScorecardsPage() {
   }
 
   const selected = scorecards.find((s) => s.id === selectedId)
+
+  async function handleDelete(e: React.MouseEvent, id: string) {
+    e.stopPropagation() // Prevent card click from triggering
+    if (!confirm("Are you sure you want to delete this scorecard? This cannot be undone.")) {
+      return
+    }
+    try {
+      await deleteDocument(COLLECTIONS.RESPONSES, id)
+      setScorecards((prev) => prev.filter((sc) => sc.id !== id))
+    } catch (err) {
+      console.error("Failed to delete scorecard:", err)
+      alert("Failed to delete scorecard. Please try again.")
+    }
+  }
 
   if (loading) {
     return (
@@ -276,6 +290,14 @@ export default function PreviousScorecardsPage() {
               <Badge className="bg-primary text-primary-foreground text-sm px-3 py-1">
                 {sc.score}
               </Badge>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="ml-2 h-8 w-8 text-muted-foreground hover:text-destructive"
+                onClick={(e) => handleDelete(e, sc.id)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
             </CardContent>
           </Card>
         ))}
