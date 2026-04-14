@@ -1230,7 +1230,7 @@ export function computePersonalBenchmark(responses: RawResponse[], userId: strin
 
   // My velocity
   const vel = computeScoreVelocity(myResponses)
-  const myVel = vel.find((v) => v.userId === userId)
+  const myVel = Array.isArray(vel) ? vel.find((v) => v.userId === userId) : undefined
 
   return {
     myAvg: Math.round(myAvg * 10) / 10,

@@ -197,17 +197,14 @@ export default function DashboardPage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      console.log("[v0] loadData: selectedOrg=", selectedOrg, "selectedDept=", selectedDept)
       const [orgDocs, allResponses, targetsDoc] = await Promise.all([
         getOrganizations(),
         fetchAllResponses(selectedOrg, selectedDept),
         getDocument(COLLECTIONS.SETTINGS, "dashboardTargets"),
       ])
-      console.log("[v0] loadData: fetched", allResponses.length, "responses")
       
       // Filter responses by selected time period
       const responses = filterByTimePeriod(allResponses, timePeriod)
-      console.log("[v0] loadData: after time filter", responses.length, "responses")
       if (targetsDoc) {
         const t = targetsDoc as Record<string, unknown>
         setTargets((prev) => ({
@@ -359,10 +356,7 @@ export default function DashboardPage() {
         setOrgUserDepartments([])
       }
     } catch (err) {
-      console.error("[v0] Failed to load dashboard data:", err)
-      if (err instanceof Error) {
-        console.error("[v0] Error stack:", err.stack)
-      }
+      console.error("Failed to load dashboard data:", err)
     } finally {
       setLoading(false)
     }
@@ -435,11 +429,13 @@ export default function DashboardPage() {
     })
     
     // Also add departments from the performance data (these come from actual user responses)
-    deptPerformance.forEach((dp) => {
-      if (dp?.department && dp.department !== "Unknown") {
-        allDepts.add(dp.department)
-      }
-    })
+    if (Array.isArray(deptPerformance)) {
+      deptPerformance.forEach((dp) => {
+        if (dp?.department && dp.department !== "Unknown") {
+          allDepts.add(dp.department)
+        }
+      })
+    }
     
     return Array.from(allDepts).sort()
   }, [selectedOrg, activeOrg, orgs, deptPerformance, orgUserDepartments])
@@ -528,10 +524,7 @@ export default function DashboardPage() {
 
             <Select
               value={selectedDept}
-              onValueChange={(val) => {
-                console.log("[v0] Department changed to:", val)
-                setSelectedDept(val)
-              }}
+              onValueChange={setSelectedDept}
             >
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="All Departments" />
