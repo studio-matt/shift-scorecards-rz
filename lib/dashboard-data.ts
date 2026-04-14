@@ -75,8 +75,23 @@ export async function fetchAllResponses(
   if (orgId && orgId !== "all") {
     responses = responses.filter((r) => r.organizationId === orgId)
   }
+  
+  // Filter by department using user's CURRENT department from profile
+  // This matches how computeDepartmentPerformance aggregates data
   if (department && department !== "all") {
-    responses = responses.filter((r) => r.department === department)
+    const allUsers = await getDocuments(COLLECTIONS.USERS)
+    const userDeptMap = new Map<string, string>()
+    for (const u of allUsers) {
+      const userData = u as Record<string, unknown>
+      const dept = (userData.department as string) || ""
+      if (dept) {
+        userDeptMap.set(u.id, dept)
+      }
+    }
+    responses = responses.filter((r) => {
+      const userDept = userDeptMap.get(r.userId) || r.department || ""
+      return userDept === department
+    })
   }
 
   return responses
