@@ -893,12 +893,16 @@ function OrgDetailView({
     setInviteSending(true)
     const emailsToSend: string[] = []
     const skippedEmails: string[] = []
+    const newDepartments = new Set<string>() // Track new departments from CSV
     
     // Get existing emails to prevent duplicates
     const existingUsers = await getUsersByOrg(org.id)
     const existingEmails = new Set(
       existingUsers.map((u) => ((u as Record<string, unknown>).email as string)?.toLowerCase() ?? "")
     )
+    
+    // Get existing org departments for comparison
+    const existingDepts = new Set<string>((org.departments as string[]) || [])
     
     try {
       if (inviteCsvFile) {
@@ -917,6 +921,12 @@ function OrgDetailView({
           const firstName = colIdx.firstName >= 0 ? properCase(parts[colIdx.firstName] ?? "") : ""
           const lastName = colIdx.lastName >= 0 ? properCase(parts[colIdx.lastName] ?? "") : ""
           const dept = inviteCsvDepartment || (colIdx.department >= 0 ? parts[colIdx.department] : "") || ""
+          
+          // Track new departments that don't exist in org yet
+          if (dept && !existingDepts.has(dept)) {
+            newDepartments.add(dept)
+          }
+          
           if (email && email.includes("@")) {
             // Skip if user already exists
             if (existingEmails.has(email)) {
@@ -937,6 +947,13 @@ function OrgDetailView({
             existingEmails.add(email) // Track to prevent duplicates within same CSV
             emailsToSend.push(email)
           }
+        }
+        
+        // Add any new departments from CSV to the organization
+        if (newDepartments.size > 0) {
+          const updatedDepts = [...existingDepts, ...newDepartments].sort()
+          await updateDocument(COLLECTIONS.ORGANIZATIONS, org.id, { departments: updatedDepts })
+          setDepartments(updatedDepts) // Update local state immediately
         }
       } else if (inviteEmail) {
         const emailLower = inviteEmail.toLowerCase()
