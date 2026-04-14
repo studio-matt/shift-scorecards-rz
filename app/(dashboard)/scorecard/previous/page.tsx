@@ -743,26 +743,54 @@ export default function PreviousScorecardsPage() {
               
               {/* Legend */}
               {showLegend && (
-                <div className="rounded-lg border border-border bg-muted/50 p-4">
+                <div className="rounded-lg border border-border bg-muted/50 p-4 max-h-80 overflow-y-auto">
                   <h4 className="mb-3 font-medium text-foreground">Question Types & Valid Values</h4>
-                  <div className="space-y-3 text-sm">
+                  <div className="grid gap-3 text-sm md:grid-cols-2">
                     <div>
-                      <p className="font-medium text-foreground">time_saving (Hours Saved)</p>
-                      <ul className="ml-4 mt-1 list-disc text-muted-foreground">
-                        <li>&quot;Not using AI yet&quot; or &quot;0 hours&quot; = 0 hrs</li>
-                        <li>&quot;30 minutes - 1 hour&quot; = 0.75 hrs</li>
+                      <p className="font-medium text-foreground">time_saving</p>
+                      <p className="text-xs text-muted-foreground mb-1">Hours saved - used in Hours Saved calculations</p>
+                      <ul className="ml-4 list-disc text-muted-foreground text-xs">
+                        <li>&quot;Not using AI yet&quot; = 0 hrs</li>
+                        <li>&quot;30 min - 1 hour&quot; = 0.75 hrs</li>
                         <li>&quot;1-2 hours&quot; = 1.5 hrs</li>
                         <li>&quot;2-4 hours&quot; = 3 hrs</li>
                         <li>&quot;4+ hours&quot; = 5.5 hrs</li>
                       </ul>
                     </div>
                     <div>
-                      <p className="font-medium text-foreground">confidence / slider</p>
-                      <p className="ml-4 text-muted-foreground">Number 0-10 (e.g., &quot;7&quot; or &quot;8.5&quot;)</p>
+                      <p className="font-medium text-foreground">confidence</p>
+                      <p className="text-xs text-muted-foreground mb-1">1-10 scale for confidence metrics</p>
+                      <p className="ml-4 text-muted-foreground text-xs">Number 1-10 (e.g., &quot;7&quot; or &quot;8&quot;)</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">scale</p>
+                      <p className="text-xs text-muted-foreground mb-1">Generic 1-10 scale for ratings</p>
+                      <p className="ml-4 text-muted-foreground text-xs">Number 1-10 (e.g., &quot;6&quot;)</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">number</p>
+                      <p className="text-xs text-muted-foreground mb-1">Any numeric input</p>
+                      <p className="ml-4 text-muted-foreground text-xs">Any number (e.g., &quot;5&quot;, &quot;12&quot;)</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">multichoice</p>
+                      <p className="text-xs text-muted-foreground mb-1">Multiple choice selection</p>
+                      <p className="ml-4 text-muted-foreground text-xs">Option value (e.g., &quot;A&quot;, &quot;B&quot;, &quot;C&quot;)</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">win</p>
+                      <p className="text-xs text-muted-foreground mb-1">Biggest win - shown in Win of the Month</p>
+                      <p className="ml-4 text-muted-foreground text-xs">Text narrative of achievement</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">goals</p>
+                      <p className="text-xs text-muted-foreground mb-1">Weekly goals with completion tracking</p>
+                      <p className="ml-4 text-muted-foreground text-xs">Text describing goals</p>
                     </div>
                     <div>
                       <p className="font-medium text-foreground">text</p>
-                      <p className="ml-4 text-muted-foreground">Any text response</p>
+                      <p className="text-xs text-muted-foreground mb-1">Free-form text response</p>
+                      <p className="ml-4 text-muted-foreground text-xs">Any text</p>
                     </div>
                   </div>
                 </div>
