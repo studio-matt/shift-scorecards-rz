@@ -1298,7 +1298,16 @@ function OrgDetailView({
   )
 
   return (
-    <div>
+    <div
+      onDragOver={(e) => {
+        // Prevent browser from opening the file
+        e.preventDefault()
+      }}
+      onDrop={(e) => {
+        // Prevent browser from opening the file if dropped outside upload zone
+        e.preventDefault()
+      }}
+    >
       <div className="mb-8">
         <button
           type="button"
@@ -1717,30 +1726,41 @@ function OrgDetailView({
                     </div>
                     <div className="flex flex-col gap-2">
                       <Label>Organization Logo</Label>
-                      <div className="flex items-center gap-3">
+                      <div 
+                        className={cn(
+                          "flex items-center gap-3 rounded-lg border-2 border-dashed p-3 transition-colors",
+                          logoDragging 
+                            ? "border-primary bg-primary/10" 
+                            : "border-transparent"
+                        )}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setLogoDragging(true)
+                        }}
+                        onDragEnter={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setLogoDragging(true)
+                        }}
+                        onDragLeave={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          // Only set to false if leaving the container (not entering a child)
+                          const rect = e.currentTarget.getBoundingClientRect()
+                          const x = e.clientX
+                          const y = e.clientY
+                          if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+                            setLogoDragging(false)
+                          }
+                        }}
+                        onDrop={handleLogoDrop}
+                      >
                         <div 
                           className={cn(
-                            "flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border-2 border-dashed bg-card overflow-hidden transition-colors",
-                            logoDragging 
-                              ? "border-primary bg-primary/10" 
-                              : "border-border"
+                            "flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border bg-card overflow-hidden transition-colors",
+                            logoDragging ? "border-primary" : "border-border"
                           )}
-                          onDragOver={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            setLogoDragging(true)
-                          }}
-                          onDragEnter={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            setLogoDragging(true)
-                          }}
-                          onDragLeave={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            setLogoDragging(false)
-                          }}
-                          onDrop={handleLogoDrop}
                         >
                           {logoUrl && !logoDragging ? (
                             <img
@@ -1779,7 +1799,7 @@ function OrgDetailView({
                             disabled={logoUploading}
                           />
                           <p className="text-[11px] text-muted-foreground">
-                            Drag & drop or click. PNG, JPG, GIF, WebP. Max 2MB.
+                            {logoDragging ? "Drop image to upload" : "Drag & drop or click. PNG, JPG, GIF, WebP. Max 2MB."}
                           </p>
                           {logoUrl && (
                             <button
