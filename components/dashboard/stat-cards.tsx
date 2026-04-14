@@ -319,6 +319,15 @@ const adminIconColors = [
 ]
 
 export function AdminStatCards({ data: s, targets, hoursMetrics, hourlyRate = 75 }: AdminStatCardsProps) {
+  // Defensive: ensure s exists and has required properties
+  if (!s) {
+    return (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <p className="text-sm text-muted-foreground">Loading stats...</p>
+      </div>
+    )
+  }
+  
   const tCompletionRate = targets?.completionRate ?? 85
   const tActiveUsers = targets?.activeUsers ?? 100
   const tScorecardsSent = targets?.scorecardsSent ?? 50
@@ -363,43 +372,59 @@ export function AdminStatCards({ data: s, targets, hoursMetrics, hourlyRate = 75
   }
 
   // Hours-based cards when metrics available
+  // Safely access hoursMetrics properties with defaults
+  const h = hoursMetrics ?? {
+    monthlyHours: 0,
+    monthOverMonthChange: 0,
+    lastMonthHours: 0,
+    avgProductivityPercent: 0,
+    fteEquivalent: 0,
+    activeParticipants: 0,
+    monthlyValue: 0,
+    annualValue: 0,
+    avgConfidence: 0,
+    confidenceChange: 0,
+    lastMonthConfidence: 0,
+    thisMonthResponses: 0,
+  }
+  
   const adminCards = hoursMetrics ? [
     {
       label: "Hours Saved This Period",
-      value: formatHours(hoursMetrics.monthlyHours),
-      change: formatHoursChange(hoursMetrics.monthOverMonthChange, hoursMetrics.lastMonthHours),
+      value: formatHours(h.monthlyHours ?? 0),
+      change: formatHoursChange(h.monthOverMonthChange ?? 0, h.lastMonthHours ?? 0),
       icon: Clock,
-      positive: hoursMetrics.lastMonthHours === 0 || hoursMetrics.monthOverMonthChange >= 0,
+      positive: (h.lastMonthHours ?? 0) === 0 || (h.monthOverMonthChange ?? 0) >= 0,
       explanation: METRIC_EXPLANATIONS.totalHoursSaved,
     },
     {
       label: "Productivity Gain",
-      value: `${hoursMetrics.avgProductivityPercent.toFixed(1)}%`,
-      change: `${hoursMetrics.fteEquivalent.toFixed(1)} FTE equivalent (${hoursMetrics.activeParticipants} people)`,
+      value: `${(h.avgProductivityPercent ?? 0).toFixed(1)}%`,
+      change: `${(h.fteEquivalent ?? 0).toFixed(1)} FTE equivalent (${h.activeParticipants ?? 0} people)`,
       icon: Gauge,
       positive: true,
       explanation: METRIC_EXPLANATIONS.productivityGain,
     },
     {
       label: "Value Created",
-      value: formatValue(hoursMetrics.monthlyValue),
-      change: `${formatValue(hoursMetrics.annualValue)} annual run rate`,
+      value: formatValue(h.monthlyValue ?? 0),
+      change: `${formatValue(h.annualValue ?? 0)} annual run rate`,
       icon: DollarSign,
       positive: true,
       explanation: METRIC_EXPLANATIONS.valueCreated(hourlyRate),
     },
     {
       label: "Avg Confidence",
-      value: hoursMetrics.avgConfidence.toFixed(1),
-      change: formatConfidenceChange(hoursMetrics.confidenceChange, hoursMetrics.lastMonthConfidence),
+      value: (h.avgConfidence ?? 0).toFixed(1),
+      change: formatConfidenceChange(h.confidenceChange ?? 0, h.lastMonthConfidence ?? 0),
       icon: Target,
-      positive: hoursMetrics.lastMonthConfidence === 0 || hoursMetrics.confidenceChange >= 0,
+      positive: (h.lastMonthConfidence ?? 0) === 0 || (h.confidenceChange ?? 0) >= 0,
       explanation: METRIC_EXPLANATIONS.avgConfidence,
     },
     {
       label: "Active Participants",
-      value: hoursMetrics.activeParticipants.toLocaleString(),
-      change: `${hoursMetrics.thisMonthResponses} scorecards this month`,
+      value: (h.activeParticipants ?? 0).toLocaleString(),
+      change: `${h.thisMonthResponses ?? 0} scorecards this month`,
       icon: Users,
       positive: true,
       explanation: METRIC_EXPLANATIONS.activeParticipants,
