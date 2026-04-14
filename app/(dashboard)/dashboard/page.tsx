@@ -43,7 +43,7 @@ import {
   ProductivityHero,
   type ProductivityHeroData,
 } from "@/components/dashboard/user-analytics"
-import { getOrganizations, getDocument, getDocuments, COLLECTIONS } from "@/lib/firestore"
+import { getOrganizations, getDocument, getDocuments, getUsersByOrg, COLLECTIONS } from "@/lib/firestore"
 import {
   fetchAllResponses,
   computeAdminStats,
@@ -129,6 +129,7 @@ export default function DashboardPage() {
     fieldAverage: 6.2,
   })
   const [userGoals, setUserGoals] = useState<GoalEntry[]>([])
+  const [orgUserDepartments, setOrgUserDepartments] = useState<string[]>([]) // Departments from users in selected org
 
   // Handle marking a goal as complete
   const handleMarkGoalComplete = useCallback((goalId: string) => {
@@ -202,8 +203,20 @@ export default function DashboardPage() {
         getDocument(COLLECTIONS.SETTINGS, "dashboardTargets"),
       ])
       
+      // Debug: Log what responses we have
+      console.log("[v0] Total responses fetched:", allResponses.length)
+      if (allResponses.length > 0) {
+        console.log("[v0] Sample response completedAt:", allResponses[0].completedAt)
+        console.log("[v0] Response dates range:", 
+          allResponses.map(r => r.completedAt).sort()[0], 
+          "to", 
+          allResponses.map(r => r.completedAt).sort().pop()
+        )
+      }
+      
       // Filter responses by selected time period
       const responses = filterByTimePeriod(allResponses, timePeriod)
+      console.log("[v0] After time filter (" + timePeriod + "):", responses.length, "responses")
       if (targetsDoc) {
         const t = targetsDoc as Record<string, unknown>
         setTargets((prev) => ({
@@ -216,7 +229,11 @@ export default function DashboardPage() {
       }
       setOrgs(orgDocs as unknown as Organization[])
 
-      // Compute all aggregations in parallel
+      // Compute department performance from ALL responses (unfiltered by time) for dropdown population
+      // But use time-filtered responses for the actual metrics display
+      const deptFromAll = computeDepartmentPerformance(allResponses)
+      
+      // Compute all aggregations in parallel using time-filtered responses
       const [stats, trend, dept, performers, improved, questions, recent] =
         await Promise.all([
           computeAdminStats(responses),
@@ -230,7 +247,8 @@ export default function DashboardPage() {
 
       setAdminStats(stats)
       setWeeklyTrend(trend)
-      setDeptPerformance(dept)
+      // Use department data from ALL responses for dropdown, but chart shows filtered data
+      setDeptPerformance(responses.length > 0 ? dept : deptFromAll)
       setTopPerformers(performers)
       setMostImproved(improved)
       setQuestionResults(questions)
@@ -333,6 +351,22 @@ export default function DashboardPage() {
         
         setUserGoals(extractedGoals.slice(0, 10)) // Show last 10 goals
       }
+      
+      // Fetch departments from users in the selected organization
+      if (selectedOrg && selectedOrg !== "all") {
+        const orgUsers = await getUsersByOrg(selectedOrg)
+        const userDepts = new Set<string>()
+        for (const u of orgUsers) {
+          const userData = u as Record<string, unknown>
+          if (userData.department && typeof userData.department === "string") {
+            userDepts.add(userData.department)
+          }
+        }
+        setOrgUserDepartments(Array.from(userDepts).sort())
+        console.log("[v0] Departments from users in org:", Array.from(userDepts))
+      } else {
+        setOrgUserDepartments([])
+      }
     } catch (err) {
       console.error("Failed to load dashboard data:", err)
     } finally {
@@ -385,8 +419,10 @@ export default function DashboardPage() {
     }
   }, [isSuperAdmin, activeOrg?.backgroundColor, activeOrg?.buttonColor, activeOrg?.buttonFontColor, activeOrg?.accentColor, selectedOrg, setSelectedOrgColor, setSelectedOrgButtonColor, setSelectedOrgButtonFontColor, setSelectedOrgAccentColor])
   
-  // Get departments from both the org config AND from the department performance data
-  // This ensures the dropdown matches what's shown in the Department Performance chart
+  // Get departments from multiple sources:
+  // 1. Org config (departments array)
+  // 2. Users in the selected org (department field)
+  // 3. Department performance data (from responses)
   const departments = useMemo(() => {
     const allDepts = new Set<string>()
     
@@ -399,6 +435,9 @@ export default function DashboardPage() {
       (activeOrg.departments as string[]).forEach((d: string) => allDepts.add(d))
     }
     
+    // Add departments from users in the selected org (most reliable source)
+    orgUserDepartments.forEach((d) => allDepts.add(d))
+    
     // Also add departments from the performance data (these come from actual user responses)
     deptPerformance.forEach((dp) => {
       if (dp.name && dp.name !== "Unknown") {
@@ -407,7 +446,7 @@ export default function DashboardPage() {
     })
     
     return Array.from(allDepts).sort()
-  }, [selectedOrg, activeOrg, orgs, deptPerformance])
+  }, [selectedOrg, activeOrg, orgs, deptPerformance, orgUserDepartments])
 
   const filterLabel = useMemo(() => {
     const parts: string[] = []

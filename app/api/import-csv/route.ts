@@ -357,6 +357,7 @@ export async function POST(request: Request) {
           templateId: template.id,
           userId,
           organizationId: results.robLevineOrgId,
+          department,   // Include department in response for filtering
           answers,
           completedAt,  // Use actual submit date from CSV
           weekOf,       // Week calculated from submit date
@@ -408,6 +409,7 @@ export async function POST(request: Request) {
         templateId: template.id,
         userId: mattUserId,
         organizationId: results.envoyOrgId,
+        department: "Design",  // Matt's department
         answers: mattAnswers,
         completedAt: now,
         weekOf,
