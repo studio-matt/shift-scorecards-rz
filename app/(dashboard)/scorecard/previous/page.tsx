@@ -786,6 +786,17 @@ export default function PreviousScorecardsPage() {
                       </ul>
                     </div>
                     <div>
+                      <p className="font-medium text-foreground">time_saving_minutes</p>
+                      <p className="text-xs text-muted-foreground mb-1">Minutes saved - midpoint rounded up</p>
+                      <ul className="ml-4 list-disc text-muted-foreground text-xs">
+                        <li>&quot;Under 2 min&quot; = 1 min</li>
+                        <li>&quot;2-5 min&quot; = 4 min</li>
+                        <li>&quot;6-10 min&quot; = 8 min</li>
+                        <li>&quot;11-15 min&quot; = 13 min</li>
+                        <li>&quot;16+ min&quot; = 20 min</li>
+                      </ul>
+                    </div>
+                    <div>
                       <p className="font-medium text-foreground">confidence</p>
                       <p className="text-xs text-muted-foreground mb-1">1-10 scale for confidence metrics</p>
                       <p className="ml-4 text-muted-foreground text-xs">Number 1-10 (e.g., &quot;7&quot; or &quot;8&quot;)</p>

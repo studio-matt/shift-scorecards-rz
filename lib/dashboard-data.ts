@@ -70,6 +70,62 @@ export function parseTimeValue(value: number | string): number {
 }
 
 /**
+ * Parse minute ranges and return minutes as a number (rounded up from midpoint).
+ * Examples:
+ * - "Under 2 minutes" → 1 min (midpoint of 0-2, rounded up)
+ * - "2-5 minutes" → 4 min (midpoint 3.5, rounded up)
+ * - "6-10 minutes" → 8 min (midpoint 8)
+ * - "11-15 minutes" → 13 min (midpoint 13)
+ * - "16+ minutes" → 20 min (estimate)
+ * - "Not using AI yet" → 0 min
+ */
+export function parseMinuteValue(value: number | string): number {
+  if (typeof value === "number") {
+    return Math.ceil(value)
+  }
+  
+  const str = String(value).toLowerCase().trim()
+  
+  // Check for "not using" or "0" patterns
+  if (str.includes("not using") || str === "0" || str === "0 min" || str === "0 minutes") {
+    return 0
+  }
+  
+  // Check for "under X" patterns (e.g., "under 2 minutes")
+  const underMatch = str.match(/under\s*(\d+)/)
+  if (underMatch) {
+    const upper = parseFloat(underMatch[1])
+    // Midpoint of 0 to upper, rounded up
+    return Math.ceil(upper / 2)
+  }
+  
+  // Match ranges like "2-5", "6-10", "11-15"
+  const rangeMatch = str.match(/(\d+(?:\.\d+)?)\s*[-–to]+\s*(\d+(?:\.\d+)?)/)
+  if (rangeMatch) {
+    const low = parseFloat(rangeMatch[1])
+    const high = parseFloat(rangeMatch[2])
+    // Midpoint rounded up
+    return Math.ceil((low + high) / 2)
+  }
+  
+  // Match "16+" or "X+ minutes" patterns
+  const plusMatch = str.match(/(\d+(?:\.\d+)?)\s*\+/)
+  if (plusMatch) {
+    const base = parseFloat(plusMatch[1])
+    // Estimate: base + 25% more (e.g., 16+ → 20)
+    return Math.ceil(base * 1.25)
+  }
+  
+  // Match plain numbers like "5" or "5 minutes"
+  const numberMatch = str.match(/^(\d+(?:\.\d+)?)/)
+  if (numberMatch) {
+    return Math.ceil(parseFloat(numberMatch[1]))
+  }
+  
+  return 0
+}
+
+/**
  * Multiplier for converting weekly responses to monthly estimates.
  * If an organization uses weekly scorecards, multiply by 4 for monthly totals.
  */
@@ -1355,6 +1411,24 @@ export async function findTimeSavingQuestionIds(): Promise<string[]> {
   return ids
 }
 
+// ── Helper: Find time-saving MINUTES question IDs from templates ──────────
+// Returns questions with type === "time_saving_minutes"
+// Values are in minutes and need to be converted to hours for reporting
+export async function findTimeSavingMinutesQuestionIds(): Promise<string[]> {
+  const templates = await fetchTemplates()
+  const ids: string[] = []
+  
+  for (const t of templates) {
+    for (const q of t.questions || []) {
+      if (q.type === "time_saving_minutes") {
+        ids.push(q.id)
+      }
+    }
+  }
+  
+  return ids
+}
+
 // ── Helper: Find ALL confidence question IDs from templates ────────────────
 // Looks for questions with type === "confidence" OR text containing "confidence"
 export async function findConfidenceQuestionIds(): Promise<string[]> {
@@ -1498,35 +1572,47 @@ export function computeOrgHoursMetrics(
   timeSavingIds: string[],
   confidenceIds: string[], // Changed to array to support multiple confidence questions
   hourlyRate: number = 100,
-): OrgHoursMetrics {
+  minutesSavingIds: string[] = [], // NEW: IDs for time_saving_minutes questions
+  ): OrgHoursMetrics {
   // Sum hours from ALL passed-in responses (already filtered by caller's time period)
   let periodHoursVal = 0
   const allUsers = new Set<string>()
   const allConfidenceScores: number[] = []
   
   for (const r of responses) {
-    // Track ALL users who submitted scorecards in this period
-    allUsers.add(r.userId)
-    
-    // Sum all time-saving question answers
-    // Use parseTimeValue to handle both numeric values and text ranges like "2-4 hours"
-    for (const qId of timeSavingIds) {
-      const val = r.answers[qId]
-      if (val !== undefined && val !== null && val !== "") {
-        const hours = parseTimeValue(val)
-        if (hours > 0) {
-          periodHoursVal += hours
-        }
-      }
-    }
-    
-    // Track confidence scores from ALL confidence-type questions
-    for (const confId of confidenceIds) {
-      const conf = r.answers[confId]
-      if (typeof conf === "number" && conf >= 1 && conf <= 10) {
-        allConfidenceScores.push(conf)
-      }
-    }
+  // Track ALL users who submitted scorecards in this period
+  allUsers.add(r.userId)
+  
+  // Sum all time-saving question answers (hours)
+  // Use parseTimeValue to handle both numeric values and text ranges like "2-4 hours"
+  for (const qId of timeSavingIds) {
+  const val = r.answers[qId]
+  if (val !== undefined && val !== null && val !== "") {
+  const hours = parseTimeValue(val)
+  if (hours > 0) {
+  periodHoursVal += hours
+  }
+  }
+  }
+  
+  // Sum all time-saving MINUTES question answers and convert to hours
+  for (const qId of minutesSavingIds) {
+  const val = r.answers[qId]
+  if (val !== undefined && val !== null && val !== "") {
+  const minutes = parseMinuteValue(val)
+  if (minutes > 0) {
+  periodHoursVal += minutes / 60 // Convert minutes to hours
+  }
+  }
+  }
+  
+  // Track confidence scores from ALL confidence-type questions
+  for (const confId of confidenceIds) {
+  const conf = r.answers[confId]
+  if (typeof conf === "number" && conf >= 1 && conf <= 10) {
+  allConfidenceScores.push(conf)
+  }
+  }
   }
   
   // Use total hours from the period (already filtered by caller)

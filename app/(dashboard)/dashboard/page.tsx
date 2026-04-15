@@ -62,6 +62,7 @@ import {
   computePersonalTrend,
   computePersonalBenchmark,
   findTimeSavingQuestionIds,
+  findTimeSavingMinutesQuestionIds,
   findConfidenceQuestionIds,
   computeUserHoursMetrics,
   computeOrgHoursMetrics,
@@ -275,15 +276,16 @@ export default function DashboardPage() {
       }
 
       // Compute hours metrics for admin view (all responses or filtered by org)
-      const [timeSavingIds, confidenceIds] = await Promise.all([
+      const [timeSavingIds, minutesSavingIds, confidenceIds] = await Promise.all([
         findTimeSavingQuestionIds(),
+        findTimeSavingMinutesQuestionIds(),
         findConfidenceQuestionIds(),
       ])
       
       // For admin: compute org hours based on current filter
       const selectedOrgDoc = orgDocs.find((o) => o.id === selectedOrg) as unknown as Organization | undefined
       const adminHourlyRate = selectedOrgDoc?.hourlyRate ?? 100
-      const adminOrgHours = computeOrgHoursMetrics(responses, timeSavingIds, confidenceIds, adminHourlyRate)
+      const adminOrgHours = computeOrgHoursMetrics(responses, timeSavingIds, confidenceIds, adminHourlyRate, minutesSavingIds)
       setOrgHoursMetrics(adminOrgHours)
       
       // Compute weekly hours trend for chart
