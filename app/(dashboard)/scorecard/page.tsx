@@ -34,6 +34,7 @@ import {
   filterActiveRelease,
   getDocument,
   createDocument,
+  updateDocument,
   getDocuments,
   COLLECTIONS,
 } from "@/lib/firestore"
@@ -76,6 +77,11 @@ export default function ScorecardPage() {
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
+  
+  // Draft auto-save state
+  const [draftId, setDraftId] = useState<string | null>(null)
+  const [autoSaving, setAutoSaving] = useState(false)
+  const [lastSaved, setLastSaved] = useState<Date | null>(null)
 
   // Remaining time countdown
   const [remainingMs, setRemainingMs] = useState(0)
@@ -107,14 +113,35 @@ export default function ScorecardPage() {
 
         // Load template
         const tmpl = await getDocument(COLLECTIONS.TEMPLATES, rel.templateId)
-        console.log("[v0] Template loaded:", {
-          templateId: rel.templateId,
-          tmpl,
-          hasQuestions: Array.isArray((tmpl as unknown as TemplateData)?.questions),
-          questionsCount: (tmpl as unknown as TemplateData)?.questions?.length,
-        })
         if (tmpl) {
           setTemplate(tmpl as unknown as TemplateData)
+          
+          // Check for existing draft for this user + release
+          if (user?.id) {
+            const allResponses = await getDocuments(COLLECTIONS.RESPONSES)
+            const existingDraft = allResponses.find((r) => {
+              const data = r as Record<string, unknown>
+              return (
+                data.userId === user.id &&
+                data.releaseId === rel.id &&
+                data.status === "draft"
+              )
+            })
+            
+            if (existingDraft) {
+              const draftData = existingDraft as Record<string, unknown>
+              setDraftId(existingDraft.id)
+              setAnswers((draftData.answers as Record<string, string | number>) || {})
+              // Find first unanswered question
+              const templateData = tmpl as unknown as TemplateData
+              const savedAnswers = (draftData.answers as Record<string, string | number>) || {}
+              const firstUnanswered = templateData.questions?.findIndex(
+                (q) => savedAnswers[q.id] === undefined
+              ) ?? 0
+              setCurrentQuestion(Math.max(0, firstUnanswered))
+              setLastSaved(draftData.updatedAt ? new Date(draftData.updatedAt as string) : null)
+            }
+          }
         }
       } catch (err) {
         console.error("Failed to load scorecard:", err)
@@ -124,7 +151,7 @@ export default function ScorecardPage() {
       }
     }
     load()
-  }, [])
+  }, [user?.id])
 
   // Countdown timer
   useEffect(() => {
@@ -160,23 +187,57 @@ export default function ScorecardPage() {
   const completedCount = Object.keys(answers).length
   const progress = totalQuestions > 0 ? (completedCount / totalQuestions) * 100 : 0
 
-  // Debug logging
-  console.log("[v0] Scorecard Debug:", {
-    loading,
-    template: template?.name,
-    questionsCount: questions.length,
-    questions: questions.map(q => ({ id: q.id, type: q.type, text: q.text?.slice(0, 50) })),
-    release: release?.id,
-    noActive,
-    expired,
-  })
+
+
+  // Auto-save function
+  const autoSaveDraft = useCallback(async (newAnswers: Record<string, string | number>) => {
+    if (!release || !template || !user) return
+    
+    setAutoSaving(true)
+    try {
+      const draftData = {
+        templateId: release.templateId,
+        templateName: template.name,
+        releaseId: release.id,
+        userId: user.id,
+        answers: newAnswers,
+        weekOf: weekOfLabel,
+        organizationId: release.organizationId,
+        status: "draft" as const,
+        updatedAt: new Date().toISOString(),
+      }
+      
+      if (draftId) {
+        // Update existing draft
+        await updateDocument(COLLECTIONS.RESPONSES, draftId, draftData)
+      } else {
+        // Create new draft
+        const newDoc = await createDocument(COLLECTIONS.RESPONSES, {
+          ...draftData,
+          createdAt: new Date().toISOString(),
+        })
+        if (newDoc?.id) {
+          setDraftId(newDoc.id)
+        }
+      }
+      setLastSaved(new Date())
+    } catch (err) {
+      console.error("Failed to auto-save draft:", err)
+    } finally {
+      setAutoSaving(false)
+    }
+  }, [release, template, user, draftId, weekOfLabel])
 
   const handleAnswer = useCallback(
     (questionId: string, value: string | number) => {
-      setAnswers((prev) => ({ ...prev, [questionId]: value }))
-      setValidationError(null) // Clear validation error when answering
+      const newAnswers = { ...answers, [questionId]: value }
+      setAnswers(newAnswers)
+      setValidationError(null)
+      
+      // Auto-save after each answer
+      autoSaveDraft(newAnswers)
     },
-    [],
+    [answers, autoSaveDraft],
   )
 
   const handleNext = useCallback(() => {
@@ -202,22 +263,35 @@ export default function ScorecardPage() {
     if (!release || !template || !user) return
     setSubmitting(true)
     try {
-      await createDocument(COLLECTIONS.RESPONSES, {
+      const completedData = {
         templateId: release.templateId,
+        templateName: template.name,
         releaseId: release.id,
         userId: user.id,
         answers,
         completedAt: new Date().toISOString(),
         weekOf: weekOfLabel,
         organizationId: release.organizationId,
-      })
+        status: "completed" as const,
+      }
+      
+      if (draftId) {
+        // Update existing draft to completed status
+        await updateDocument(COLLECTIONS.RESPONSES, draftId, completedData)
+      } else {
+        // Create new completed response (no draft existed)
+        await createDocument(COLLECTIONS.RESPONSES, {
+          ...completedData,
+          createdAt: new Date().toISOString(),
+        })
+      }
       setSubmitted(true)
     } catch (err) {
       console.error("Failed to submit scorecard:", err)
     } finally {
       setSubmitting(false)
     }
-  }, [release, template, user, answers, weekOfLabel])
+  }, [release, template, user, answers, weekOfLabel, draftId])
 
   const activeInputRef = useRef<HTMLDivElement>(null)
 
@@ -638,9 +712,22 @@ export default function ScorecardPage() {
             </CardHeader>
             <CardContent>
               <Progress value={progress} className="mb-3 h-2" />
-              <p className="mb-2 text-sm text-muted-foreground">
-                {completedCount} of {totalQuestions} completed
-              </p>
+  <p className="mb-2 text-sm text-muted-foreground">
+  {completedCount} of {totalQuestions} completed
+  </p>
+  <p className="mb-2 text-xs text-muted-foreground flex items-center gap-1">
+    {autoSaving ? (
+      <>
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Saving...
+      </>
+    ) : lastSaved ? (
+      <>
+        <CheckCircle2 className="h-3 w-3 text-green-500" />
+        Auto-saved {lastSaved.toLocaleTimeString()}
+      </>
+    ) : null}
+  </p>
               {completedCount < totalQuestions && (
                 <p className="mb-4 text-xs text-amber-500">
                   All {totalQuestions} questions are required to submit
