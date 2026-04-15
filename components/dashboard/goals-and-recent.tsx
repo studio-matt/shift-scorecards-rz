@@ -178,7 +178,7 @@ export function MostImprovedCard({ showCompany = false, data }: MostImprovedProp
               className="flex items-center justify-between rounded-lg border border-border p-3"
             >
               <div>
-                <Link href={`/dashboard?viewUser=${person.userId}`} className="text-sm font-medium text-foreground">
+                <Link href={`/admin/users/${person.userId}`} className="text-sm font-medium text-foreground hover:text-primary hover:underline">
                   {person.name}
                 </Link>
                 {showCompany ? (

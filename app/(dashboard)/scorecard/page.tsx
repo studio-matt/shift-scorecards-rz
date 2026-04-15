@@ -35,6 +35,7 @@ import {
   getDocument,
   createDocument,
   updateDocument,
+  deleteDocument,
   getDocuments,
   COLLECTIONS,
 } from "@/lib/firestore"
@@ -293,6 +294,30 @@ export default function ScorecardPage() {
     }
   }, [release, template, user, answers, weekOfLabel, draftId])
 
+  // Clear all answers and delete draft from DB
+  const handleClearScorecard = useCallback(async () => {
+    if (!confirm("Are you sure you want to clear all your answers? This cannot be undone.")) {
+      return
+    }
+    
+    try {
+      // Delete draft from DB if it exists
+      if (draftId) {
+        await deleteDocument(COLLECTIONS.RESPONSES, draftId)
+        setDraftId(null)
+      }
+      
+      // Reset local state
+      setAnswers({})
+      setCurrentQuestion(0)
+      setLastSaved(null)
+      setValidationError(null)
+    } catch (err) {
+      console.error("Failed to clear scorecard:", err)
+      alert("Failed to clear scorecard. Please try again.")
+    }
+  }, [draftId])
+
   const activeInputRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -408,16 +433,29 @@ export default function ScorecardPage() {
         </Badge>
       </div>
 
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground">
-          {template?.name ?? "Scorecard"}
-        </h1>
-        <p className="text-sm font-medium text-primary">
-          Scorecard for the week of {weekOfLabel}
-        </p>
-        <p className="mt-1 text-muted-foreground">
-          {template?.description}
-        </p>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">
+            {template?.name ?? "Scorecard"}
+          </h1>
+          <p className="text-sm font-medium text-primary">
+            Scorecard for the week of {weekOfLabel}
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            {template?.description}
+          </p>
+        </div>
+        {Object.keys(answers).length > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClearScorecard}
+            className="text-muted-foreground hover:text-destructive"
+          >
+            <Trash2 className="mr-1 h-4 w-4" />
+            Clear Answers
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-col gap-6 lg:flex-row">
@@ -670,12 +708,43 @@ export default function ScorecardPage() {
                                   </button>
                                 ))}
                               </div>
-                              <p className="text-xs text-muted-foreground">
-                                Select the amount of time AI helped you save this week
-                              </p>
-                            </div>
-                          )}
-                          {index < totalQuestions - 1 && (
+  <p className="text-xs text-muted-foreground">
+  Select the amount of time AI helped you save this week
+  </p>
+  </div>
+  )}
+  {q.type === "time_saving_minutes" && (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap gap-2">
+        {[
+          { label: "Under 2 minutes", value: "1" },
+          { label: "2-5 minutes", value: "4" },
+          { label: "6-10 minutes", value: "8" },
+          { label: "11-15 minutes", value: "13" },
+          { label: "16+ minutes", value: "20" },
+          { label: "Not using AI yet", value: "0" },
+        ].map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => handleAnswer(q.id, opt.value)}
+            className={cn(
+              "px-4 py-2 rounded-lg border text-sm font-medium transition-all",
+              String(answers[q.id]) === opt.value
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-card hover:border-primary/50 hover:bg-primary/5"
+            )}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Select the time saved in minutes (midpoint values, rounded up)
+      </p>
+    </div>
+  )}
+  {index < totalQuestions - 1 && (
                             <Button
                               size="sm"
                               className="mt-3"
@@ -780,21 +849,43 @@ const [loading, setLoading] = useState(true)
       try {
         // 1. Calculate hours saved from this submission
         // Find time-saving questions (type === "time_saving" OR text matches pattern)
-        // For "Hours: 1-10" type questions, the values ARE hours directly (not minutes)
         const timeSavingQuestions = template?.questions?.filter(q => {
           if (q.type === "time_saving") return true
           const text = q.text.toLowerCase()
           return (text.includes("time") || text.includes("hours")) && text.includes("save")
         }) ?? []
         
-        // Sum the HOURS directly - values are already in hours (1-10 scale)
+        // Find time-saving MINUTES questions
+        const timeSavingMinutesQuestions = template?.questions?.filter(q => {
+          return q.type === "time_saving_minutes"
+        }) ?? []
+        
+        // Sum the HOURS - values may be numbers OR strings like "0.75", "1.5", "3", "5.5"
         let totalHours = 0
         for (const q of timeSavingQuestions) {
           const val = answers[q.id]
-          if (typeof val === "number" && val > 0) {
-            totalHours += val
+          if (val !== undefined && val !== null && val !== "") {
+            const numVal = typeof val === "number" ? val : parseFloat(String(val))
+            if (!isNaN(numVal) && numVal > 0) {
+              totalHours += numVal
+            }
           }
         }
+        
+        // Add minutes questions (converted to hours)
+        let totalMinutes = 0
+        for (const q of timeSavingMinutesQuestions) {
+          const val = answers[q.id]
+          if (val !== undefined && val !== null && val !== "") {
+            const numVal = typeof val === "number" ? val : parseFloat(String(val))
+            if (!isNaN(numVal) && numVal > 0) {
+              totalMinutes += numVal
+            }
+          }
+        }
+        // Convert minutes to hours and add
+        totalHours += totalMinutes / 60
+        
         const thisHours = Math.round(totalHours * 10) / 10
         setHoursSaved(thisHours)
         
@@ -821,12 +912,15 @@ const [loading, setLoading] = useState(true)
           )
           const prevResponse = sorted[1] // Second most recent
           if (prevResponse) {
-            // Values are in HOURS directly (not minutes)
+            // Values may be numbers OR strings like "0.75", "1.5", "3", "5.5"
             let prevHoursTotal = 0
             for (const q of timeSavingQuestions) {
               const val = prevResponse.answers[q.id]
-              if (typeof val === "number" && val > 0) {
-                prevHoursTotal += val
+              if (val !== undefined && val !== null && val !== "") {
+                const numVal = typeof val === "number" ? val : parseFloat(String(val))
+                if (!isNaN(numVal) && numVal > 0) {
+                  prevHoursTotal += numVal
+                }
               }
             }
             setPrevHours(Math.round(prevHoursTotal * 10) / 10)

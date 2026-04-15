@@ -88,7 +88,7 @@ export function MVPSpotlight({ performer, topPerformers = [] }: { performer: Top
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  <Link href={`/dashboard?viewUser=${p.id}`} className="text-sm font-semibold text-foreground">
+                  <Link href={`/admin/users/${p.id}`} className="text-sm font-semibold text-foreground hover:text-primary hover:underline">
                     {p.name}
                   </Link>
                   <p className="text-xs text-muted-foreground">
@@ -368,7 +368,7 @@ export function TopPerformers({ showCompany = false, data }: TopPerformersProps)
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  <Link href={`/dashboard?viewUser=${performer.id}`} className="text-sm font-medium text-foreground">
+                  <Link href={`/admin/users/${performer.id}`} className="text-sm font-medium text-foreground hover:text-primary hover:underline">
                     {displayName}
                   </Link>
                   {showCompany ? (
