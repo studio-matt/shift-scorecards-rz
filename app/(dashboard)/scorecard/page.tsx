@@ -787,12 +787,16 @@ const [loading, setLoading] = useState(true)
           return (text.includes("time") || text.includes("hours")) && text.includes("save")
         }) ?? []
         
-        // Sum the HOURS directly - values are already in hours (1-10 scale)
+        // Sum the HOURS - values may be numbers OR strings like "0.75", "1.5", "3", "5.5"
         let totalHours = 0
         for (const q of timeSavingQuestions) {
           const val = answers[q.id]
-          if (typeof val === "number" && val > 0) {
-            totalHours += val
+          if (val !== undefined && val !== null && val !== "") {
+            // Handle both number and string values
+            const numVal = typeof val === "number" ? val : parseFloat(String(val))
+            if (!isNaN(numVal) && numVal > 0) {
+              totalHours += numVal
+            }
           }
         }
         const thisHours = Math.round(totalHours * 10) / 10
@@ -821,12 +825,15 @@ const [loading, setLoading] = useState(true)
           )
           const prevResponse = sorted[1] // Second most recent
           if (prevResponse) {
-            // Values are in HOURS directly (not minutes)
+            // Values may be numbers OR strings like "0.75", "1.5", "3", "5.5"
             let prevHoursTotal = 0
             for (const q of timeSavingQuestions) {
               const val = prevResponse.answers[q.id]
-              if (typeof val === "number" && val > 0) {
-                prevHoursTotal += val
+              if (val !== undefined && val !== null && val !== "") {
+                const numVal = typeof val === "number" ? val : parseFloat(String(val))
+                if (!isNaN(numVal) && numVal > 0) {
+                  prevHoursTotal += numVal
+                }
               }
             }
             setPrevHours(Math.round(prevHoursTotal * 10) / 10)
