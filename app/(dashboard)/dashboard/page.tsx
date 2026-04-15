@@ -196,6 +196,12 @@ export default function DashboardPage() {
   }, [])
 
   const loadData = useCallback(async () => {
+    // Don't load data until selectedOrg is properly set for non-super-admin users
+    // This prevents showing data from all orgs before the user's org is determined
+    if (!isSuperAdmin && selectedOrg === "all" && (user?.organizationId || user?.company)) {
+      return // Wait for useEffect to set the correct org
+    }
+    
     try {
       setLoading(true)
       const [orgDocs, allResponses, targetsDoc] = await Promise.all([
@@ -361,15 +367,16 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }, [selectedOrg, selectedDept, user, timePeriod, filterByTimePeriod])
+  }, [selectedOrg, selectedDept, user, timePeriod, filterByTimePeriod, isSuperAdmin])
 
   useEffect(() => {
     loadData()
   }, [loadData])
 
-  // Lock org selection for company admins once user data is available
+  // Lock org selection for non-super-admin users (company admins and regular users)
+  // This ensures they only see data from their own organization
   useEffect(() => {
-    if (isCompanyAdmin && selectedOrg === "all") {
+    if (!isSuperAdmin && selectedOrg === "all") {
       // Try organizationId first, then fall back to finding org by company name
       if (user?.organizationId) {
         setSelectedOrg(user.organizationId)
@@ -380,7 +387,7 @@ export default function DashboardPage() {
         }
       }
     }
-  }, [isCompanyAdmin, user?.organizationId, user?.company, selectedOrg, orgs])
+  }, [isSuperAdmin, user?.organizationId, user?.company, selectedOrg, orgs])
 
   const activeOrg = orgs.find((o) => o.id === selectedOrg)
 
