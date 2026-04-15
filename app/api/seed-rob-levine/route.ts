@@ -257,6 +257,9 @@ async function seedRobLevineData() {
               adminAnswers[question.id] = "Successfully onboarded new team members to AI tools"
             } else if (questionText.includes("goal") || questionText.includes("next")) {
               adminAnswers[question.id] = "Expand AI adoption across all departments"
+            } else if (question.type === "time_saving") {
+              // Time saving questions - admins save 4-8 hours
+              adminAnswers[question.id] = Math.floor(Math.random() * 5) + 4
             } else if (question.type === "scale" || question.type === "number") {
               adminAnswers[question.id] = Math.floor(Math.random() * 3) + 7 // 7-9 range
             } else if (question.type === "text") {
@@ -336,6 +339,11 @@ async function seedRobLevineData() {
             answers[question.id] = userData.biggestWin
           } else if (questionText.includes("goal") || questionText.includes("next")) {
             answers[question.id] = userData.nextGoal
+          } else if (question.type === "time_saving") {
+            // Time saving questions - generate random hours saved between 1-8
+            // Use timeToHours scale: 1-2 hrs = 2, 2-4 hrs = 3, 4+ hrs = 5
+            const hoursOptions = [1, 2, 3, 4, 5, 6, 7, 8]
+            answers[question.id] = hoursOptions[Math.floor(Math.random() * hoursOptions.length)]
           } else if (question.type === "scale" || question.type === "number") {
             // Random scale value between 4-10 for other scale questions
             answers[question.id] = Math.floor(Math.random() * 7) + 4

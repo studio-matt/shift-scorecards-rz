@@ -783,6 +783,7 @@ function OrgDetailView({
   const [logoUrl, setLogoUrl] = useState(org.logoUrl ?? "")
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoDragging, setLogoDragging] = useState(false)
+  const [csvDragging, setCsvDragging] = useState(false)
   // Financial settings
   const [hourlyRate, setHourlyRate] = useState(org.hourlyRate ?? 100)
 
@@ -893,12 +894,16 @@ function OrgDetailView({
     setInviteSending(true)
     const emailsToSend: string[] = []
     const skippedEmails: string[] = []
+    const newDepartments = new Set<string>() // Track new departments from CSV
     
     // Get existing emails to prevent duplicates
     const existingUsers = await getUsersByOrg(org.id)
     const existingEmails = new Set(
       existingUsers.map((u) => ((u as Record<string, unknown>).email as string)?.toLowerCase() ?? "")
     )
+    
+    // Get existing org departments for comparison
+    const existingDepts = new Set<string>((org.departments as string[]) || [])
     
     try {
       if (inviteCsvFile) {
@@ -910,6 +915,8 @@ function OrgDetailView({
           firstName: headers.indexOf("firstname"),
           lastName: headers.indexOf("lastname"),
           department: headers.indexOf("department"),
+          startDate: headers.indexOf("startdate"),
+          endDate: headers.indexOf("enddate"),
         }
         for (let i = 1; i < lines.length; i++) {
           const parts = lines[i].split(",").map((s) => s.trim())
@@ -917,6 +924,14 @@ function OrgDetailView({
           const firstName = colIdx.firstName >= 0 ? properCase(parts[colIdx.firstName] ?? "") : ""
           const lastName = colIdx.lastName >= 0 ? properCase(parts[colIdx.lastName] ?? "") : ""
           const dept = inviteCsvDepartment || (colIdx.department >= 0 ? parts[colIdx.department] : "") || ""
+          const startDate = colIdx.startDate >= 0 ? parts[colIdx.startDate] ?? "" : ""
+          const endDate = colIdx.endDate >= 0 ? parts[colIdx.endDate] ?? "" : ""
+          
+          // Track new departments that don't exist in org yet
+          if (dept && !existingDepts.has(dept)) {
+            newDepartments.add(dept)
+          }
+          
           if (email && email.includes("@")) {
             // Skip if user already exists
             if (existingEmails.has(email)) {
@@ -924,7 +939,7 @@ function OrgDetailView({
               continue
             }
             // Create user record directly so they appear in members list
-            await createDocument(COLLECTIONS.USERS, {
+            const userData: Record<string, unknown> = {
               email,
               firstName,
               lastName,
@@ -933,10 +948,22 @@ function OrgDetailView({
               role: "user",
               status: "pending",
               createdAt: new Date().toISOString(),
-            })
+            }
+            // Add scorecard period dates if provided
+            if (startDate) userData.scorecardStartDate = startDate
+            if (endDate) userData.scorecardEndDate = endDate
+            
+            await createDocument(COLLECTIONS.USERS, userData)
             existingEmails.add(email) // Track to prevent duplicates within same CSV
             emailsToSend.push(email)
           }
+        }
+        
+        // Add any new departments from CSV to the organization
+        if (newDepartments.size > 0) {
+          const updatedDepts = [...existingDepts, ...newDepartments].sort()
+          await updateDocument(COLLECTIONS.ORGANIZATIONS, org.id, { departments: updatedDepts })
+          setDepartments(updatedDepts) // Update local state immediately
         }
       } else if (inviteEmail) {
         const emailLower = inviteEmail.toLowerCase()
@@ -2017,6 +2044,11 @@ function OrgDetailView({
                     value={memberSearch}
                     onChange={(e) => setMemberSearch(e.target.value)}
                     className="pl-9"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    name="member-search-field"
                   />
                 </div>
               )}
@@ -2392,10 +2424,43 @@ function OrgDetailView({
                   </div>
                   <label
                     htmlFor="org-csv-upload"
-                    className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+                    className={cn(
+                      "flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-3 text-sm transition-colors",
+                      csvDragging
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:border-primary hover:bg-primary/5 hover:text-primary"
+                    )}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setCsvDragging(true)
+                    }}
+                    onDragEnter={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setCsvDragging(true)
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setCsvDragging(false)
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setCsvDragging(false)
+                      const file = e.dataTransfer.files?.[0]
+                      if (file && (file.name.endsWith(".csv") || file.type === "text/csv")) {
+                        // Create a fake event to reuse the existing handler
+                        const fakeEvent = { target: { files: [file] } } as unknown as React.ChangeEvent<HTMLInputElement>
+                        handleInviteCsvUpload(fakeEvent)
+                      }
+                    }}
                   >
                     <Upload className="h-4 w-4" />
-                    {inviteCsvFile ? (
+                    {csvDragging ? (
+                      "Drop CSV file here"
+                    ) : inviteCsvFile ? (
                       <span className="font-medium text-foreground">
                         {inviteCsvFile.name}{" "}
                         <span className="text-muted-foreground">
@@ -2403,7 +2468,7 @@ function OrgDetailView({
                         </span>
                       </span>
                     ) : (
-                      "Upload CSV file"
+                      "Drop CSV or click to upload"
                     )}
                   </label>
                   <input

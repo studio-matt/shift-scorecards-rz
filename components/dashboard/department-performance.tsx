@@ -26,7 +26,9 @@ interface DepartmentPerformanceChartProps {
 
 export function DepartmentPerformanceChart({ data, fieldAverage = 6.2 }: DepartmentPerformanceChartProps) {
   const { accentColor } = useBackground()
-  if (data.length === 0) {
+  
+  // Ensure data is an array before accessing .length or .map
+  if (!Array.isArray(data) || data.length === 0) {
     return (
       <Card>
         <CardHeader>

@@ -98,7 +98,7 @@ function LoginForm() {
     }
   }
 
-  // SSR skeleton
+  // SSR skeleton with loading animation
   if (!mounted) {
     return (
       <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4">
@@ -109,20 +109,20 @@ function LoginForm() {
         <Card className="relative w-full max-w-md border-border/50 bg-card/80 backdrop-blur-xl">
           <CardHeader className="items-center text-center">
             <ShiftLogo size="lg" imageScale={0.7} variant="white" className="mb-4" />
-            <div className="h-7 w-40 rounded bg-muted-foreground/10" />
-            <div className="mt-2 h-4 w-56 rounded bg-muted-foreground/10" />
+            <div className="h-7 w-40 animate-pulse rounded bg-muted-foreground/10" />
+            <div className="mt-2 h-4 w-56 animate-pulse rounded bg-muted-foreground/10" />
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
-                <div className="h-4 w-24 rounded bg-muted-foreground/10" />
-                <div className="h-10 rounded-md border border-input bg-background/50" />
+                <div className="h-4 w-24 animate-pulse rounded bg-muted-foreground/10" />
+                <div className="h-10 animate-pulse rounded-md border border-input bg-background/50" />
               </div>
               <div className="flex flex-col gap-2">
-                <div className="h-4 w-16 rounded bg-muted-foreground/10" />
-                <div className="h-10 rounded-md border border-input bg-background/50" />
+                <div className="h-4 w-16 animate-pulse rounded bg-muted-foreground/10" />
+                <div className="h-10 animate-pulse rounded-md border border-input bg-background/50" />
               </div>
-              <div className="h-10 rounded-md bg-primary/30" />
+              <div className="h-10 animate-pulse rounded-md bg-primary/30" />
             </div>
           </CardContent>
         </Card>

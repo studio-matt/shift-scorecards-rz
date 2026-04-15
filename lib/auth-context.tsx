@@ -133,35 +133,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Listen to Firebase Auth state changes
   useEffect(() => {
+    let mounted = true
+    
+    // Set a timeout to ensure we don't hang indefinitely
+    const timeout = setTimeout(() => {
+      if (mounted && !ready) {
+        console.warn("[v0] Auth initialization timeout - setting ready state")
+        setReady(true)
+      }
+    }, 10000) // 10 second timeout
+    
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      if (!mounted) return
+      
       if (fbUser) {
         // Only clear error when a new login attempt starts (user is present)
         setAuthError(null)
         setFirebaseUser(fbUser)
         try {
           const profile = await resolveUserProfile(fbUser)
-          setUser(profile)
-          setOriginalRole(profile.role) // Store the real role from DB
+          if (mounted) {
+            setUser(profile)
+            setOriginalRole(profile.role) // Store the real role from DB
+          }
         } catch (err) {
           console.error("Failed to resolve user profile:", err)
           // Check if this is an access denied error
           if (err instanceof Error && err.message.includes("ACCESS_DENIED")) {
             // Extract the message after "ACCESS_DENIED: "
             const message = err.message.replace("ACCESS_DENIED: ", "")
-            setAuthError(message)
+            if (mounted) setAuthError(message)
           }
-          setUser(null)
-          setFirebaseUser(null)
+          if (mounted) {
+            setUser(null)
+            setFirebaseUser(null)
+          }
         }
       } else {
         // User signed out - don't clear authError here, it may have just been set
-        setFirebaseUser(null)
-        setUser(null)
-        setOriginalRole(null)
+        if (mounted) {
+          setFirebaseUser(null)
+          setUser(null)
+          setOriginalRole(null)
+        }
       }
-      setReady(true)
+      if (mounted) setReady(true)
     })
-    return () => unsubscribe()
+    
+    return () => {
+      mounted = false
+      clearTimeout(timeout)
+      unsubscribe()
+    }
   }, [])
 
   const login = useCallback(async (email: string, password: string) => {

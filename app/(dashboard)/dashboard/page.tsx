@@ -203,20 +203,8 @@ export default function DashboardPage() {
         getDocument(COLLECTIONS.SETTINGS, "dashboardTargets"),
       ])
       
-      // Debug: Log what responses we have
-      console.log("[v0] Total responses fetched:", allResponses.length)
-      if (allResponses.length > 0) {
-        console.log("[v0] Sample response completedAt:", allResponses[0].completedAt)
-        console.log("[v0] Response dates range:", 
-          allResponses.map(r => r.completedAt).sort()[0], 
-          "to", 
-          allResponses.map(r => r.completedAt).sort().pop()
-        )
-      }
-      
       // Filter responses by selected time period
       const responses = filterByTimePeriod(allResponses, timePeriod)
-      console.log("[v0] After time filter (" + timePeriod + "):", responses.length, "responses")
       if (targetsDoc) {
         const t = targetsDoc as Record<string, unknown>
         setTargets((prev) => ({
@@ -286,11 +274,11 @@ export default function DashboardPage() {
         }
       }
 
-  // Compute hours metrics for admin view (all responses or filtered by org)
-  const [timeSavingIds, confidenceIds] = await Promise.all([
-    findTimeSavingQuestionIds(),
-    findConfidenceQuestionIds(),
-  ])
+      // Compute hours metrics for admin view (all responses or filtered by org)
+      const [timeSavingIds, confidenceIds] = await Promise.all([
+        findTimeSavingQuestionIds(),
+        findConfidenceQuestionIds(),
+      ])
       
       // For admin: compute org hours based on current filter
       const selectedOrgDoc = orgDocs.find((o) => o.id === selectedOrg) as unknown as Organization | undefined
@@ -310,8 +298,8 @@ export default function DashboardPage() {
         setPersonalTrend(computePersonalTrend(allResponses, user.id))
         setPersonalBenchmark(computePersonalBenchmark(allResponses, user.id))
         
-  // Compute user-specific hours metrics (use allResponses for user's data)
-  const userHours = computeUserHoursMetrics(allResponses, user.id, timeSavingIds, confidenceIds)
+        // Compute user-specific hours metrics (use allResponses for user's data)
+        const userHours = computeUserHoursMetrics(allResponses, user.id, timeSavingIds, confidenceIds)
         setUserHoursMetrics(userHours)
 
         // Extract goals from user's responses based on question types
@@ -363,7 +351,6 @@ export default function DashboardPage() {
           }
         }
         setOrgUserDepartments(Array.from(userDepts).sort())
-        console.log("[v0] Departments from users in org:", Array.from(userDepts))
       } else {
         setOrgUserDepartments([])
       }
@@ -436,14 +423,18 @@ export default function DashboardPage() {
     }
     
     // Add departments from users in the selected org (most reliable source)
-    orgUserDepartments.forEach((d) => allDepts.add(d))
+    orgUserDepartments.forEach((d) => {
+      if (d && d.trim()) allDepts.add(d)
+    })
     
     // Also add departments from the performance data (these come from actual user responses)
-    deptPerformance.forEach((dp) => {
-      if (dp.name && dp.name !== "Unknown") {
-        allDepts.add(dp.name)
-      }
-    })
+    if (Array.isArray(deptPerformance)) {
+      deptPerformance.forEach((dp) => {
+        if (dp?.department && dp.department !== "Unknown") {
+          allDepts.add(dp.department)
+        }
+      })
+    }
     
     return Array.from(allDepts).sort()
   }, [selectedOrg, activeOrg, orgs, deptPerformance, orgUserDepartments])
@@ -539,7 +530,7 @@ export default function DashboardPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Departments</SelectItem>
-                {departments.map((dept) => (
+                {departments.filter(Boolean).map((dept) => (
                   <SelectItem key={dept} value={dept}>
                     {dept}
                   </SelectItem>
