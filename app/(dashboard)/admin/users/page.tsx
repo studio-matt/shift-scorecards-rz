@@ -568,8 +568,8 @@ export default function ManageUsersPage() {
                   <div>
                     <div className="flex items-center gap-2">
                       <Link
-                        href={`/dashboard?viewUser=${user.id}`}
-                        className="text-sm font-medium text-foreground"
+                        href={`/admin/users/${user.id}`}
+                        className="text-sm font-medium text-foreground hover:text-primary hover:underline"
                       >
                         {user.name}
                       </Link>
