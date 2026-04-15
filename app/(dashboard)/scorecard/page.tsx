@@ -571,6 +571,36 @@ export default function ScorecardPage() {
                               </p>
                             </div>
                           )}
+                          {q.type === "time_saving" && (
+                            <div className="flex flex-col gap-3">
+                              <div className="flex flex-wrap gap-2">
+                                {[
+                                  { label: "Not using AI yet", value: "0" },
+                                  { label: "30 min - 1 hour", value: "0.75" },
+                                  { label: "1-2 hours", value: "1.5" },
+                                  { label: "2-4 hours", value: "3" },
+                                  { label: "4+ hours", value: "5.5" },
+                                ].map((opt) => (
+                                  <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() => handleAnswer(q.id, opt.value)}
+                                    className={cn(
+                                      "px-4 py-2 rounded-lg border text-sm font-medium transition-all",
+                                      String(answers[q.id]) === opt.value
+                                        ? "border-primary bg-primary text-primary-foreground"
+                                        : "border-border bg-card hover:border-primary/50 hover:bg-primary/5"
+                                    )}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                ))}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                Select the amount of time AI helped you save this week
+                              </p>
+                            </div>
+                          )}
                           {index < totalQuestions - 1 && (
                             <Button
                               size="sm"
