@@ -274,12 +274,11 @@ export default function DashboardPage() {
         }
       }
 
-  // Compute hours metrics for admin view (all responses or filtered by org)
-  const [timeSavingIds, confidenceIds] = await Promise.all([
-    findTimeSavingQuestionIds(),
-    findConfidenceQuestionIds(),
-  ])
-
+      // Compute hours metrics for admin view (all responses or filtered by org)
+      const [timeSavingIds, confidenceIds] = await Promise.all([
+        findTimeSavingQuestionIds(),
+        findConfidenceQuestionIds(),
+      ])
       
       // For admin: compute org hours based on current filter
       const selectedOrgDoc = orgDocs.find((o) => o.id === selectedOrg) as unknown as Organization | undefined
@@ -299,8 +298,8 @@ export default function DashboardPage() {
         setPersonalTrend(computePersonalTrend(allResponses, user.id))
         setPersonalBenchmark(computePersonalBenchmark(allResponses, user.id))
         
-  // Compute user-specific hours metrics (use allResponses for user's data)
-  const userHours = computeUserHoursMetrics(allResponses, user.id, timeSavingIds, confidenceIds)
+        // Compute user-specific hours metrics (use allResponses for user's data)
+        const userHours = computeUserHoursMetrics(allResponses, user.id, timeSavingIds, confidenceIds)
         setUserHoursMetrics(userHours)
 
         // Extract goals from user's responses based on question types
