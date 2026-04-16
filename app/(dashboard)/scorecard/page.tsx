@@ -193,15 +193,10 @@ export default function ScorecardPage() {
 
   // Auto-save function
   const autoSaveDraft = useCallback(async (newAnswers: Record<string, string | number>) => {
-    console.log("[v0] autoSaveDraft called", { release: !!release, template: !!template, user: !!user })
-    if (!release || !template || !user) {
-      console.log("[v0] autoSaveDraft early return - missing data")
-      return
-    }
+    if (!release || !template || !user) return
     
     setAutoSaving(true)
     try {
-      console.log("[v0] autoSaveDraft preparing data, draftId:", draftId)
       const draftData = {
         templateId: release.templateId,
         templateName: template.name,
@@ -216,24 +211,20 @@ export default function ScorecardPage() {
       
       if (draftId) {
         // Update existing draft
-        console.log("[v0] autoSaveDraft updating existing draft:", draftId)
         await updateDocument(COLLECTIONS.RESPONSES, draftId, draftData)
-        console.log("[v0] autoSaveDraft update success")
       } else {
         // Create new draft
-        console.log("[v0] autoSaveDraft creating new draft")
         const newDoc = await createDocument(COLLECTIONS.RESPONSES, {
           ...draftData,
           createdAt: new Date().toISOString(),
         })
-        console.log("[v0] autoSaveDraft created:", newDoc?.id)
         if (newDoc?.id) {
           setDraftId(newDoc.id)
         }
       }
       setLastSaved(new Date())
     } catch (err) {
-      console.error("[v0] Failed to auto-save draft:", err)
+      console.error("Failed to auto-save draft:", err)
     } finally {
       setAutoSaving(false)
     }
@@ -241,17 +232,12 @@ export default function ScorecardPage() {
 
   const handleAnswer = useCallback(
     (questionId: string, value: string | number) => {
-      console.log("[v0] handleAnswer called", { questionId, value })
-      try {
-        const newAnswers = { ...answers, [questionId]: value }
-        setAnswers(newAnswers)
-        setValidationError(null)
-        
-        // Auto-save after each answer
-        autoSaveDraft(newAnswers)
-      } catch (err) {
-        console.error("[v0] handleAnswer error:", err)
-      }
+      const newAnswers = { ...answers, [questionId]: value }
+      setAnswers(newAnswers)
+      setValidationError(null)
+      
+      // Auto-save after each answer
+      autoSaveDraft(newAnswers)
     },
     [answers, autoSaveDraft],
   )
