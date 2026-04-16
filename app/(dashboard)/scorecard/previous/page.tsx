@@ -201,9 +201,29 @@ export default function PreviousScorecardsPage() {
       })
       
       // Filter responses by organization for non-super-admin users
-      const responses = isSuperAdmin 
-        ? allResponses 
-        : allResponses.filter((r) => r.organizationId === userOrgId)
+      // If userOrgId can't be determined, show user's own responses only
+      console.log("[v0] Previous Scorecards filter debug:", {
+        isSuperAdmin,
+        userOrgId,
+        userId: user?.id,
+        userCompany: user?.company,
+        userOrganizationId: user?.organizationId,
+        totalResponses: allResponses.length,
+        sampleOrgIds: allResponses.slice(0, 5).map(r => r.organizationId),
+      })
+      
+      let responses: RawResponse[]
+      if (isSuperAdmin) {
+        responses = allResponses
+      } else if (userOrgId) {
+        // Filter by organization
+        responses = allResponses.filter((r) => r.organizationId === userOrgId)
+      } else {
+        // Fallback: show only the current user's responses if org can't be determined
+        responses = allResponses.filter((r) => r.userId === user?.id)
+      }
+      
+      console.log("[v0] Filtered responses count:", responses.length)
       
       // Group by organization + weekOf
       const grouped = new Map<string, AggregatedScorecard>()
