@@ -107,6 +107,9 @@ export default function PreviousScorecardsPage() {
   const [selectedOrg, setSelectedOrg] = useState("all")
   const [selectedDept, setSelectedDept] = useState("all")
   const [timePeriod, setTimePeriod] = useState("all")
+  
+  // Check if user is super admin (can see all companies)
+  const isSuperAdmin = user?.role === "super_admin"
   const [orgs, setOrgs] = useState<Array<{ id: string; name: string }>>([])
   const [departments, setDepartments] = useState<string[]>([])
   const [templates, setTemplates] = useState<Array<{ id: string; name: string; questions: TemplateQuestion[] }>>([])
@@ -175,7 +178,7 @@ export default function PreviousScorecardsPage() {
       setTemplates(templatesList)
       
       // Parse responses
-      const responses: RawResponse[] = responseDocs.map((d) => {
+      const allResponses: RawResponse[] = responseDocs.map((d) => {
         const data = d as Record<string, unknown>
         return {
           id: d.id,
@@ -188,6 +191,11 @@ export default function PreviousScorecardsPage() {
           answers: (data.answers as Record<string, number | string>) ?? {},
         }
       })
+      
+      // Filter responses by organization for non-super-admin users
+      const responses = isSuperAdmin 
+        ? allResponses 
+        : allResponses.filter((r) => r.organizationId === user?.organizationId)
       
       // Group by organization + weekOf
       const grouped = new Map<string, AggregatedScorecard>()
@@ -257,7 +265,7 @@ export default function PreviousScorecardsPage() {
     } finally {
       setLoading(false)
     }
-  }, [user])
+  }, [user, isSuperAdmin])
 
   useEffect(() => {
     fetchScorecards()
@@ -869,26 +877,28 @@ export default function PreviousScorecardsPage() {
           />
         </div>
 
-        {/* Company dropdown */}
-        <Select
-          value={selectedOrg}
-          onValueChange={(val) => {
-            setSelectedOrg(val)
-            setSelectedDept("all") // Reset dept when org changes
-          }}
-        >
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="All Companies" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Companies</SelectItem>
-            {orgs.map((org) => (
-              <SelectItem key={org.id} value={org.id}>
-                {org.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Company dropdown - only visible to super admins */}
+        {isSuperAdmin && (
+          <Select
+            value={selectedOrg}
+            onValueChange={(val) => {
+              setSelectedOrg(val)
+              setSelectedDept("all") // Reset dept when org changes
+            }}
+          >
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="All Companies" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Companies</SelectItem>
+              {orgs.map((org) => (
+                <SelectItem key={org.id} value={org.id}>
+                  {org.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         {/* Department dropdown */}
         <Select value={selectedDept} onValueChange={setSelectedDept}>
