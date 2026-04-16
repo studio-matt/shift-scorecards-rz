@@ -155,23 +155,52 @@ export async function fetchAllResponses(
   const docs = await getDocuments(COLLECTIONS.RESPONSES)
   let responses = docs.map((d) => ({ ...d } as unknown as RawResponse))
 
+  // Build user profile maps for org/department filtering
+  // This ensures we filter by user's ACTUAL org/dept, not what's stored on the response
+  const allUsers = await getDocuments(COLLECTIONS.USERS)
+  const userOrgMap = new Map<string, string>()
+  const userDeptMap = new Map<string, string>()
+  
+  // Also build org name to ID mapping for matching by company name
+  const orgDocs = await getDocuments(COLLECTIONS.ORGANIZATIONS)
+  const orgNameToIdMap = new Map<string, string>()
+  for (const org of orgDocs) {
+    const orgData = org as Record<string, unknown>
+    const name = (orgData.name as string) || ""
+    if (name) {
+      orgNameToIdMap.set(name.toLowerCase(), org.id)
+    }
+  }
+  
+  for (const u of allUsers) {
+    const userData = u as Record<string, unknown>
+    // Get user's org - prefer organizationId, fallback to matching company name
+    let userOrg = (userData.organizationId as string) || ""
+    if (!userOrg && userData.company) {
+      userOrg = orgNameToIdMap.get((userData.company as string).toLowerCase()) || ""
+    }
+    if (userOrg) {
+      userOrgMap.set(u.id, userOrg)
+    }
+    
+    const dept = (userData.department as string) || ""
+    if (dept) {
+      userDeptMap.set(u.id, dept)
+    }
+  }
+
   if (orgId && orgId !== "all") {
-    // Filter by org but ALWAYS include user's own responses
-    responses = responses.filter((r) => r.organizationId === orgId || r.userId === userId)
+    // Filter by user's ACTUAL organization (from profile), not the response's stored orgId
+    // Also include responses where the stored orgId matches (for backwards compatibility)
+    // And always include current user's own responses
+    responses = responses.filter((r) => {
+      const userOrg = userOrgMap.get(r.userId)
+      return userOrg === orgId || r.organizationId === orgId || r.userId === userId
+    })
   }
   
   // Filter by department using user's CURRENT department from profile
-  // This matches how computeDepartmentPerformance aggregates data
   if (department && department !== "all") {
-    const allUsers = await getDocuments(COLLECTIONS.USERS)
-    const userDeptMap = new Map<string, string>()
-    for (const u of allUsers) {
-      const userData = u as Record<string, unknown>
-      const dept = (userData.department as string) || ""
-      if (dept) {
-        userDeptMap.set(u.id, dept)
-      }
-    }
     responses = responses.filter((r) => {
       const userDept = userDeptMap.get(r.userId) || r.department || ""
       return userDept === department
