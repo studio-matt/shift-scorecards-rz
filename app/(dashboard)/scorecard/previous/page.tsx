@@ -140,14 +140,22 @@ export default function PreviousScorecardsPage() {
       
       // Build org name map and populate orgs list
       const orgNameMap = new Map<string, string>()
+      const orgNameToIdMap = new Map<string, string>() // For matching by company name
       const orgsList: Array<{ id: string; name: string }> = []
       for (const org of orgDocs) {
         const data = org as Record<string, unknown>
         const name = (data.name as string) || "Unknown Organization"
         orgNameMap.set(org.id, name)
+        orgNameToIdMap.set(name.toLowerCase(), org.id)
         orgsList.push({ id: org.id, name })
       }
       setOrgs(orgsList.sort((a, b) => a.name.localeCompare(b.name)))
+      
+      // Determine user's organization ID (by organizationId or by matching company name)
+      let userOrgId = user?.organizationId
+      if (!userOrgId && user?.company) {
+        userOrgId = orgNameToIdMap.get(user.company.toLowerCase())
+      }
       
       // Build user department map and collect unique departments
       const userDeptMap = new Map<string, string>()
@@ -195,7 +203,7 @@ export default function PreviousScorecardsPage() {
       // Filter responses by organization for non-super-admin users
       const responses = isSuperAdmin 
         ? allResponses 
-        : allResponses.filter((r) => r.organizationId === user?.organizationId)
+        : allResponses.filter((r) => r.organizationId === userOrgId)
       
       // Group by organization + weekOf
       const grouped = new Map<string, AggregatedScorecard>()
