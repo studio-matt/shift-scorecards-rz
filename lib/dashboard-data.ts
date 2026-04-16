@@ -646,7 +646,7 @@ export interface RecentScorecard {
   templateName: string
   delta?: number
   answers?: Record<string, unknown>
-  questions?: { id: string; text: string; type: string }[]
+  questions?: { id: string; text: string; type: string; options?: { label: string; value: string }[] }[]
 }
 
 export async function computeRecentScorecards(
@@ -657,7 +657,7 @@ export async function computeRecentScorecards(
   const tmplNameMap = new Map(templates.map((t) => [t.id, (t as unknown as Record<string, unknown>).name as string]))
   const tmplQuestionsMap = new Map(templates.map((t) => {
     const tmpl = t as unknown as Record<string, unknown>
-    const questions = (tmpl.questions as { id: string; text: string; type: string }[]) || []
+    const questions = (tmpl.questions as { id: string; text: string; type: string; options?: { label: string; value: string }[] }[]) || []
     return [t.id, questions]
   }))
 
