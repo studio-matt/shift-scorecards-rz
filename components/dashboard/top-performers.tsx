@@ -48,10 +48,18 @@ export interface HighFive {
   organizationId?: string // For org-based filtering
 }
 
+// Helper to check if a name looks like a raw ID (no spaces, looks like a hash)
+const isValidName = (name: string) => {
+  if (!name) return false
+  // Raw IDs are typically long alphanumeric strings without spaces like "98Chdi6WfVagpMnDXCnN"
+  const looksLikeId = /^[a-zA-Z0-9]{15,}$/.test(name)
+  return !looksLikeId && name.length > 0
+}
+
 // ── MVP Spotlight (Top 5 in Organization) ────────────────────────────────────
 export function MVPSpotlight({ performer, topPerformers = [] }: { performer: TopPerformer | null; topPerformers?: TopPerformer[] }) {
-  // Show top 5 performers
-  const top5 = topPerformers.slice(0, 5)
+  // Show top 5 performers, filtering out any with raw IDs as names
+  const top5 = topPerformers.filter((p) => isValidName(p.name)).slice(0, 5)
   
   if (!performer && top5.length === 0) return null
   
@@ -234,14 +242,6 @@ export function HighFiveSection({
   const recentFives = highFives.slice(0, 4)
   
   // Helper to check if a name looks like a raw ID (no spaces, looks like a hash)
-  const isValidName = (name: string) => {
-    if (!name) return false
-    // Names should have at least one space OR be a short single word (first name only)
-    // Raw IDs are typically long strings without spaces like "98Chdi6WfVagpMnDXCnN"
-    const looksLikeId = /^[a-zA-Z0-9]{15,}$/.test(name)
-    return !looksLikeId && name.length > 0
-  }
-  
   // Filter performers based on search, excluding those with raw IDs as names
   const validPerformers = performers.filter((p) => isValidName(p.name))
   const filteredPerformers = searchQuery.trim()
@@ -406,7 +406,10 @@ interface TopPerformersProps {
 
 export function TopPerformers({ showCompany = false, data }: TopPerformersProps) {
   const [showNames, setShowNames] = useState(false)
-
+  
+  // Filter out performers with raw IDs as names
+  const filteredData = data.filter((p) => isValidName(p.name))
+  
   return (
     <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
@@ -435,12 +438,12 @@ export function TopPerformers({ showCompany = false, data }: TopPerformersProps)
       </CardHeader>
       <CardContent className="relative">
         <div className="flex flex-col gap-3">
-          {data.length === 0 && (
+          {filteredData.length === 0 && (
             <p className="py-4 text-center text-sm text-muted-foreground">
               No performers match the current filters
             </p>
           )}
-          {data.map((performer, index) => {
+          {filteredData.map((performer, index) => {
             const displayName = showNames ? performer.name : anonymizeName(performer.name)
             const initials = performer.name.split(" ").map((n) => n[0]).join("")
             const isTop3 = index < 3

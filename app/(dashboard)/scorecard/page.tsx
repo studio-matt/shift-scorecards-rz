@@ -709,12 +709,12 @@ export default function ScorecardPage() {
                                   </button>
                                 ))}
                               </div>
-  <p className="text-xs text-muted-foreground">
-  Select the amount of time AI helped you save this week
-  </p>
-  </div>
-  )}
-  {q.type === "time_saving_minutes" && (
+                              <p className="text-xs text-muted-foreground">
+                                Select the amount of time AI helped you save this week
+                              </p>
+                            </div>
+                          )}
+                          {q.type === "time_saving_minutes" && (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-2">
         {[
