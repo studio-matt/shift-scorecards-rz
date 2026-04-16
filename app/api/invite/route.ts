@@ -52,19 +52,36 @@ export async function POST(req: Request) {
       "{{inviteLink}}": appUrl,
     })
     
-    const results = await Promise.allSettled(
-      emails.map((email: string) =>
-        resend.emails.send({
-          from: fromEmail,
-          to: email,
-          subject,
-          html,
-        }),
-      ),
-    )
-
-    const sent = results.filter((r) => r.status === "fulfilled").length
-    const failed = results.filter((r) => r.status === "rejected").length
+    // Use Resend Batch API - sends up to 100 emails per request
+    // This avoids hitting the 5 req/s rate limit
+    const batchEmails = emails.map((email: string) => ({
+      from: fromEmail,
+      to: email,
+      subject,
+      html,
+    }))
+    
+    // Split into batches of 100 (Resend's batch limit)
+    const BATCH_SIZE = 100
+    let sent = 0
+    let failed = 0
+    
+    for (let i = 0; i < batchEmails.length; i += BATCH_SIZE) {
+      const batch = batchEmails.slice(i, i + BATCH_SIZE)
+      try {
+        const result = await resend.batch.send(batch)
+        if (result.data) {
+          sent += result.data.data.length
+        }
+        if (result.error) {
+          console.error("[invite] Batch error:", result.error)
+          failed += batch.length
+        }
+      } catch (batchErr) {
+        console.error("[invite] Batch send failed:", batchErr)
+        failed += batch.length
+      }
+    }
 
     return NextResponse.json({ sent, failed, total: emails.length })
   } catch (err) {
