@@ -16,7 +16,7 @@ const METRIC_EXPLANATIONS = {
   ),
   confidence: (
     <div className="space-y-1">
-      <p className="font-semibold">Confidence Score</p>
+      <p className="font-semibold">Confidence Level</p>
       <p>Your average self-reported confidence across all questions.</p>
       <ul className="list-disc pl-4 space-y-0.5">
         <li>Scale: 1-10 (higher is better)</li>
@@ -27,7 +27,7 @@ const METRIC_EXPLANATIONS = {
   rank: (
     <div className="space-y-1">
       <p className="font-semibold">Percentile Rank</p>
-      <p>Your ranking compared to others in your company based on confidence scores.</p>
+      <p>Your ranking compared to others in your company based on confidence levels.</p>
       <ul className="list-disc pl-4 space-y-0.5">
         <li>90th = Top 10% of your company</li>
         <li>50th = Middle of the pack</li>

@@ -835,7 +835,8 @@ export default function DashboardPage() {
 
         <QuestionResults data={questionResults} />
 
-        <RecentScorecardsCard data={recentScorecards} />
+        {/* Filter to show only current user's scorecards */}
+<RecentScorecardsCard data={recentScorecards.filter((sc) => sc.userId === user?.id)} />
       </div>
     </div>
   )
