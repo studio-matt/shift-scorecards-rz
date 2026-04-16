@@ -293,6 +293,9 @@ export function RecentScorecardsCard({ data }: RecentScorecardsCardProps) {
               selectedScorecard.questions.map((q, idx) => {
                 const answer = selectedScorecard.answers?.[q.id]
                 
+                // Debug: log the question to see if options are present
+                console.log("[v0] Question:", q.id, "type:", q.type, "options:", q.options, "answer:", answer)
+                
                 // For questions with options, look up the label from options
                 let displayAnswer: string
                 if (answer === undefined || answer === null) {
@@ -300,6 +303,7 @@ export function RecentScorecardsCard({ data }: RecentScorecardsCardProps) {
                 } else if (q.options && q.options.length > 0 && typeof answer === "string") {
                   // Find the matching option and show its label (works for multichoice, goals, etc.)
                   const option = q.options.find(opt => opt.value === answer)
+                  console.log("[v0] Looking for option with value:", answer, "found:", option)
                   displayAnswer = option ? option.label : answer
                 } else if (typeof answer === "number") {
                   displayAnswer = answer.toString()
