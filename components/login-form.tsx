@@ -268,18 +268,20 @@ export default function LoginForm() {
                     Remember me
                   </Label>
                 </div>
-                <button
+                <Button
                   type="button"
-                  className="text-sm font-medium text-primary hover:underline"
-                  onClick={() => {
-                    console.log("[v0] Forgot password clicked, showForgotPassword:", showForgotPassword)
+                  variant="link"
+                  className="h-auto p-0 text-sm font-medium text-primary hover:underline"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
                     setShowForgotPassword(true)
-                    setResetEmail(email) // Pre-fill with current email if entered
+                    setResetEmail(email)
                     setResetMessage(null)
                   }}
                 >
                   Forgot password?
-                </button>
+                </Button>
               </div>
             )}
             <Button type="submit" className="w-full" disabled={loading}>
@@ -371,7 +373,6 @@ export default function LoginForm() {
       </Card>
 
       {/* Forgot Password Modal */}
-      {console.log("[v0] Rendering Dialog, showForgotPassword:", showForgotPassword)}
       <Dialog open={showForgotPassword} onOpenChange={setShowForgotPassword}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
