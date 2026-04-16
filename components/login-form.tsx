@@ -268,26 +268,17 @@ export default function LoginForm() {
                     Remember me
                   </Label>
                 </div>
-                <span
-                  role="button"
-                  tabIndex={0}
-                  className="text-sm font-medium text-primary hover:underline cursor-pointer"
+                <button
+                  type="button"
+                  className="text-sm font-medium text-primary hover:underline"
                   onClick={() => {
-                    alert("Forgot password clicked!")
                     setShowForgotPassword(true)
                     setResetEmail(email)
                     setResetMessage(null)
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      setShowForgotPassword(true)
-                      setResetEmail(email)
-                      setResetMessage(null)
-                    }
-                  }}
                 >
                   Forgot password?
-                </span>
+                </button>
               </div>
             )}
             <Button type="submit" className="w-full" disabled={loading}>
