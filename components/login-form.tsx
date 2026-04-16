@@ -272,6 +272,7 @@ export default function LoginForm() {
                   type="button"
                   className="text-sm font-medium text-primary hover:underline"
                   onClick={() => {
+                    console.log("[v0] Forgot password clicked, showForgotPassword:", showForgotPassword)
                     setShowForgotPassword(true)
                     setResetEmail(email) // Pre-fill with current email if entered
                     setResetMessage(null)
@@ -370,6 +371,7 @@ export default function LoginForm() {
       </Card>
 
       {/* Forgot Password Modal */}
+      {console.log("[v0] Rendering Dialog, showForgotPassword:", showForgotPassword)}
       <Dialog open={showForgotPassword} onOpenChange={setShowForgotPassword}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
