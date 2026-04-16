@@ -198,9 +198,7 @@ export default function DashboardPage() {
   const loadData = useCallback(async () => {
     // Don't load data until selectedOrg is properly set for non-super-admin users
     // This prevents showing data from all orgs before the user's org is determined
-    console.log("[v0] loadData called:", { isSuperAdmin, selectedOrg, userOrgId: user?.organizationId, userCompany: user?.company })
     if (!isSuperAdmin && selectedOrg === "all" && (user?.organizationId || user?.company)) {
-      console.log("[v0] loadData early return - waiting for org to be set")
       return // Wait for useEffect to set the correct org
     }
     
@@ -211,8 +209,6 @@ export default function DashboardPage() {
         fetchAllResponses(selectedOrg, selectedDept, user?.id),
         getDocument(COLLECTIONS.SETTINGS, "dashboardTargets"),
       ])
-      
-      console.log("[v0] loadData fetched:", { allResponsesCount: allResponses.length, selectedOrg, selectedDept })
       
       // Filter responses by selected time period
       const responses = filterByTimePeriod(allResponses, timePeriod)
@@ -317,9 +313,9 @@ export default function DashboardPage() {
         // Extract goals from user's responses based on question types
         // We need to fetch templates to get question types
         const templates = await getDocuments(COLLECTIONS.TEMPLATES)
-        const templateMap = new Map<string, { questions: Array<{ id: string; type: string }> }>()
+        const templateMap = new Map<string, { questions: Array<{ id: string; type: string; text?: string; options?: Array<{ label: string; value: string }> }> }>()
         for (const t of templates) {
-          const template = t as unknown as { id: string; questions: Array<{ id: string; type: string }> }
+          const template = t as unknown as { id: string; questions: Array<{ id: string; type: string; text?: string; options?: Array<{ label: string; value: string }> }> }
           templateMap.set(template.id, template)
         }
         
@@ -335,10 +331,22 @@ export default function DashboardPage() {
             const answer = response.answers?.[question.id]
             if (!answer || typeof answer !== "string" || !answer.trim()) continue
             
-            if (question.type === "goals") {
+            if (question.type === "goals" || question.type === "text" || question.type === "goal") {
+              // For multichoice/goals questions, look up the option label
+              let goalText = answer
+              if (question.options && question.options.length > 0) {
+                const option = question.options.find(opt => opt.value === answer)
+                if (option) {
+                  goalText = option.label
+                }
+              }
+              
+              // Skip if the text is too short (likely a raw value like "A", "B")
+              if (goalText.length < 3) continue
+              
               extractedGoals.push({
                 id: `${responseId}-${question.id}`,
-                text: answer,
+                text: goalText,
                 weekOf: response.weekOf || response.completedAt?.slice(0, 10) || "",
                 status: "in-progress",
               })
@@ -840,14 +848,7 @@ export default function DashboardPage() {
         <QuestionResults data={questionResults} />
 
         {/* Filter to show only current user's scorecards */}
-        {(() => {
-          const filtered = recentScorecards.filter((sc) => sc.userId === user?.id)
-          console.log("[v0] userId:", user?.id)
-          console.log("[v0] totalScorecards:", recentScorecards.length)
-          console.log("[v0] filteredCount:", filtered.length)
-          console.log("[v0] allUserIds:", JSON.stringify(recentScorecards.map(sc => sc.userId)))
-          return <RecentScorecardsCard data={filtered} />
-        })()}
+        <RecentScorecardsCard data={recentScorecards.filter((sc) => sc.userId === user?.id)} />
       </div>
     </div>
   )
