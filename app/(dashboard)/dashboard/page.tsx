@@ -208,7 +208,7 @@ export default function DashboardPage() {
       setLoading(true)
       const [orgDocs, allResponses, targetsDoc] = await Promise.all([
         getOrganizations(),
-        fetchAllResponses(selectedOrg, selectedDept),
+        fetchAllResponses(selectedOrg, selectedDept, user?.id),
         getDocument(COLLECTIONS.SETTINGS, "dashboardTargets"),
       ])
       

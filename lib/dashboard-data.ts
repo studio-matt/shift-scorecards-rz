@@ -150,12 +150,14 @@ interface RawResponse {
 export async function fetchAllResponses(
   orgId?: string,
   department?: string,
+  userId?: string, // Include user's own responses regardless of org filter
 ): Promise<RawResponse[]> {
   const docs = await getDocuments(COLLECTIONS.RESPONSES)
   let responses = docs.map((d) => ({ ...d } as unknown as RawResponse))
 
   if (orgId && orgId !== "all") {
-    responses = responses.filter((r) => r.organizationId === orgId)
+    // Filter by org but ALWAYS include user's own responses
+    responses = responses.filter((r) => r.organizationId === orgId || r.userId === userId)
   }
   
   // Filter by department using user's CURRENT department from profile
