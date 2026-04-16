@@ -1005,10 +1005,10 @@ export function PersonalTrendChart({ data }: { data: PersonalTrendPoint[] }) {
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
       <CardHeader className="relative pb-2">
         <CardTitle className="text-sm font-semibold">
-          Your Score Trend vs. Averages
+          Your Hours Trend vs. Averages
         </CardTitle>
         <CardDescription className="text-[11px]">
-          Your scores compared to anonymized department and company averages over time
+          Your hours saved compared to anonymized department and company averages over time
         </CardDescription>
       </CardHeader>
       <CardContent className="relative">
@@ -1037,7 +1037,7 @@ export function PersonalTrendChart({ data }: { data: PersonalTrendPoint[] }) {
             <Line
               type="monotone"
               dataKey="myScore"
-              name="You"
+              name="Your Hours"
               stroke="hsl(var(--primary))"
               strokeWidth={3}
               dot={{ r: 4, fill: "hsl(var(--primary))" }}
