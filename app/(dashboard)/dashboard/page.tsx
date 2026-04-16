@@ -198,9 +198,7 @@ export default function DashboardPage() {
   const loadData = useCallback(async () => {
     // Don't load data until selectedOrg is properly set for non-super-admin users
     // This prevents showing data from all orgs before the user's org is determined
-    console.log("[v0] loadData called:", { isSuperAdmin, selectedOrg, userOrgId: user?.organizationId, userCompany: user?.company })
     if (!isSuperAdmin && selectedOrg === "all" && (user?.organizationId || user?.company)) {
-      console.log("[v0] loadData early return - waiting for org to be set")
       return // Wait for useEffect to set the correct org
     }
     
@@ -211,8 +209,6 @@ export default function DashboardPage() {
         fetchAllResponses(selectedOrg, selectedDept, user?.id),
         getDocument(COLLECTIONS.SETTINGS, "dashboardTargets"),
       ])
-      
-      console.log("[v0] loadData fetched:", { allResponsesCount: allResponses.length, selectedOrg, selectedDept })
       
       // Filter responses by selected time period
       const responses = filterByTimePeriod(allResponses, timePeriod)
@@ -840,14 +836,7 @@ export default function DashboardPage() {
         <QuestionResults data={questionResults} />
 
         {/* Filter to show only current user's scorecards */}
-        {(() => {
-          const filtered = recentScorecards.filter((sc) => sc.userId === user?.id)
-          console.log("[v0] userId:", user?.id)
-          console.log("[v0] totalScorecards:", recentScorecards.length)
-          console.log("[v0] filteredCount:", filtered.length)
-          console.log("[v0] allUserIds:", JSON.stringify(recentScorecards.map(sc => sc.userId)))
-          return <RecentScorecardsCard data={filtered} />
-        })()}
+        <RecentScorecardsCard data={recentScorecards.filter((sc) => sc.userId === user?.id)} />
       </div>
     </div>
   )

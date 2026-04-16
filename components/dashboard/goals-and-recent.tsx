@@ -292,13 +292,22 @@ export function RecentScorecardsCard({ data }: RecentScorecardsCardProps) {
             {selectedScorecard?.questions && selectedScorecard.questions.length > 0 && selectedScorecard?.answers ? (
               selectedScorecard.questions.map((q, idx) => {
                 const answer = selectedScorecard.answers?.[q.id]
-                const displayAnswer = answer !== undefined && answer !== null
-                  ? typeof answer === "number"
-                    ? answer.toString()
-                    : typeof answer === "string"
-                    ? answer
-                    : JSON.stringify(answer)
-                  : "No response"
+                
+                // For multichoice questions, look up the label from options
+                let displayAnswer: string
+                if (answer === undefined || answer === null) {
+                  displayAnswer = "No response"
+                } else if (q.type === "multichoice" && q.options && typeof answer === "string") {
+                  // Find the matching option and show its label
+                  const option = q.options.find(opt => opt.value === answer)
+                  displayAnswer = option ? option.label : answer
+                } else if (typeof answer === "number") {
+                  displayAnswer = answer.toString()
+                } else if (typeof answer === "string") {
+                  displayAnswer = answer
+                } else {
+                  displayAnswer = JSON.stringify(answer)
+                }
                 
                 return (
                   <div key={q.id} className="rounded-lg border border-border/50 bg-muted/30 p-4">
@@ -311,7 +320,7 @@ export function RecentScorecardsCard({ data }: RecentScorecardsCardProps) {
                         ) : q.type === "time_saving" && typeof answer === "number" ? (
                           <span className="font-semibold">{answer} minutes</span>
                         ) : (
-                          displayAnswer
+                          <span className="font-semibold">{displayAnswer}</span>
                         )}
                       </p>
                     </div>

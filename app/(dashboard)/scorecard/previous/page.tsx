@@ -202,27 +202,15 @@ export default function PreviousScorecardsPage() {
       
       // Filter responses by organization for non-super-admin users
       // If userOrgId can't be determined, show user's own responses only
-      console.log("[v0] isSuperAdmin:", isSuperAdmin)
-      console.log("[v0] userOrgId:", userOrgId)
-      console.log("[v0] user.id:", user?.id)
-      console.log("[v0] user.company:", user?.company)
-      console.log("[v0] user.organizationId:", user?.organizationId)
-      console.log("[v0] totalResponses:", allResponses.length)
-      console.log("[v0] sampleUserIds:", JSON.stringify(allResponses.slice(0, 5).map(r => r.userId)))
-      console.log("[v0] sampleOrgIds:", JSON.stringify(allResponses.slice(0, 5).map(r => r.organizationId)))
-      
       let responses: RawResponse[]
       if (isSuperAdmin) {
-        console.log("[v0] Using superAdmin path - showing all")
         responses = allResponses
       } else {
         // For non-super-admins: show responses from their org OR their own responses
         // This ensures users always see their own scorecards even if org filtering has issues
-        console.log("[v0] Filtering by orgId OR userId")
         responses = allResponses.filter((r) => 
           r.organizationId === userOrgId || r.userId === user?.id
         )
-        console.log("[v0] After combined filter:", responses.length)
       }
       
       // Group by organization + weekOf
