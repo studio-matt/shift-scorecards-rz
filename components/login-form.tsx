@@ -15,6 +15,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 export default function LoginForm() {
   const [email, setEmail] = useState("")
@@ -26,6 +33,12 @@ export default function LoginForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [mode, setMode] = useState<"login" | "signup">("login")
+  
+  // Forgot password state
+  const [showForgotPassword, setShowForgotPassword] = useState(false)
+  const [resetEmail, setResetEmail] = useState("")
+  const [resetLoading, setResetLoading] = useState(false)
+  const [resetMessage, setResetMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const { login, signup, loginWithProvider, isAuthenticated, ready, authError, clearAuthError } = useAuth()
   const router = useRouter()
 
@@ -82,6 +95,39 @@ export default function LoginForm() {
         setError(msg)
       }
       setLoading(false)
+    }
+  }
+
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault()
+    if (!resetEmail.trim()) {
+      setResetMessage({ type: "error", text: "Please enter your email address." })
+      return
+    }
+    
+    setResetLoading(true)
+    setResetMessage(null)
+    
+    try {
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: resetEmail }),
+      })
+      
+      const data = await res.json()
+      setResetMessage({ type: "success", text: data.message || "Password reset email sent!" })
+      
+      // Clear email after success and close after delay
+      setTimeout(() => {
+        setShowForgotPassword(false)
+        setResetEmail("")
+        setResetMessage(null)
+      }, 3000)
+    } catch {
+      setResetMessage({ type: "error", text: "Failed to send reset email. Please try again." })
+    } finally {
+      setResetLoading(false)
     }
   }
 
@@ -225,6 +271,11 @@ export default function LoginForm() {
                 <button
                   type="button"
                   className="text-sm font-medium text-primary hover:underline"
+                  onClick={() => {
+                    setShowForgotPassword(true)
+                    setResetEmail(email) // Pre-fill with current email if entered
+                    setResetMessage(null)
+                  }}
                 >
                   Forgot password?
                 </button>
@@ -317,6 +368,54 @@ export default function LoginForm() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Forgot Password Modal */}
+      <Dialog open={showForgotPassword} onOpenChange={setShowForgotPassword}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reset Your Password</DialogTitle>
+            <DialogDescription>
+              Enter your email address and we&apos;ll send you a link to reset your password.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleForgotPassword} className="space-y-4">
+            {resetMessage && (
+              <div
+                className={`rounded-md p-3 text-sm ${
+                  resetMessage.type === "success"
+                    ? "bg-green-50 text-green-800 dark:bg-green-950/20 dark:text-green-300"
+                    : "bg-destructive/10 text-destructive"
+                }`}
+              >
+                {resetMessage.text}
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="reset-email">Email Address</Label>
+              <Input
+                id="reset-email"
+                type="email"
+                placeholder="Enter your email"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowForgotPassword(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={resetLoading}>
+                {resetLoading ? "Sending..." : "Send Reset Link"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

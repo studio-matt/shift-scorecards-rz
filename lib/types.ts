@@ -172,12 +172,13 @@ export interface EmailSettings {
   updatedBy: string
 }
 
-export type EmailTemplateType = 
+export type EmailTemplateType =
   | "scorecard_posted"
   | "scorecard_reminder"
   | "scorecard_completed"
   | "weekly_digest"
   | "member_invitation"
+  | "password_reset"
 
 export interface EmailTemplate {
   id: EmailTemplateType
@@ -229,5 +230,10 @@ export const EMAIL_PLACEHOLDERS = {
   member_invitation: [
     { key: "{{organizationName}}", description: "Organization name" },
     { key: "{{inviteLink}}", description: "Link to accept the invitation" },
+  ],
+  password_reset: [
+    { key: "{{userName}}", description: "Recipient's full name" },
+    { key: "{{firstName}}", description: "Recipient's first name" },
+    { key: "{{resetLink}}", description: "Link to reset password" },
   ],
 } as const
