@@ -21,6 +21,8 @@ import {
   Sparkles,
   Send,
   X,
+  Pencil,
+  Check,
 } from "lucide-react"
 import type { TopPerformer } from "@/lib/types"
 import { COLLECTIONS, setDocument, getDocuments } from "@/lib/firestore"
@@ -139,6 +141,8 @@ export function HighFiveSection({
   const [message, setMessage] = useState("")
   const [loadedFives, setLoadedFives] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editMessage, setEditMessage] = useState("")
 
   const loadHighFives = useCallback(async () => {
     if (loadedFives) return
@@ -179,6 +183,28 @@ export function HighFiveSection({
     }
   }
 
+  // Start editing a high five
+  function startEdit(hf: HighFive) {
+    setEditingId(hf.id)
+    setEditMessage(hf.message)
+  }
+  
+  // Save edited high five
+  async function saveEdit() {
+    if (!editingId || !editMessage.trim()) return
+    const updated = highFives.map((hf) =>
+      hf.id === editingId ? { ...hf, message: editMessage.trim() } : hf
+    )
+    setHighFives(updated)
+    setEditingId(null)
+    setEditMessage("")
+    try {
+      await setDocument(COLLECTIONS.SETTINGS, "highFives", { items: updated, updatedAt: Timestamp.now() })
+    } catch {
+      // fail silently
+    }
+  }
+  
   const recentFives = highFives.slice(0, 4)
   
   // Filter performers based on search
@@ -280,13 +306,44 @@ export function HighFiveSection({
             {recentFives.map((hf) => (
               <div key={hf.id} className="flex items-start gap-2 rounded-md bg-muted/30 px-2.5 py-1.5">
                 <Hand className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="text-[11px] text-foreground">
                     <span className="font-semibold">{hf.fromName}</span>
                     {" gave "}<span className="font-semibold">{hf.toName}</span>{" a high five"}
                   </p>
-                  <p className="text-[10px] text-muted-foreground italic truncate">{`"${hf.message}"`}</p>
+                  {editingId === hf.id ? (
+                    <div className="mt-1 flex gap-1">
+                      <Input
+                        value={editMessage}
+                        onChange={(e) => setEditMessage(e.target.value)}
+                        className="h-6 text-[10px]"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveEdit()
+                          if (e.key === "Escape") { setEditingId(null); setEditMessage("") }
+                        }}
+                        autoFocus
+                      />
+                      <Button size="sm" variant="ghost" className="h-6 px-1.5" onClick={saveEdit}>
+                        <Check className="h-3 w-3" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-6 px-1.5" onClick={() => { setEditingId(null); setEditMessage("") }}>
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground italic truncate">{`"${hf.message}"`}</p>
+                  )}
                 </div>
+                {/* Show edit button only for high fives the current user gave */}
+                {hf.fromName === currentUserName && editingId !== hf.id && (
+                  <button
+                    onClick={() => startEdit(hf)}
+                    className="shrink-0 text-muted-foreground hover:text-foreground"
+                    title="Edit message"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                )}
               </div>
             ))}
           </div>
