@@ -293,12 +293,12 @@ export function RecentScorecardsCard({ data }: RecentScorecardsCardProps) {
               selectedScorecard.questions.map((q, idx) => {
                 const answer = selectedScorecard.answers?.[q.id]
                 
-                // For multichoice questions, look up the label from options
+                // For questions with options, look up the label from options
                 let displayAnswer: string
                 if (answer === undefined || answer === null) {
                   displayAnswer = "No response"
-                } else if (q.type === "multichoice" && q.options && typeof answer === "string") {
-                  // Find the matching option and show its label
+                } else if (q.options && q.options.length > 0 && typeof answer === "string") {
+                  // Find the matching option and show its label (works for multichoice, goals, etc.)
                   const option = q.options.find(opt => opt.value === answer)
                   displayAnswer = option ? option.label : answer
                 } else if (typeof answer === "number") {
