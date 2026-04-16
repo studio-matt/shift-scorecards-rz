@@ -23,6 +23,7 @@ import {
   X,
   Pencil,
   Check,
+  Trash2,
 } from "lucide-react"
 import type { TopPerformer } from "@/lib/types"
 import { COLLECTIONS, setDocument, getDocuments } from "@/lib/firestore"
@@ -205,6 +206,18 @@ export function HighFiveSection({
     }
   }
   
+  // Delete a high five
+  async function deleteHighFive(id: string) {
+    if (!confirm("Delete this high five?")) return
+    const updated = highFives.filter((hf) => hf.id !== id)
+    setHighFives(updated)
+    try {
+      await setDocument(COLLECTIONS.SETTINGS, "highFives", { items: updated, updatedAt: Timestamp.now() })
+    } catch {
+      // fail silently
+    }
+  }
+  
   const recentFives = highFives.slice(0, 4)
   
   // Filter performers based on search
@@ -334,15 +347,24 @@ export function HighFiveSection({
                     <p className="text-[10px] text-muted-foreground italic truncate">{`"${hf.message}"`}</p>
                   )}
                 </div>
-                {/* Show edit button only for high fives the current user gave */}
+                {/* Show edit/delete buttons only for high fives the current user gave */}
                 {hf.fromName === currentUserName && editingId !== hf.id && (
-                  <button
-                    onClick={() => startEdit(hf)}
-                    className="shrink-0 text-muted-foreground hover:text-foreground"
-                    title="Edit message"
-                  >
-                    <Pencil className="h-3 w-3" />
-                  </button>
+                  <div className="flex gap-1 shrink-0">
+                    <button
+                      onClick={() => startEdit(hf)}
+                      className="text-muted-foreground hover:text-foreground"
+                      title="Edit message"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={() => deleteHighFive(hf.id)}
+                      className="text-muted-foreground hover:text-destructive"
+                      title="Delete high five"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
