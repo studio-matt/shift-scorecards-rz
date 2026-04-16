@@ -836,7 +836,16 @@ export default function DashboardPage() {
         <QuestionResults data={questionResults} />
 
         {/* Filter to show only current user's scorecards */}
-<RecentScorecardsCard data={recentScorecards.filter((sc) => sc.userId === user?.id)} />
+        {(() => {
+          const filtered = recentScorecards.filter((sc) => sc.userId === user?.id)
+          console.log("[v0] RecentScorecards debug:", {
+            userId: user?.id,
+            totalScorecards: recentScorecards.length,
+            filteredCount: filtered.length,
+            allUserIds: recentScorecards.map(sc => sc.userId),
+          })
+          return <RecentScorecardsCard data={filtered} />
+        })()}
       </div>
     </div>
   )
