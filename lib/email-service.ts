@@ -82,6 +82,23 @@ If you didn't expect this invitation, you can safely ignore this email.
 </div>`,
     enabled: true,
   },
+  password_reset: {
+    id: "password_reset",
+    name: "Password Reset",
+    description: "Sent when a user requests to reset their password",
+    subject: "Reset Your Password",
+    body: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
+<h1 style="color: #111; margin-bottom: 8px;">Reset Your Password</h1>
+<p style="color: #555; line-height: 1.6;">
+Hi {{firstName}}, we received a request to reset your password. Click the button below to create a new password.
+</p>
+<p><a href="{{resetLink}}" style="display: inline-block; margin-top: 20px; padding: 12px 24px; background: #111; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 500;">Reset Password</a></p>
+<p style="color: #999; font-size: 13px; margin-top: 32px;">
+If you didn't request this, you can safely ignore this email. This link will expire in 1 hour.
+</p>
+</div>`,
+    enabled: true,
+  },
 }
 
 // Get email settings from Firestore
