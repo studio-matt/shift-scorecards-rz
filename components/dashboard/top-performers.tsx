@@ -40,10 +40,12 @@ function anonymizeName(name: string): string {
 export interface HighFive {
   id: string
   fromName: string
+  fromUserId?: string
   toUserId: string
   toName: string
   message: string
   createdAt: string
+  organizationId?: string // For org-based filtering
 }
 
 // ── MVP Spotlight (Top 5 in Organization) ────────────────────────────────────
@@ -133,9 +135,13 @@ export function MVPSpotlight({ performer, topPerformers = [] }: { performer: Top
 export function HighFiveSection({
   performers,
   currentUserName,
+  currentUserId,
+  organizationId,
 }: {
   performers: TopPerformer[]
   currentUserName: string
+  currentUserId?: string
+  organizationId?: string
 }) {
   const [highFives, setHighFives] = useState<HighFive[]>([])
   const [sending, setSending] = useState<string | null>(null) // userId being high-fived
@@ -151,13 +157,18 @@ export function HighFiveSection({
       const docs = await getDocuments(COLLECTIONS.SETTINGS)
       const fiveDoc = docs.find((d) => d.id === "highFives") as Record<string, unknown> | undefined
       if (fiveDoc && Array.isArray(fiveDoc.items)) {
-        setHighFives(fiveDoc.items as HighFive[])
+        // Filter to only show high fives from same organization
+        const allFives = fiveDoc.items as HighFive[]
+        const filteredFives = organizationId 
+          ? allFives.filter((hf) => hf.organizationId === organizationId || !hf.organizationId)
+          : allFives
+        setHighFives(filteredFives)
       }
     } catch {
       // fail silently
     }
     setLoadedFives(true)
-  }, [loadedFives])
+  }, [loadedFives, organizationId])
 
   // Load on mount
   useEffect(() => { loadHighFives() }, [loadHighFives])
@@ -167,10 +178,12 @@ export function HighFiveSection({
     const newFive: HighFive = {
       id: `hf-${Date.now()}`,
       fromName: currentUserName || "Anonymous",
+      fromUserId: currentUserId,
       toUserId: toPerformer.id,
       toName: toPerformer.name,
       message: message.trim(),
       createdAt: new Date().toISOString(),
+      organizationId: organizationId,
     }
     const updated = [newFive, ...highFives].slice(0, 50) // Keep last 50
     setHighFives(updated)
@@ -220,13 +233,23 @@ export function HighFiveSection({
   
   const recentFives = highFives.slice(0, 4)
   
-  // Filter performers based on search
+  // Helper to check if a name looks like a raw ID (no spaces, looks like a hash)
+  const isValidName = (name: string) => {
+    if (!name) return false
+    // Names should have at least one space OR be a short single word (first name only)
+    // Raw IDs are typically long strings without spaces like "98Chdi6WfVagpMnDXCnN"
+    const looksLikeId = /^[a-zA-Z0-9]{15,}$/.test(name)
+    return !looksLikeId && name.length > 0
+  }
+  
+  // Filter performers based on search, excluding those with raw IDs as names
+  const validPerformers = performers.filter((p) => isValidName(p.name))
   const filteredPerformers = searchQuery.trim()
-    ? performers.filter((p) => 
+    ? validPerformers.filter((p) => 
         p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.department?.toLowerCase().includes(searchQuery.toLowerCase())
       )
-    : performers.slice(0, 6)
+    : validPerformers.slice(0, 6)
 
   return (
     <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
@@ -348,7 +371,7 @@ export function HighFiveSection({
                   )}
                 </div>
                 {/* Show edit/delete buttons only for high fives the current user gave */}
-                {hf.fromName === currentUserName && editingId !== hf.id && (
+                {(hf.fromUserId === currentUserId || hf.fromName === currentUserName) && editingId !== hf.id && (
                   <div className="flex gap-1 shrink-0">
                     <button
                       onClick={() => startEdit(hf)}
