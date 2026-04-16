@@ -313,9 +313,9 @@ export default function DashboardPage() {
         // Extract goals from user's responses based on question types
         // We need to fetch templates to get question types
         const templates = await getDocuments(COLLECTIONS.TEMPLATES)
-        const templateMap = new Map<string, { questions: Array<{ id: string; type: string }> }>()
+        const templateMap = new Map<string, { questions: Array<{ id: string; type: string; text?: string; options?: Array<{ label: string; value: string }> }> }>()
         for (const t of templates) {
-          const template = t as unknown as { id: string; questions: Array<{ id: string; type: string }> }
+          const template = t as unknown as { id: string; questions: Array<{ id: string; type: string; text?: string; options?: Array<{ label: string; value: string }> }> }
           templateMap.set(template.id, template)
         }
         
@@ -331,10 +331,22 @@ export default function DashboardPage() {
             const answer = response.answers?.[question.id]
             if (!answer || typeof answer !== "string" || !answer.trim()) continue
             
-            if (question.type === "goals") {
+            if (question.type === "goals" || question.type === "text" || question.type === "goal") {
+              // For multichoice/goals questions, look up the option label
+              let goalText = answer
+              if (question.options && question.options.length > 0) {
+                const option = question.options.find(opt => opt.value === answer)
+                if (option) {
+                  goalText = option.label
+                }
+              }
+              
+              // Skip if the text is too short (likely a raw value like "A", "B")
+              if (goalText.length < 3) continue
+              
               extractedGoals.push({
                 id: `${responseId}-${question.id}`,
-                text: answer,
+                text: goalText,
                 weekOf: response.weekOf || response.completedAt?.slice(0, 10) || "",
                 status: "in-progress",
               })
