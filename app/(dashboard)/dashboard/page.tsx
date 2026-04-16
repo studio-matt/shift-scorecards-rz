@@ -612,7 +612,7 @@ export default function DashboardPage() {
               <TopPerformers showCompany data={topPerformers} />
               <div className="flex flex-col gap-6">
                 <MostImprovedCard showCompany data={mostImproved} />
-                <HighFiveSection performers={topPerformers} currentUserName={user?.firstName ? `${user.firstName} ${user.lastName ?? ""}`.trim() : "Admin"} />
+                <HighFiveSection performers={topPerformers} currentUserName={user?.firstName ? `${user.firstName} ${user.lastName ?? ""}`.trim() : "Admin"} currentUserId={user?.id} organizationId={selectedOrg !== "all" ? selectedOrg : undefined} />
               </div>
             </div>
           </div>
@@ -829,7 +829,7 @@ export default function DashboardPage() {
           {/* Top 5 Performers with Wins + High Fives */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {topPerformers.length > 0 && <MVPSpotlight performer={topPerformers[0]} topPerformers={topPerformers} />}
-            <HighFiveSection performers={topPerformers} currentUserName={myName || "User"} />
+            <HighFiveSection performers={topPerformers} currentUserName={myName || "User"} currentUserId={user?.id} organizationId={user?.organizationId} />
           </div>
         </div>
 

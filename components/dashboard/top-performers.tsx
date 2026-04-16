@@ -21,6 +21,9 @@ import {
   Sparkles,
   Send,
   X,
+  Pencil,
+  Check,
+  Trash2,
 } from "lucide-react"
 import type { TopPerformer } from "@/lib/types"
 import { COLLECTIONS, setDocument, getDocuments } from "@/lib/firestore"
@@ -37,10 +40,12 @@ function anonymizeName(name: string): string {
 export interface HighFive {
   id: string
   fromName: string
+  fromUserId?: string
   toUserId: string
   toName: string
   message: string
   createdAt: string
+  organizationId?: string // For org-based filtering
 }
 
 // ── MVP Spotlight (Top 5 in Organization) ────────────────────────────────────
@@ -130,15 +135,21 @@ export function MVPSpotlight({ performer, topPerformers = [] }: { performer: Top
 export function HighFiveSection({
   performers,
   currentUserName,
+  currentUserId,
+  organizationId,
 }: {
   performers: TopPerformer[]
   currentUserName: string
+  currentUserId?: string
+  organizationId?: string
 }) {
   const [highFives, setHighFives] = useState<HighFive[]>([])
   const [sending, setSending] = useState<string | null>(null) // userId being high-fived
   const [message, setMessage] = useState("")
   const [loadedFives, setLoadedFives] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editMessage, setEditMessage] = useState("")
 
   const loadHighFives = useCallback(async () => {
     if (loadedFives) return
@@ -146,13 +157,18 @@ export function HighFiveSection({
       const docs = await getDocuments(COLLECTIONS.SETTINGS)
       const fiveDoc = docs.find((d) => d.id === "highFives") as Record<string, unknown> | undefined
       if (fiveDoc && Array.isArray(fiveDoc.items)) {
-        setHighFives(fiveDoc.items as HighFive[])
+        // Filter to only show high fives from same organization
+        const allFives = fiveDoc.items as HighFive[]
+        const filteredFives = organizationId 
+          ? allFives.filter((hf) => hf.organizationId === organizationId || !hf.organizationId)
+          : allFives
+        setHighFives(filteredFives)
       }
     } catch {
       // fail silently
     }
     setLoadedFives(true)
-  }, [loadedFives])
+  }, [loadedFives, organizationId])
 
   // Load on mount
   useEffect(() => { loadHighFives() }, [loadHighFives])
@@ -162,10 +178,12 @@ export function HighFiveSection({
     const newFive: HighFive = {
       id: `hf-${Date.now()}`,
       fromName: currentUserName || "Anonymous",
+      fromUserId: currentUserId,
       toUserId: toPerformer.id,
       toName: toPerformer.name,
       message: message.trim(),
       createdAt: new Date().toISOString(),
+      organizationId: organizationId,
     }
     const updated = [newFive, ...highFives].slice(0, 50) // Keep last 50
     setHighFives(updated)
@@ -179,15 +197,59 @@ export function HighFiveSection({
     }
   }
 
+  // Start editing a high five
+  function startEdit(hf: HighFive) {
+    setEditingId(hf.id)
+    setEditMessage(hf.message)
+  }
+  
+  // Save edited high five
+  async function saveEdit() {
+    if (!editingId || !editMessage.trim()) return
+    const updated = highFives.map((hf) =>
+      hf.id === editingId ? { ...hf, message: editMessage.trim() } : hf
+    )
+    setHighFives(updated)
+    setEditingId(null)
+    setEditMessage("")
+    try {
+      await setDocument(COLLECTIONS.SETTINGS, "highFives", { items: updated, updatedAt: Timestamp.now() })
+    } catch {
+      // fail silently
+    }
+  }
+  
+  // Delete a high five
+  async function deleteHighFive(id: string) {
+    if (!confirm("Delete this high five?")) return
+    const updated = highFives.filter((hf) => hf.id !== id)
+    setHighFives(updated)
+    try {
+      await setDocument(COLLECTIONS.SETTINGS, "highFives", { items: updated, updatedAt: Timestamp.now() })
+    } catch {
+      // fail silently
+    }
+  }
+  
   const recentFives = highFives.slice(0, 4)
   
-  // Filter performers based on search
+  // Helper to check if a name looks like a raw ID (no spaces, looks like a hash)
+  const isValidName = (name: string) => {
+    if (!name) return false
+    // Names should have at least one space OR be a short single word (first name only)
+    // Raw IDs are typically long strings without spaces like "98Chdi6WfVagpMnDXCnN"
+    const looksLikeId = /^[a-zA-Z0-9]{15,}$/.test(name)
+    return !looksLikeId && name.length > 0
+  }
+  
+  // Filter performers based on search, excluding those with raw IDs as names
+  const validPerformers = performers.filter((p) => isValidName(p.name))
   const filteredPerformers = searchQuery.trim()
-    ? performers.filter((p) => 
+    ? validPerformers.filter((p) => 
         p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.department?.toLowerCase().includes(searchQuery.toLowerCase())
       )
-    : performers.slice(0, 6)
+    : validPerformers.slice(0, 6)
 
   return (
     <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
@@ -280,13 +342,53 @@ export function HighFiveSection({
             {recentFives.map((hf) => (
               <div key={hf.id} className="flex items-start gap-2 rounded-md bg-muted/30 px-2.5 py-1.5">
                 <Hand className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="text-[11px] text-foreground">
                     <span className="font-semibold">{hf.fromName}</span>
                     {" gave "}<span className="font-semibold">{hf.toName}</span>{" a high five"}
                   </p>
-                  <p className="text-[10px] text-muted-foreground italic truncate">{`"${hf.message}"`}</p>
+                  {editingId === hf.id ? (
+                    <div className="mt-1 flex gap-1">
+                      <Input
+                        value={editMessage}
+                        onChange={(e) => setEditMessage(e.target.value)}
+                        className="h-6 text-[10px]"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveEdit()
+                          if (e.key === "Escape") { setEditingId(null); setEditMessage("") }
+                        }}
+                        autoFocus
+                      />
+                      <Button size="sm" variant="ghost" className="h-6 px-1.5" onClick={saveEdit}>
+                        <Check className="h-3 w-3" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-6 px-1.5" onClick={() => { setEditingId(null); setEditMessage("") }}>
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground italic truncate">{`"${hf.message}"`}</p>
+                  )}
                 </div>
+                {/* Show edit/delete buttons only for high fives the current user gave */}
+                {(hf.fromUserId === currentUserId || hf.fromName === currentUserName) && editingId !== hf.id && (
+                  <div className="flex gap-1 shrink-0">
+                    <button
+                      onClick={() => startEdit(hf)}
+                      className="text-muted-foreground hover:text-foreground"
+                      title="Edit message"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={() => deleteHighFive(hf.id)}
+                      className="text-muted-foreground hover:text-destructive"
+                      title="Delete high five"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
