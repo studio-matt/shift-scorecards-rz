@@ -1,5 +1,24 @@
 export type UserRole = "admin" | "company_admin" | "user"
 
+export interface NotificationPreferences {
+  // Scorecard notifications
+  scorecardPosted: boolean      // New scorecard is available
+  scorecardReminder: boolean    // Reminder to complete scorecard
+  // Personal progress
+  weeklyDigest: boolean         // Weekly summary of personal progress
+  // Leadership notifications (for admins/company_admins)
+  leadershipReport: boolean     // Weekly org/company performance report
+  nonResponderAlerts: boolean   // Alert when participation drops
+}
+
+export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  scorecardPosted: true,
+  scorecardReminder: true,
+  weeklyDigest: true,
+  leadershipReport: true,
+  nonResponderAlerts: true,
+}
+
 export interface User {
   id: string
   authId?: string
@@ -13,6 +32,8 @@ export interface User {
   avatar?: string
   organizationId: string
   excludeFromReporting?: boolean
+  notificationPreferences?: NotificationPreferences
+  timezone?: string
   createdAt: string
   lastLogin: string
 }
@@ -177,6 +198,7 @@ export type EmailTemplateType =
   | "scorecard_reminder"
   | "scorecard_completed"
   | "weekly_digest"
+  | "leadership_report"
   | "member_invitation"
   | "password_reset"
 

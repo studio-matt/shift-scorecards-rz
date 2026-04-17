@@ -28,9 +28,10 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Upload, ChevronDown, ChevronRight, Shield, Key, ZoomIn, RotateCw } from "lucide-react"
+import { Upload, ChevronDown, ChevronRight, Shield, Key, ZoomIn, RotateCw, Bell, Mail, FileText, Users, AlertTriangle, Loader2 } from "lucide-react"
 import { uploadAvatar } from "@/lib/storage"
 import { updateDocument, COLLECTIONS } from "@/lib/firestore"
+import { DEFAULT_NOTIFICATION_PREFERENCES, type NotificationPreferences } from "@/lib/types"
 
 // ─── Canvas-based crop helper ────────────────────────────────────────
 function cropImageToCanvas(
@@ -318,7 +319,12 @@ export default function SettingsPage() {
   const [jobTitle, setJobTitle] = useState(user?.jobTitle ?? "")
   const [department, setDepartment] = useState(user?.department ?? "")
 const [phone, setPhone] = useState(user?.phone ?? "")
-const [emailNotifications, setEmailNotifications] = useState(true)
+const [timezone, setTimezone] = useState(user?.timezone ?? "pt")
+const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreferences>(
+  user?.notificationPreferences ?? DEFAULT_NOTIFICATION_PREFERENCES
+)
+const [saving, setSaving] = useState(false)
+const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
@@ -330,6 +336,33 @@ const [emailNotifications, setEmailNotifications] = useState(true)
   const [avatarUrl, setAvatarUrl] = useState(user?.avatar ?? "")
 
   const initials = `${firstName[0] ?? ""}${lastName[0] ?? ""}`
+  
+  const isAdmin = user?.role === "admin" || user?.role === "company_admin"
+
+  async function handleSaveSettings() {
+    if (!user?.id) return
+    setSaving(true)
+    setSaveMessage(null)
+    
+    try {
+      await updateDocument(COLLECTIONS.USERS, user.id, {
+        firstName,
+        lastName,
+        jobTitle,
+        department,
+        phone,
+        timezone,
+        notificationPreferences: notificationPrefs,
+      })
+      setSaveMessage({ type: "success", text: "Settings saved successfully!" })
+      setTimeout(() => setSaveMessage(null), 3000)
+    } catch (err) {
+      console.error("Failed to save settings:", err)
+      setSaveMessage({ type: "error", text: "Failed to save settings. Please try again." })
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div>
@@ -404,6 +437,104 @@ const [emailNotifications, setEmailNotifications] = useState(true)
             </CardContent>
           </Card>
 
+          {/* Email Notifications */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Bell className="h-4 w-4" />
+                Email Notifications
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              {/* Scorecard Notifications */}
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Scorecard Alerts</p>
+                <div className="flex items-center justify-between py-2">
+                  <div className="flex items-start gap-3">
+                    <FileText className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">New Scorecard Available</p>
+                      <p className="text-xs text-muted-foreground">Get notified when a new scorecard is posted</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={notificationPrefs.scorecardPosted}
+                    onCheckedChange={(checked) => setNotificationPrefs(prev => ({ ...prev, scorecardPosted: checked }))}
+                  />
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <div className="flex items-start gap-3">
+                    <Mail className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Scorecard Reminders</p>
+                      <p className="text-xs text-muted-foreground">Receive reminders to complete your scorecard</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={notificationPrefs.scorecardReminder}
+                    onCheckedChange={(checked) => setNotificationPrefs(prev => ({ ...prev, scorecardReminder: checked }))}
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-border" />
+
+              {/* Personal Progress */}
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Personal Progress</p>
+                <div className="flex items-center justify-between py-2">
+                  <div className="flex items-start gap-3">
+                    <FileText className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Weekly Progress Digest</p>
+                      <p className="text-xs text-muted-foreground">Weekly summary of your hours saved, streak, and rank</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={notificationPrefs.weeklyDigest}
+                    onCheckedChange={(checked) => setNotificationPrefs(prev => ({ ...prev, weeklyDigest: checked }))}
+                  />
+                </div>
+              </div>
+
+              {/* Leadership Reports - Only shown to admins */}
+              {isAdmin && (
+                <>
+                  <div className="border-t border-border" />
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Leadership Reports</p>
+                    <div className="flex items-center justify-between py-2">
+                      <div className="flex items-start gap-3">
+                        <Users className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                        <div>
+                          <p className="text-sm font-medium text-foreground">Weekly Leadership Report</p>
+                          <p className="text-xs text-muted-foreground">Organization performance summary with top performers and metrics</p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={notificationPrefs.leadershipReport}
+                        onCheckedChange={(checked) => setNotificationPrefs(prev => ({ ...prev, leadershipReport: checked }))}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between py-2">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                        <div>
+                          <p className="text-sm font-medium text-foreground">Non-Responder Alerts</p>
+                          <p className="text-xs text-muted-foreground">Get notified when participation rates drop</p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={notificationPrefs.nonResponderAlerts}
+                        onCheckedChange={(checked) => setNotificationPrefs(prev => ({ ...prev, nonResponderAlerts: checked }))}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Preferences */}
           <Card>
             <CardHeader>
@@ -411,26 +542,11 @@ const [emailNotifications, setEmailNotifications] = useState(true)
                 Preferences
               </CardTitle>
             </CardHeader>
-            <CardContent className="flex flex-col gap-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    Email Notifications
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Receive weekly scorecard updates via email
-                  </p>
-                </div>
-                <Switch
-                  checked={emailNotifications}
-                  onCheckedChange={setEmailNotifications}
-                  aria-label="Toggle email notifications"
-                />
-              </div>
+            <CardContent className="flex flex-col gap-4">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="flex flex-col gap-2">
                   <Label>Timezone</Label>
-                  <Select defaultValue="pt">
+                  <Select value={timezone} onValueChange={setTimezone}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -635,9 +751,29 @@ const [emailNotifications, setEmailNotifications] = useState(true)
             </CardContent>
           </Card>
 
+          {saveMessage && (
+            <div
+              className={`rounded-md p-3 text-sm ${
+                saveMessage.type === "success"
+                  ? "bg-green-50 text-green-800 dark:bg-green-950/20 dark:text-green-300"
+                  : "bg-destructive/10 text-destructive"
+              }`}
+            >
+              {saveMessage.text}
+            </div>
+          )}
           <div className="flex justify-end gap-3">
-            <Button variant="outline">Cancel</Button>
-            <Button>Save Changes</Button>
+            <Button variant="outline" disabled={saving}>Cancel</Button>
+            <Button onClick={handleSaveSettings} disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Changes"
+              )}
+            </Button>
           </div>
         </div>
 

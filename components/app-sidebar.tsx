@@ -65,6 +65,7 @@ const adminNavItems = [
   { href: "/admin/builder", label: "Templates", icon: FileText },
   { href: "/admin/schedule", label: "Schedule Release", icon: Send },
   { href: "/admin/users", label: "Manage Users", icon: Users },
+  { href: "/admin/reports", label: "Weekly Reports", icon: FileText },
   { href: "/admin/prompts", label: "AI Prompts", icon: Sparkles },
   { href: "/admin/organization", label: "Organization", icon: Building2 },
   { href: "/admin/email", label: "Email Settings", icon: Mail, superAdminOnly: true },
