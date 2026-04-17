@@ -226,7 +226,7 @@ async function fetchTemplates(): Promise<TemplateDoc[]> {
   return docs as unknown as TemplateDoc[]
 }
 
-// ── Admin stat cards ──────────────────────────────────────────────────
+// ── Admin stat cards ───────────────��──────────────────────────────────
 export interface AdminStats {
   avgScore: number
   avgScoreChange: number
@@ -1647,27 +1647,29 @@ export function computeOrgHoursMetrics(
   }
   
   // Use total hours from the period (already filtered by caller)
-  const periodHours = periodHoursVal
+  // IMPORTANT: Time-saving questions ask for WEEKLY hours saved, but downstream metrics
+  // (productivity %, FTE, annual run rate) expect MONTHLY values.
+  // Convert weekly sum to monthly equivalent by multiplying by 4 (weeks per month)
+  const weeklyHoursSum = periodHoursVal
+  const monthlyHours = weeklyHoursSum * WEEKLY_TO_MONTHLY_MULTIPLIER
   
   // Active participants = users in this filtered period
   const activeParticipants = allUsers.size
   
   // Calculate productivity as percentage of total work capacity saved
   // Total work capacity for all participants = activeParticipants * 160 hours/month
-  // Productivity = hours saved / total work capacity * 100
+  // Productivity = monthly hours saved / total work capacity * 100
   const totalWorkCapacity = activeParticipants > 0 ? activeParticipants * 160 : 160
-  const avgProductivityPercent = (periodHours / totalWorkCapacity) * 100
-  
-
+  const avgProductivityPercent = (monthlyHours / totalWorkCapacity) * 100
   
   // FTE equivalent (160 hours = 1 FTE per month) - this is the company total, not per person
-  const fteEquivalent = periodHours / 160
+  const fteEquivalent = monthlyHours / 160
   
-  // Annual projections (extrapolate from period data)
-  const annualRunRate = periodHours * 12
+  // Annual projections (extrapolate from monthly data)
+  const annualRunRate = monthlyHours * 12
   
-  // Dollar values
-  const periodValue = periodHours * hourlyRate
+  // Dollar values (based on monthly hours)
+  const periodValue = monthlyHours * hourlyRate
   const annualValue = periodValue * 12
   const perPersonValue = activeParticipants > 0 ? periodValue / activeParticipants : 0
   
@@ -1677,8 +1679,8 @@ export function computeOrgHoursMetrics(
     : 0
   
   return {
-    totalHoursSaved: Math.round(periodHours * 10) / 10,
-    monthlyHours: Math.round(periodHours * 10) / 10, // Now represents "period hours"
+    totalHoursSaved: Math.round(monthlyHours * 10) / 10,
+    monthlyHours: Math.round(monthlyHours * 10) / 10, // Monthly equivalent (weekly * 4)
     lastMonthHours: 0, // No longer computed - period is pre-filtered
     monthOverMonthChange: 0,
     monthOverMonthPercent: 0,

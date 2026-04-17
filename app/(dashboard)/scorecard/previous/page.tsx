@@ -579,6 +579,61 @@ export default function PreviousScorecardsPage() {
               <Clock className="h-3 w-3" />
               {selected.avgHours} hrs avg
             </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto gap-2"
+              onClick={() => {
+                // Build CSV with raw data for audit trail
+                const csvRows: string[] = []
+                
+                // Header row
+                csvRows.push([
+                  "Response ID",
+                  "User ID",
+                  "Organization",
+                  "Week Of",
+                  "Completed At",
+                  "Question ID",
+                  "Question Text",
+                  "Question Type",
+                  "Raw Value"
+                ].map(h => `"${h}"`).join(","))
+                
+                // Data rows - one row per question per response
+                for (const response of selectedResponses) {
+                  for (const q of questions) {
+                    const rawValue = response.answers[q.id]
+                    csvRows.push([
+                      response.id,
+                      response.userId,
+                      selected.organizationName,
+                      selected.weekOf,
+                      response.completedAt,
+                      q.id,
+                      q.text,
+                      q.type,
+                      rawValue !== undefined && rawValue !== null ? String(rawValue) : ""
+                    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))
+                  }
+                }
+                
+                // Download CSV
+                const csvContent = csvRows.join("\n")
+                const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+                const url = URL.createObjectURL(blob)
+                const link = document.createElement("a")
+                link.href = url
+                link.download = `${selected.organizationName.replace(/[^a-zA-Z0-9]/g, "_")}_${selected.weekOf}_raw_data.csv`
+                document.body.appendChild(link)
+                link.click()
+                document.body.removeChild(link)
+                URL.revokeObjectURL(url)
+              }}
+            >
+              <FileDown className="h-4 w-4" />
+              Export Raw Data
+            </Button>
           </div>
         </div>
 
