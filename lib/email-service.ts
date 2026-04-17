@@ -100,6 +100,34 @@ const DEFAULT_TEMPLATES: Record<EmailTemplateType, Omit<EmailTemplate, "updatedA
 </div>`,
     enabled: true,
   },
+  non_responder_alert: {
+    id: "non_responder_alert",
+    name: "Non-Responder Alert",
+    description: "Sent to admins when participation drops or users haven't completed scorecards",
+    subject: "Participation Alert - {{organizationName}} - {{weekOf}}",
+    body: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+<div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin-bottom: 24px; border-radius: 0 8px 8px 0;">
+<h1 style="color: #92400e; margin: 0 0 8px 0; font-size: 18px;">Participation Alert</h1>
+<p style="color: #92400e; margin: 0;">{{nonRespondersCount}} team members have not completed their scorecard this week.</p>
+</div>
+
+<p style="color: #555; margin-bottom: 8px;"><strong>Organization:</strong> {{organizationName}}</p>
+<p style="color: #555; margin-bottom: 8px;"><strong>Week of:</strong> {{weekOf}}</p>
+<p style="color: #555; margin-bottom: 24px;"><strong>Current Participation Rate:</strong> {{participationRate}}%</p>
+
+<div style="background: #f8f9fa; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+<h2 style="color: #111; font-size: 16px; margin: 0 0 16px 0;">Non-Responders</h2>
+{{nonRespondersList}}
+</div>
+
+<p><a href="{{dashboardLink}}" style="display: inline-block; padding: 12px 24px; background: #111; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 500;">View Dashboard</a></p>
+
+<p style="color: #999; font-size: 13px; margin-top: 32px;">
+You're receiving this because you have non-responder alerts enabled. <a href="{{settingsLink}}" style="color: #999;">Manage notification preferences</a>
+</p>
+</div>`,
+    enabled: false, // Off by default
+  },
   member_invitation: {
     id: "member_invitation",
     name: "Member Invitation",

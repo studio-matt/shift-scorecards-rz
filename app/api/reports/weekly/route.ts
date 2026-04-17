@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getDocuments, COLLECTIONS } from "@/lib/firestore"
+import { getDocuments, addDocument, COLLECTIONS } from "@/lib/firestore"
 import {
   fetchAllResponses,
   computeOrgHoursMetrics,
@@ -115,6 +115,7 @@ export async function POST(request: Request) {
           }
 
           // Send to each admin
+          const sentEmails: string[] = []
           for (const admin of orgAdmins) {
             try {
               await sendEmail({
@@ -125,11 +126,33 @@ export async function POST(request: Request) {
                   firstName: admin.firstName,
                 },
               })
+              sentEmails.push(admin.email)
               results.sent++
             } catch (err) {
               results.failed++
               results.errors.push(`Failed to send to ${admin.email}: ${err}`)
             }
+          }
+          
+          // Save to report history
+          try {
+            await addDocument(COLLECTIONS.REPORT_HISTORY, {
+              organizationId: org.id,
+              reportType: "leadership",
+              weekOf,
+              generatedAt: new Date().toISOString(),
+              sentTo: sentEmails,
+              metrics: {
+                totalHoursSaved: hoursMetrics.totalHoursSaved,
+                productivityGain: hoursMetrics.avgProductivityPercent,
+                participationRate,
+                topPerformersCount: topPerformers.length,
+                nonRespondersCount: orgNonResponders.length,
+              },
+              status: sentEmails.length > 0 ? "sent" : "failed",
+            })
+          } catch (historyErr) {
+            console.error("Failed to save report history:", historyErr)
           }
         } catch (err) {
           results.errors.push(`Failed to process org ${org.name}: ${err}`)
