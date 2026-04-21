@@ -226,7 +226,7 @@ async function fetchTemplates(): Promise<TemplateDoc[]> {
   return docs as unknown as TemplateDoc[]
 }
 
-// ── Admin stat cards ───────────────���──────────────────────────────────
+// ── Admin stat cards ───────────────����──────────────────────────────────
 export interface AdminStats {
   avgScore: number
   avgScoreChange: number
@@ -660,14 +660,19 @@ export async function computeQuestionResults(
         ? Math.round((currentAvg - previousAvg) * 10) / 10
         : 0
       
+      // Get question text - if not found in map, skip this question
+      const questionText = questionTextMap.get(qId)
+      
       return {
-        question: questionTextMap.get(qId) ?? qId,
+        question: questionText ?? null, // Will filter out nulls below
+        questionId: qId,
         score: Math.round(currentAvg * 10) / 10,
         change,
         responseCount: recent?.count ?? 0,
       }
     })
-    .filter(q => q.score > 0 || q.change !== 0) // Show questions with data or changes
+    .filter(q => q.question !== null && (q.score > 0 || q.change !== 0)) // Only include questions with proper text
+    .map(({ questionId, ...rest }) => rest) // Remove questionId from final result
     .sort((a, b) => b.score - a.score) // Sort by highest score
 }
 
@@ -710,6 +715,10 @@ export async function computeUserQuestionResults(
     // Only include numeric answers
     if (typeof val !== "number" || val < 0) continue
     
+    // Get question text - skip if not found in templates
+    const questionText = questionTextMap.get(qId)
+    if (!questionText) continue // Skip questions without proper text
+    
     // Get the previous value for this question (if exists) for change calculation
     const previousVal = previousResponse?.answers?.[qId]
     const change = typeof previousVal === "number" && previousVal >= 0
@@ -717,7 +726,7 @@ export async function computeUserQuestionResults(
       : 0
     
     results.push({
-      question: questionTextMap.get(qId) ?? qId,
+      question: questionText,
       score: Math.round(val * 10) / 10,
       change,
       responseCount: 1, // Single user's last response
