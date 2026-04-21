@@ -759,6 +759,19 @@ export async function computeUserQuestionResults(
     }
   }
 
+  // Debug: Log what we have
+  console.log("[v0] computeUserQuestionResults debug:", {
+    lastResponseId: lastResponse.id,
+    templateId: lastResponse.templateId,
+    answersKeys: Object.keys(lastResponse.answers),
+    answersCount: Object.keys(lastResponse.answers).length,
+    templateQuestionsFound: templateQuestions ? templateQuestions.size : 0,
+    globalQuestionsFound: questionTextMap.size,
+    embeddedQuestionsFound: embeddedQuestions?.length ?? 0,
+    responseQuestionTextMapSize: responseQuestionTextMap.size,
+    sampleQuestionIds: Array.from(responseQuestionTextMap.keys()).slice(0, 5),
+  })
+
   // Extract answers from the last completed scorecard
   const results: QuestionResult[] = []
   
@@ -768,6 +781,7 @@ export async function computeUserQuestionResults(
     
     // Get question text from our comprehensive map
     const questionText = responseQuestionTextMap.get(qId)
+    console.log("[v0] Question lookup:", { qId, val, questionText: questionText ?? "NOT FOUND" })
     if (!questionText) continue // Skip questions without proper text
     
     // Get the previous value for this question (if exists) for change calculation
