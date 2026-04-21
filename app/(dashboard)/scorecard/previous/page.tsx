@@ -303,7 +303,7 @@ export default function PreviousScorecardsPage() {
       
       // Load the individual responses for this aggregated scorecard
       const responseDocs = await getDocuments(COLLECTIONS.RESPONSES)
-      const filtered = responseDocs
+      let filtered = responseDocs
         .filter((d) => sc.responseIds.includes(d.id))
         .map((d) => {
           const data = d as Record<string, unknown>
@@ -318,6 +318,12 @@ export default function PreviousScorecardsPage() {
             answers: (data.answers as Record<string, number | string>) ?? {},
           }
         })
+      
+      // For non-admin users, only show their own responses
+      if (!isAdmin && user?.id) {
+        filtered = filtered.filter((r) => r.userId === user.id)
+      }
+      
       setSelectedResponses(filtered)
     } catch (err) {
       console.error("Failed to fetch template questions:", err)
