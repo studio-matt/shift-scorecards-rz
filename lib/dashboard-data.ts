@@ -226,7 +226,7 @@ async function fetchTemplates(): Promise<TemplateDoc[]> {
   return docs as unknown as TemplateDoc[]
 }
 
-// ── Admin stat cards ───────────────�������──────────────────────────────────
+// ── Admin stat cards ───────────────��������──────────────────────────────────
 export interface AdminStats {
   avgScore: number
   avgScoreChange: number
@@ -1876,10 +1876,11 @@ export function computeOrgHoursMetrics(
   }
 }
 
-// ── Weekly hours trend (for chart) ────────────────────────────────────
+// ── Monthly hours trend (for chart) ────────────────────────────────────
+// Hours are multiplied by 4 to convert weekly scorecard hours to monthly estimates
 export interface WeeklyHoursTrend {
   week: string
-  hours: number
+  hours: number  // Monthly hours (weekly * 4)
   responses: number
 }
 
@@ -1907,7 +1908,8 @@ export function computeWeeklyHoursTrend(
       weekMap.set(week, { hours: 0, count: 0, date })
     }
     const entry = weekMap.get(week)!
-    entry.hours += responseHours
+    // Multiply by 4 to convert weekly hours to monthly estimate
+    entry.hours += responseHours * WEEKLY_TO_MONTHLY_MULTIPLIER
     entry.count += 1
   }
   

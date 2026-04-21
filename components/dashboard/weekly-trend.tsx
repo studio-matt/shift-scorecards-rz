@@ -194,20 +194,19 @@ export function HoursTrendChart({ data }: HoursTrendChartProps) {
   // Format helpers
   const formatHours = (hrs: number) => hrs >= 1000 ? `${(hrs / 1000).toFixed(1)}K` : Math.round(hrs).toString()
   
-  // Format week labels consistently (e.g., "Week 10" instead of "W10" or dates)
+  // Format labels as dates (e.g., "April 13, 2026") for clarity
   const formatWeekLabel = (week: string) => {
-    // If already formatted like "W10" or "Week 10", normalize to "Week X"
-    const weekMatch = week.match(/^W?(\d+)$/i)
-    if (weekMatch) {
-      return `Week ${weekMatch[1]}`
-    }
-    // If it's a date string, try to get week number
+    // If it's a date string, format as readable date
     if (week.includes("-") || week.includes("/")) {
       const date = new Date(week)
       if (!isNaN(date.getTime())) {
-        const weekNum = Math.ceil((date.getTime() - new Date(date.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))
-        return `Week ${weekNum}`
+        return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
       }
+    }
+    // If already formatted like "W10" or "Week 10", keep as-is but label as month period
+    const weekMatch = week.match(/^W?(\d+)$/i)
+    if (weekMatch) {
+      return `Period ${weekMatch[1]}`
     }
     return week
   }
@@ -224,10 +223,10 @@ export function HoursTrendChart({ data }: HoursTrendChartProps) {
       <CardHeader className="relative flex flex-row items-start justify-between">
         <div>
           <CardTitle className="text-base font-semibold">
-            Hours Saved Trend - Last {data.length} Weeks
+            Monthly Hours Saved Trend - Last {data.length} Months
           </CardTitle>
           <p className="mt-1 text-xs text-muted-foreground">
-            Total: <span className="font-semibold text-foreground">{formatHours(totalHours)} hrs</span>
+            Total: <span className="font-semibold text-foreground">{formatHours(totalHours)} hrs/month</span>
             {" "}from {totalResponses} scorecards
             {delta !== 0 && (
               <span className={delta >= 0 ? "ml-2 text-emerald-400" : "ml-2 text-red-400"}>
