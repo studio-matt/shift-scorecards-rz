@@ -762,11 +762,11 @@ export default function PreviousScorecardsPage() {
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">
-            Previous Scorecards
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            View past scorecard submissions and results by organization.
-          </p>
+  Previous Scorecards
+  </h1>
+  <p className="mt-1 text-muted-foreground">
+  {isAdmin ? "View past scorecard submissions and results by organization." : "View your past scorecard submissions."}
+  </p>
         </div>
         
         {/* Import Button */}
@@ -1066,9 +1066,9 @@ export default function PreviousScorecardsPage() {
                 <CardTitle className="text-base">
                   {sc.weekOf ? `Week of ${sc.weekOf}` : sc.templateName || "Scorecard"}
                 </CardTitle>
-                <CardDescription className="mt-0.5">
-                  Completed {formatShort(sc.latestCompletedAt)} · {sc.responseCount} response{sc.responseCount !== 1 ? "s" : ""}
-                </CardDescription>
+  <CardDescription className="mt-0.5">
+  Completed {formatShort(sc.latestCompletedAt)}{isAdmin && ` · ${sc.responseCount} response${sc.responseCount !== 1 ? "s" : ""}`}
+  </CardDescription>
               </div>
               <div className="flex items-center gap-2">
                 <Badge className="bg-primary text-primary-foreground text-sm px-3 py-1 flex items-center gap-1">
