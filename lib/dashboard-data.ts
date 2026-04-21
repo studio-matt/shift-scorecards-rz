@@ -226,7 +226,7 @@ async function fetchTemplates(): Promise<TemplateDoc[]> {
   return docs as unknown as TemplateDoc[]
 }
 
-// ── Admin stat cards ───────────────����──────────────────────────────────
+// ── Admin stat cards ───────────────�����──────────────────────────────────
 export interface AdminStats {
   avgScore: number
   avgScoreChange: number
@@ -590,6 +590,19 @@ export async function computeQuestionResults(
     }
   }
 
+  // Also extract question text from embedded questions in responses
+  for (const r of responses) {
+    const responseData = r as unknown as Record<string, unknown>
+    const embeddedQuestions = responseData.questions as Array<{ id: string; text: string }> | undefined
+    if (embeddedQuestions && Array.isArray(embeddedQuestions)) {
+      for (const q of embeddedQuestions) {
+        if (q.id && q.text && !questionTextMap.has(q.id)) {
+          questionTextMap.set(q.id, q.text)
+        }
+      }
+    }
+  }
+
   // Also detect numeric questions from actual response data (in case template types are missing)
   for (const r of responses) {
     for (const [qId, val] of Object.entries(r.answers)) {
@@ -687,12 +700,17 @@ export async function computeUserQuestionResults(
 
   const templates = await fetchTemplates()
 
-  // Build question text lookup for ALL numeric questions
+  // Build question text lookup for ALL questions from ALL templates
   const questionTextMap = new Map<string, string>()
+  const templateQuestionsMap = new Map<string, Map<string, string>>() // templateId -> (questionId -> text)
+  
   for (const t of templates) {
+    const tmplQuestions = new Map<string, string>()
     for (const q of t.questions || []) {
       questionTextMap.set(q.id, q.text)
+      tmplQuestions.set(q.id, q.text)
     }
+    templateQuestionsMap.set(t.id, tmplQuestions)
   }
 
   // Sort responses by date to find the LAST completed scorecard
@@ -708,6 +726,39 @@ export async function computeUserQuestionResults(
     return []
   }
 
+  // Get question text lookup for this specific template
+  const templateQuestions = templateQuestionsMap.get(lastResponse.templateId)
+  
+  // Also check if the response itself has questions embedded (some responses store this)
+  const responseData = lastResponse as unknown as Record<string, unknown>
+  const embeddedQuestions = responseData.questions as Array<{ id: string; text: string }> | undefined
+
+  // Build a comprehensive question text map for this response
+  const responseQuestionTextMap = new Map<string, string>()
+  
+  // First, try template questions
+  if (templateQuestions) {
+    for (const [qId, text] of templateQuestions) {
+      responseQuestionTextMap.set(qId, text)
+    }
+  }
+  
+  // Then try global template questions
+  for (const [qId, text] of questionTextMap) {
+    if (!responseQuestionTextMap.has(qId)) {
+      responseQuestionTextMap.set(qId, text)
+    }
+  }
+  
+  // Finally, try embedded questions in the response itself
+  if (embeddedQuestions && Array.isArray(embeddedQuestions)) {
+    for (const q of embeddedQuestions) {
+      if (q.id && q.text) {
+        responseQuestionTextMap.set(q.id, q.text)
+      }
+    }
+  }
+
   // Extract answers from the last completed scorecard
   const results: QuestionResult[] = []
   
@@ -715,8 +766,8 @@ export async function computeUserQuestionResults(
     // Only include numeric answers
     if (typeof val !== "number" || val < 0) continue
     
-    // Get question text - skip if not found in templates
-    const questionText = questionTextMap.get(qId)
+    // Get question text from our comprehensive map
+    const questionText = responseQuestionTextMap.get(qId)
     if (!questionText) continue // Skip questions without proper text
     
     // Get the previous value for this question (if exists) for change calculation
@@ -1598,7 +1649,7 @@ function getMonthBoundaries() {
   return { thisMonthStart, lastMonthStart, lastMonthEnd }
 }
 
-// ── Compute hours metrics for a single user ───────────────────────────
+// ── Compute hours metrics for a single user ──���────────────────────────
 export function computeUserHoursMetrics(
   responses: RawResponse[],
   userId: string,
