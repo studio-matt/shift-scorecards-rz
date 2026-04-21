@@ -724,17 +724,6 @@ export async function computeUserQuestionResults(
     questionIndexToType.set(i, q.type)
   }
 
-  // Debug: Log what we're working with
-  console.log("[v0] computeUserQuestionResults DEBUG:", {
-    lastResponseId: lastResponse.id,
-    templateId: lastResponse.templateId,
-    templateFound: !!template,
-    templateQuestionsCount: templateQuestions.length,
-    answerKeys: Object.keys(lastResponse.answers),
-    questionIdToTextKeys: Array.from(questionIdToText.keys()),
-    sampleAnswers: Object.entries(lastResponse.answers).slice(0, 3).map(([k, v]) => ({ key: k, value: v, type: typeof v })),
-  })
-
   // Extract answers from the last completed scorecard
   const results: QuestionResult[] = []
   const answerEntries = Object.entries(lastResponse.answers)
@@ -751,7 +740,6 @@ export async function computeUserQuestionResults(
     // Try to get question text:
     // 1. First try direct ID match
     let questionText = questionIdToText.get(qId)
-    console.log("[v0] Question lookup:", { qId, rawVal, val, directMatch: !!questionText })
     
     // 2. If no match, try to extract number from ID and match by index
     if (!questionText) {
@@ -1451,13 +1439,25 @@ export function computePersonalTrend(responses: RawResponse[], userId: string): 
   const weekMap = new Map<string, { my: number[]; dept: number[]; org: number[] }>()
   const allWeeks = new Set<string>()
 
+  // Helper to extract numeric values (handles string coercion)
+  const getNumericValues = (answers: Record<string, string | number>): number[] => {
+    const values: number[] = []
+    for (const v of Object.values(answers)) {
+      const num = typeof v === "string" ? parseFloat(v) : v
+      if (typeof num === "number" && !isNaN(num) && num >= 0) {
+        values.push(num)
+      }
+    }
+    return values
+  }
+
   for (const r of responses) {
     allWeeks.add(r.weekOf)
     if (!weekMap.has(r.weekOf)) weekMap.set(r.weekOf, { my: [], dept: [], org: [] })
     const entry = weekMap.get(r.weekOf)!
-    const scaleVals = Object.values(r.answers).filter((v) => typeof v === "number" && v >= 1 && v <= 10) as number[]
-    if (scaleVals.length === 0) continue
-    const avg = scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length
+    const numericVals = getNumericValues(r.answers)
+    if (numericVals.length === 0) continue
+    const avg = numericVals.reduce((a, b) => a + b, 0) / numericVals.length
     if (r.userId === userId) entry.my.push(avg)
     if (r.department === myDept) entry.dept.push(avg)
     if (r.organizationId === myOrg) entry.org.push(avg)
@@ -1485,10 +1485,22 @@ export function computePersonalBenchmark(responses: RawResponse[], userId: strin
   const myDept = myResponses[0].department
   const myOrg = myResponses[0].organizationId
 
+  // Helper to extract numeric values (handles string coercion)
+  const getNumericValues = (answers: Record<string, string | number>): number[] => {
+    const values: number[] = []
+    for (const v of Object.values(answers)) {
+      const num = typeof v === "string" ? parseFloat(v) : v
+      if (typeof num === "number" && !isNaN(num) && num >= 0) {
+        values.push(num)
+      }
+    }
+    return values
+  }
+
   // My avg
   const myScores: number[] = []
   for (const r of myResponses) {
-    const vals = Object.values(r.answers).filter((v) => typeof v === "number" && v >= 1 && v <= 10) as number[]
+    const vals = getNumericValues(r.answers)
     if (vals.length > 0) myScores.push(vals.reduce((a, b) => a + b, 0) / vals.length)
   }
   const myAvg = myScores.length > 0 ? myScores.reduce((a, b) => a + b, 0) / myScores.length : 0
@@ -1499,7 +1511,7 @@ export function computePersonalBenchmark(responses: RawResponse[], userId: strin
   const userAvgs = new Map<string, number[]>()
   for (const r of responses) {
     if (r.organizationId === myOrg) {
-      const vals = Object.values(r.answers).filter((v) => typeof v === "number" && v >= 1 && v <= 10) as number[]
+      const vals = getNumericValues(r.answers)
       if (vals.length === 0) continue
       const avg = vals.reduce((a, b) => a + b, 0) / vals.length
       orgScores.push(avg)
