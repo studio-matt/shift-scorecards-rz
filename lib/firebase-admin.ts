@@ -1,0 +1,92 @@
+/**
+ * Firebase Admin SDK initialization for server-side operations
+ * Used for operations that require elevated privileges like deleting users from Firebase Auth
+ */
+
+import { initializeApp, cert, getApps, getApp, type App } from "firebase-admin/app"
+import { getAuth, type Auth } from "firebase-admin/auth"
+import { getFirestore, type Firestore } from "firebase-admin/firestore"
+
+let app: App
+let adminAuth: Auth
+let adminDb: Firestore
+
+function initializeAdmin(): App {
+  if (getApps().length > 0) {
+    return getApp()
+  }
+
+  const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
+  if (!serviceAccountKey) {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set")
+  }
+
+  try {
+    const serviceAccount = JSON.parse(serviceAccountKey)
+    return initializeApp({
+      credential: cert(serviceAccount),
+    })
+  } catch (error) {
+    throw new Error(`Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY: ${error}`)
+  }
+}
+
+export function getAdminApp(): App {
+  if (!app) {
+    app = initializeAdmin()
+  }
+  return app
+}
+
+export function getAdminAuth(): Auth {
+  if (!adminAuth) {
+    adminAuth = getAuth(getAdminApp())
+  }
+  return adminAuth
+}
+
+export function getAdminDb(): Firestore {
+  if (!adminDb) {
+    adminDb = getFirestore(getAdminApp())
+  }
+  return adminDb
+}
+
+/**
+ * Delete a user from Firebase Auth by their email
+ * Returns true if deleted, false if user not found
+ */
+export async function deleteUserFromAuth(email: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const auth = getAdminAuth()
+    const userRecord = await auth.getUserByEmail(email)
+    await auth.deleteUser(userRecord.uid)
+    return { success: true }
+  } catch (error: unknown) {
+    const firebaseError = error as { code?: string; message?: string }
+    if (firebaseError.code === "auth/user-not-found") {
+      // User doesn't exist in Firebase Auth - that's fine
+      return { success: true }
+    }
+    console.error("Failed to delete user from Firebase Auth:", error)
+    return { success: false, error: firebaseError.message || "Unknown error" }
+  }
+}
+
+/**
+ * Delete a user from Firebase Auth by their UID
+ */
+export async function deleteUserFromAuthByUid(uid: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const auth = getAdminAuth()
+    await auth.deleteUser(uid)
+    return { success: true }
+  } catch (error: unknown) {
+    const firebaseError = error as { code?: string; message?: string }
+    if (firebaseError.code === "auth/user-not-found") {
+      return { success: true }
+    }
+    console.error("Failed to delete user from Firebase Auth:", error)
+    return { success: false, error: firebaseError.message || "Unknown error" }
+  }
+}
