@@ -331,7 +331,7 @@ export default function DashboardPage() {
             const answer = response.answers?.[question.id]
             if (!answer || typeof answer !== "string" || !answer.trim()) continue
             
-            if (question.type === "goals" || question.type === "text" || question.type === "goal") {
+            if (question.type === "goals" || question.type === "goal") {
               // For multichoice/goals questions, look up the option label
               let goalText = answer
               if (question.options && question.options.length > 0) {
