@@ -1,5 +1,64 @@
 export type UserRole = "admin" | "company_admin" | "user"
 
+export interface NotificationPreferences {
+  // Scorecard notifications
+  scorecardPosted: boolean      // New scorecard is available
+  scorecardReminder: boolean    // Reminder to complete scorecard
+  // Personal progress
+  weeklyDigest: boolean         // Weekly summary of personal progress
+  // Leadership notifications (for admins/company_admins)
+  leadershipReport: boolean     // Weekly org/company performance report
+  nonResponderAlerts: boolean   // Alert when participation drops
+}
+
+export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  scorecardPosted: true,
+  scorecardReminder: true,
+  weeklyDigest: true,
+  leadershipReport: true,
+  nonResponderAlerts: false, // Off by default - admin controls when to enable
+}
+
+export interface ReportSchedule {
+  enabled: boolean
+  reportType: "leadership" | "digest" | "both"
+  frequency: "weekly" | "biweekly" | "monthly" | "specific_date"
+  dayOfWeek?: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday"
+  timeOfDay: string // HH:MM format in user's timezone
+  specificDate?: string // ISO date for one-time reports
+  timezone: string
+  lastSentAt?: string
+  nextScheduledAt?: string
+}
+
+export const DEFAULT_REPORT_SCHEDULE: ReportSchedule = {
+  enabled: false,
+  reportType: "leadership",
+  frequency: "weekly",
+  dayOfWeek: "monday",
+  timeOfDay: "09:00",
+  timezone: "America/Los_Angeles",
+}
+
+export interface ReportHistory {
+  id: string
+  userId: string
+  organizationId: string
+  reportType: "leadership" | "digest" | "non_responder_alert"
+  weekOf: string
+  generatedAt: string
+  sentTo: string[] // email addresses
+  metrics: {
+    totalHoursSaved: number
+    productivityGain: number
+    participationRate: number
+    topPerformersCount: number
+    nonRespondersCount: number
+  }
+  status: "sent" | "failed" | "pending"
+  errorMessage?: string
+}
+
 export interface User {
   id: string
   authId?: string
@@ -13,6 +72,9 @@ export interface User {
   avatar?: string
   organizationId: string
   excludeFromReporting?: boolean
+  notificationPreferences?: NotificationPreferences
+  reportSchedule?: ReportSchedule
+  timezone?: string
   createdAt: string
   lastLogin: string
 }
@@ -177,6 +239,8 @@ export type EmailTemplateType =
   | "scorecard_reminder"
   | "scorecard_completed"
   | "weekly_digest"
+  | "leadership_report"
+  | "non_responder_alert"
   | "member_invitation"
   | "password_reset"
 
@@ -235,5 +299,25 @@ export const EMAIL_PLACEHOLDERS = {
     { key: "{{userName}}", description: "Recipient's full name" },
     { key: "{{firstName}}", description: "Recipient's first name" },
     { key: "{{resetLink}}", description: "Link to reset password" },
+  ],
+  leadership_report: [
+    { key: "{{organizationName}}", description: "Organization name" },
+    { key: "{{weekOf}}", description: "Week of the report" },
+    { key: "{{totalHoursSaved}}", description: "Total hours saved" },
+    { key: "{{productivityGain}}", description: "Productivity gain percentage" },
+    { key: "{{participationRate}}", description: "Participation rate percentage" },
+    { key: "{{periodValue}}", description: "Dollar value created" },
+    { key: "{{topPerformersList}}", description: "HTML list of top performers" },
+    { key: "{{nonRespondersCount}}", description: "Number of non-responders" },
+    { key: "{{nonRespondersList}}", description: "HTML list of non-responders" },
+    { key: "{{reportLink}}", description: "Link to full report" },
+  ],
+  non_responder_alert: [
+    { key: "{{organizationName}}", description: "Organization name" },
+    { key: "{{weekOf}}", description: "Week of the alert" },
+    { key: "{{nonRespondersCount}}", description: "Number of non-responders" },
+    { key: "{{participationRate}}", description: "Current participation rate" },
+    { key: "{{nonRespondersList}}", description: "HTML list of non-responders with names/departments" },
+    { key: "{{dashboardLink}}", description: "Link to admin dashboard" },
   ],
 } as const

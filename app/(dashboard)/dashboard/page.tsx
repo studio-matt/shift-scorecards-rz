@@ -122,6 +122,7 @@ export default function DashboardPage() {
   const [userHoursMetrics, setUserHoursMetrics] = useState<UserHoursMetrics | null>(null)
   const [orgHoursMetrics, setOrgHoursMetrics] = useState<OrgHoursMetrics | null>(null)
   const [weeklyHoursTrend, setWeeklyHoursTrend] = useState<WeeklyHoursTrend[]>([])
+  const [userQuestionResults, setUserQuestionResults] = useState<QuestionResult[]>([])
   const [targets, setTargets] = useState({
     avgScore: 7.0,
     completionRate: 85,
@@ -141,7 +142,7 @@ export default function DashboardPage() {
   }, [])
 
   // Handle cycling goal status (not-started -> in-progress -> completed -> not-started)
-  const handleCycleGoalStatus = useCallback((goalId: string, newStatus: "completed" | "in-progress" | "not-started") => {
+  const handleCycleGoalStatus = useCallback(async (goalId: string, newStatus: "completed" | "in-progress" | "not-started") => {
     setUserGoals(prev => prev.map(g => 
       g.id === goalId ? { 
         ...g, 
@@ -149,8 +150,19 @@ export default function DashboardPage() {
         completedAt: newStatus === "completed" ? new Date().toISOString() : undefined 
       } : g
     ))
-    // TODO: Persist to database
-  }, [])
+    
+    // Persist to user document in Firestore
+    if (user?.id) {
+      try {
+        const { updateDocument } = await import("@/lib/firestore")
+        await updateDocument(COLLECTIONS.USERS, user.id, {
+          [`goalStatuses.${goalId}`]: { status: newStatus, updatedAt: new Date().toISOString() }
+        })
+      } catch (err) {
+        console.error("Failed to save goal status:", err)
+      }
+    }
+  }, [user?.id])
 
   // Helper to filter responses by time period
   const filterByTimePeriod = useCallback((responses: Awaited<ReturnType<typeof fetchAllResponses>>, period: string) => {
@@ -319,6 +331,10 @@ export default function DashboardPage() {
           templateMap.set(template.id, template)
         }
         
+        // Load user's saved goal statuses from their document
+        const userDoc = await getDocument(COLLECTIONS.USERS, user.id)
+        const savedStatuses = (userDoc as Record<string, unknown>)?.goalStatuses as Record<string, { status: string }> | undefined
+        
         const userResponses = allResponses.filter(r => r.userId === user.id)
         const extractedGoals: GoalEntry[] = []
         
@@ -331,7 +347,7 @@ export default function DashboardPage() {
             const answer = response.answers?.[question.id]
             if (!answer || typeof answer !== "string" || !answer.trim()) continue
             
-            if (question.type === "goals" || question.type === "text" || question.type === "goal") {
+            if (question.type === "goals" || question.type === "goal") {
               // For multichoice/goals questions, look up the option label
               let goalText = answer
               if (question.options && question.options.length > 0) {
@@ -344,11 +360,14 @@ export default function DashboardPage() {
               // Skip if the text is too short (likely a raw value like "A", "B")
               if (goalText.length < 3) continue
               
+              const goalId = `${responseId}-${question.id}`
+              const savedStatus = savedStatuses?.[goalId]?.status as GoalEntry["status"] | undefined
+              
               extractedGoals.push({
-                id: `${responseId}-${question.id}`,
+                id: goalId,
                 text: goalText,
                 weekOf: response.weekOf || response.completedAt?.slice(0, 10) || "",
-                status: "in-progress",
+                status: savedStatus || "in-progress",
               })
             }
           }
@@ -358,9 +377,15 @@ export default function DashboardPage() {
         extractedGoals.sort((a, b) => b.weekOf.localeCompare(a.weekOf))
         
         setUserGoals(extractedGoals.slice(0, 10)) // Show last 10 goals
-      }
-      
-      // Fetch departments from users in the selected organization
+        
+        // Compute question results for THIS USER's responses only using user-specific function
+        // Reuse userResponses which is already filtered for this user
+        const { computeUserQuestionResults } = await import("@/lib/dashboard-data")
+        const userQResults = await computeUserQuestionResults(userResponses)
+        setUserQuestionResults(userQResults)
+        }
+        
+        // Fetch departments from users in the selected organization
       if (selectedOrg && selectedOrg !== "all") {
         const orgUsers = await getUsersByOrg(selectedOrg)
         const userDepts = new Set<string>()
@@ -637,8 +662,8 @@ export default function DashboardPage() {
 
   // --- User Dashboard ---
 
-  // Derive weak categories for AI Action Plan & Prompt Packs
-  const weakCategories = questionResults
+  // Derive weak categories for AI Action Plan & Prompt Packs (use user's own question results)
+  const weakCategories = userQuestionResults
     .filter((q) => typeof q.score === "number" && q.score < 7)
     .sort((a, b) => a.score - b.score)
     .slice(0, 5)
@@ -845,10 +870,14 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <QuestionResults data={questionResults} />
+        <QuestionResults data={userQuestionResults} />
 
-        {/* Filter to show only current user's scorecards */}
-        <RecentScorecardsCard data={recentScorecards.filter((sc) => sc.userId === user?.id)} />
+        {/* Show user's scorecards - filter to only this user's submissions */}
+        <RecentScorecardsCard data={recentScorecards.filter((sc) => {
+          // Try matching by user ID (Firestore doc ID) or by authId
+          const isMatch = sc.userId === user?.id || sc.userId === user?.authId
+          return isMatch
+        })} />
       </div>
     </div>
   )

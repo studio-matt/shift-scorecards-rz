@@ -110,6 +110,8 @@ export default function PreviousScorecardsPage() {
   
   // Check if user is super admin (can see all companies)
   const isSuperAdmin = user?.role === "super_admin"
+  // Check if user is any admin type (can filter by department)
+  const isAdmin = user?.role === "super_admin" || user?.role === "admin" || user?.role === "company_admin"
   const [orgs, setOrgs] = useState<Array<{ id: string; name: string }>>([])
   const [departments, setDepartments] = useState<string[]>([])
   const [templates, setTemplates] = useState<Array<{ id: string; name: string; questions: TemplateQuestion[] }>>([])
@@ -158,14 +160,25 @@ export default function PreviousScorecardsPage() {
       }
       
       // Build user department map and collect unique departments
+      // For non-super-admins, only include departments from their organization
       const userDeptMap = new Map<string, string>()
       const deptSet = new Set<string>()
       for (const u of userDocs) {
         const data = u as Record<string, unknown>
         const dept = (data.department as string) || ""
+        const userOrgIdField = (data.organizationId as string) || ""
+        const userCompany = (data.company as string) || ""
+        
+        // Match user to organization
+        const userBelongsToOrg = userOrgIdField === userOrgId || 
+          (userCompany && orgNameToIdMap.get(userCompany.toLowerCase()) === userOrgId)
+        
         if (dept) {
           userDeptMap.set(u.id, dept)
-          deptSet.add(dept)
+          // Only add to department list if super admin OR user belongs to same org
+          if (isSuperAdmin || userBelongsToOrg) {
+            deptSet.add(dept)
+          }
         }
       }
       setDepartments(Array.from(deptSet).sort())
@@ -301,7 +314,7 @@ export default function PreviousScorecardsPage() {
       
       // Load the individual responses for this aggregated scorecard
       const responseDocs = await getDocuments(COLLECTIONS.RESPONSES)
-      const filtered = responseDocs
+      let filtered = responseDocs
         .filter((d) => sc.responseIds.includes(d.id))
         .map((d) => {
           const data = d as Record<string, unknown>
@@ -316,6 +329,12 @@ export default function PreviousScorecardsPage() {
             answers: (data.answers as Record<string, number | string>) ?? {},
           }
         })
+      
+      // For non-admin users, only show their own responses
+      if (!isAdmin && user?.id) {
+        filtered = filtered.filter((r) => r.userId === user.id)
+      }
+      
       setSelectedResponses(filtered)
     } catch (err) {
       console.error("Failed to fetch template questions:", err)
@@ -971,20 +990,22 @@ export default function PreviousScorecardsPage() {
           </Select>
         )}
 
-        {/* Department dropdown */}
-        <Select value={selectedDept} onValueChange={setSelectedDept}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="All Departments" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Departments</SelectItem>
-            {departments.filter(Boolean).map((dept) => (
-              <SelectItem key={dept} value={dept}>
-                {dept}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Department dropdown - only visible to admins */}
+        {isAdmin && (
+          <Select value={selectedDept} onValueChange={setSelectedDept}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="All Departments" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {departments.filter(Boolean).map((dept) => (
+                <SelectItem key={dept} value={dept}>
+                  {dept}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         {/* Time period dropdown */}
         <Select value={timePeriod} onValueChange={setTimePeriod}>

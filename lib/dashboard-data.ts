@@ -226,7 +226,7 @@ async function fetchTemplates(): Promise<TemplateDoc[]> {
   return docs as unknown as TemplateDoc[]
 }
 
-// ── Admin stat cards ───────────────��──────────────────────────────────
+// ── Admin stat cards ───────────────��������──────────────────────────────────
 export interface AdminStats {
   avgScore: number
   avgScoreChange: number
@@ -570,54 +570,55 @@ export async function computeMostImproved(
 }
 
 // ── Question results ──────────────────────────────────────────────────
-// ONLY shows time_saving type questions - these are the only ones that count for hours saved
+// Shows ALL numeric question types (scale, number, time_saving, confidence, rating)
+// Uses RELEASE-BASED grouping (by weekOf) instead of arbitrary time windows
 export async function computeQuestionResults(
   responses: RawResponse[],
 ): Promise<QuestionResult[]> {
   const templates = await fetchTemplates()
 
-  // Build question text lookup AND identify time_saving questions ONLY
-  const questionTextMap = new Map<string, string>()
-  const timeSavingQuestionIds = new Set<string>()
+  // Build question text lookup by ID and by index (position)
+  const questionTextById = new Map<string, string>()
+  const questionTextByIndex = new Map<number, string>() // index -> text (for fallback matching)
+  
+  // Build a comprehensive question text map from all templates
   for (const t of templates) {
-    for (const q of t.questions || []) {
-      questionTextMap.set(q.id, q.text)
-      // ONLY time_saving type questions count for hours saved metrics
-      if (q.type === "time_saving") {
-        timeSavingQuestionIds.add(q.id)
+    for (let i = 0; i < (t.questions || []).length; i++) {
+      const q = t.questions[i]
+      questionTextById.set(q.id, q.text)
+      // Also map by numeric index (for q1, q2, sr1, sr2 style IDs)
+      const numMatch = q.id.match(/\d+/)
+      if (numMatch) {
+        const idx = parseInt(numMatch[0], 10)
+        if (!questionTextByIndex.has(idx)) {
+          questionTextByIndex.set(idx, q.text)
+        }
       }
     }
   }
 
-  // If no time_saving questions found, return empty
-  if (timeSavingQuestionIds.size === 0) {
-    return []
-  }
-
-  // Sort responses by date to separate current vs previous period
-  const sortedResponses = [...responses].sort((a, b) => 
-    new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
-  )
+  // Group responses by release (weekOf) - NOT by arbitrary time windows
+  const releaseWeeks = Array.from(new Set(responses.map(r => r.weekOf))).sort().reverse()
   
-  // Split into this week vs last week (for more granular comparison)
-  const now = new Date()
-  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-  const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
+  // Get the most recent release and previous release (for change calculation)
+  const mostRecentRelease = releaseWeeks[0]
+  const previousRelease = releaseWeeks[1]
   
-  const thisWeekResponses = sortedResponses.filter(r => new Date(r.completedAt) >= oneWeekAgo)
-  const lastWeekResponses = sortedResponses.filter(r => {
-    const d = new Date(r.completedAt)
-    return d >= twoWeeksAgo && d < oneWeekAgo
-  })
+  const recentResponses = mostRecentRelease 
+    ? responses.filter(r => r.weekOf === mostRecentRelease)
+    : responses // Fallback to all if no weekOf
+  const previousResponses = previousRelease 
+    ? responses.filter(r => r.weekOf === previousRelease)
+    : []
 
-  // Aggregate answers per question for each period - ONLY time_saving questions
+  // Aggregate answers per question for each release period
   const aggregateByQuestion = (resps: RawResponse[]) => {
     const map = new Map<string, { total: number; count: number }>()
     for (const r of resps) {
-      for (const [qId, val] of Object.entries(r.answers)) {
-        // ONLY include time_saving type questions
-        if (!timeSavingQuestionIds.has(qId)) continue
-        if (typeof val !== "number" || val < 0) continue
+      for (const [qId, rawVal] of Object.entries(r.answers)) {
+        // Coerce to number - values might be strings from form inputs
+        const val = typeof rawVal === "string" ? parseFloat(rawVal) : rawVal
+        if (typeof val !== "number" || isNaN(val) || val < 0) continue
         if (!map.has(qId)) {
           map.set(qId, { total: 0, count: 0 })
         }
@@ -629,40 +630,164 @@ export async function computeQuestionResults(
     return map
   }
 
-  const thisWeekData = aggregateByQuestion(thisWeekResponses)
-  const lastWeekData = aggregateByQuestion(lastWeekResponses)
+  const recentData = aggregateByQuestion(recentResponses)
+  const previousData = aggregateByQuestion(previousResponses)
 
-  // Only use time_saving question IDs that have data
-  const questionsWithData = Array.from(timeSavingQuestionIds).filter(
-    qId => thisWeekData.has(qId) || lastWeekData.has(qId)
-  )
+  // Get all question IDs that have data
+  const allQuestionIds = new Set([...recentData.keys(), ...previousData.keys()])
 
-  return questionsWithData
+  // Helper to get question text with fallback to index matching
+  const getQuestionText = (qId: string): string | null => {
+    // Try direct ID match first
+    let text = questionTextById.get(qId)
+    if (text) return text
+    
+    // Try matching by numeric part of ID (e.g., "q3" -> 3 -> sr3)
+    const numMatch = qId.match(/\d+/)
+    if (numMatch) {
+      const idx = parseInt(numMatch[0], 10)
+      text = questionTextByIndex.get(idx)
+      if (text) return text
+    }
+    
+    return null
+  }
+
+  return Array.from(allQuestionIds)
     .map((qId) => {
-      const thisWeek = thisWeekData.get(qId)
-      const lastWeek = lastWeekData.get(qId)
+      const recent = recentData.get(qId)
+      const previous = previousData.get(qId)
       
-      const currentAvg = thisWeek && thisWeek.count > 0 
-        ? thisWeek.total / thisWeek.count 
+      const currentAvg = recent && recent.count > 0 
+        ? recent.total / recent.count 
         : 0
-      const previousAvg = lastWeek && lastWeek.count > 0 
-        ? lastWeek.total / lastWeek.count 
+      const previousAvg = previous && previous.count > 0 
+        ? previous.total / previous.count 
         : 0
       
-      // Calculate change (difference between this week and last week averages)
-      // Positive = saving more time this week
-      const change = lastWeek && lastWeek.count > 0
+      // Calculate change (difference between most recent release and previous release)
+      const change = previous && previous.count > 0
         ? Math.round((currentAvg - previousAvg) * 10) / 10
         : 0
       
+      // Get question text with fallback matching
+      const questionText = getQuestionText(qId)
+      
       return {
-        question: questionTextMap.get(qId) ?? qId,
-        score: Math.round(currentAvg * 10) / 10, // Average minutes saved
+        question: questionText,
+        score: Math.round(currentAvg * 10) / 10,
         change,
+        responseCount: recent?.count ?? 0,
       }
     })
-    .filter(q => q.score > 0 || q.change !== 0) // Show questions with data or changes
-    .sort((a, b) => b.change - a.change) // Sort by biggest improvement
+    .filter(q => q.question !== null && (q.score > 0 || q.change !== 0)) // Only include questions with proper text
+    .sort((a, b) => b.score - a.score) // Sort by highest score
+}
+
+// ── User Question Results (for individual user dashboard) ─────────────
+// Shows answers from the user's LAST COMPLETED scorecard only
+export async function computeUserQuestionResults(
+  responses: RawResponse[],
+): Promise<QuestionResult[]> {
+  if (responses.length === 0) {
+    return []
+  }
+
+  const templates = await fetchTemplates()
+
+  // Sort responses by date to find the LAST completed scorecard
+  const sortedResponses = [...responses].sort((a, b) => 
+    new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
+  )
+
+  // Get ONLY the most recent response (last completed scorecard)
+  const lastResponse = sortedResponses[0]
+  const previousResponse = sortedResponses[1] // For change calculation if exists
+  
+  if (!lastResponse) {
+    return []
+  }
+
+  // Get the template for this response
+  const template = templates.find(t => t.id === lastResponse.templateId)
+  const templateQuestions = template?.questions || []
+  
+  // Build question ID to text map from the template
+  const questionIdToText = new Map<string, string>()
+  const questionIndexToText = new Map<number, string>()
+  const questionIndexToType = new Map<number, string>()
+  
+  for (let i = 0; i < templateQuestions.length; i++) {
+    const q = templateQuestions[i]
+    questionIdToText.set(q.id, q.text)
+    questionIndexToText.set(i, q.text)
+    questionIndexToType.set(i, q.type)
+  }
+
+  // Extract answers from the last completed scorecard
+  const results: QuestionResult[] = []
+  const answerEntries = Object.entries(lastResponse.answers)
+  
+  for (let i = 0; i < answerEntries.length; i++) {
+    const [qId, rawVal] = answerEntries[i]
+    
+    // Coerce to number - values might be strings from form inputs
+    const val = typeof rawVal === "string" ? parseFloat(rawVal) : rawVal
+    
+    // Only include numeric answers (skip text answers and NaN)
+    if (typeof val !== "number" || isNaN(val) || val < 0) continue
+    
+    // Try to get question text:
+    // 1. First try direct ID match
+    let questionText = questionIdToText.get(qId)
+    
+    // 2. If no match, try to extract number from ID and match by index
+    if (!questionText) {
+      const numMatch = qId.match(/\d+/)
+      if (numMatch) {
+        const idx = parseInt(numMatch[0], 10) - 1 // IDs are 1-based (q1, q2, sr1, sr2)
+        if (idx >= 0 && idx < templateQuestions.length) {
+          questionText = questionIndexToText.get(idx)
+        }
+      }
+    }
+    
+    // 3. If still no match, try matching by position in answers array
+    if (!questionText && i < templateQuestions.length) {
+      // Skip text-type questions when matching by position
+      let numericIndex = 0
+      for (let j = 0; j < templateQuestions.length; j++) {
+        const qType = templateQuestions[j].type
+        if (qType === "scale" || qType === "number" || qType === "time_saving" || qType === "confidence" || qType === "rating") {
+          if (numericIndex === i) {
+            questionText = templateQuestions[j].text
+            break
+          }
+          numericIndex++
+        }
+      }
+    }
+    
+    // Skip if we still can't find the question text
+    if (!questionText) continue
+    
+    // Get the previous value for this question (if exists) for change calculation
+    const previousVal = previousResponse?.answers?.[qId]
+    const change = typeof previousVal === "number" && previousVal >= 0
+      ? Math.round((val - previousVal) * 10) / 10
+      : 0
+    
+    results.push({
+      question: questionText,
+      score: Math.round(val * 10) / 10,
+      change,
+      responseCount: 1,
+    })
+  }
+
+  return results
+    .filter(q => q.score > 0)
+    .sort((a, b) => b.score - a.score)
 }
 
 // ── Recent scorecards ─────────────────────────────────────────────────
@@ -830,14 +955,18 @@ export async function computeStreaks(responses: RawResponse[], userNameMap?: Map
 }
 
 // ── Engagement: Non-responders ────────────────────────────────────────
+// Non-responder: Has NOT answered the MOST RECENT scorecard release
+// Dropped off: Has missed at least 1 scorecard that was assigned to them
 export interface NonResponder {
   userId: string
   name: string
   department: string
   orgName: string
-  missedWeeks: number
+  missedReleases: number  // Total releases missed (not arbitrary time windows)
   lastResponseWeek: string
-}
+  isDroppedOff: boolean   // True if user has missed 2+ previous releases (not just 1)
+  missedCurrentRelease: boolean  // True if user hasn't responded to the most recent release
+  }
 
 export async function computeNonResponders(responses: RawResponse[], filterOrgId?: string): Promise<NonResponder[]> {
   const allUsersRaw = await getDocuments(COLLECTIONS.USERS)
@@ -854,12 +983,16 @@ export async function computeNonResponders(responses: RawResponse[], filterOrgId
   })
   const orgs = await getOrganizations()
   const orgNameMap = new Map(orgs.map((o) => [o.id, (o as Record<string, unknown>).name as string]))
-  const allWeeks = Array.from(new Set(responses.map((r) => r.weekOf))).sort()
-  const totalWeeks = allWeeks.length || 1
-  const respondedWeeks = new Map<string, Set<string>>()
+  
+  // Get all releases (sorted newest to oldest) - using weekOf as release identifier
+  const allReleases = Array.from(new Set(responses.map((r) => r.weekOf))).sort().reverse()
+  const mostRecentRelease = allReleases[0]
+  const totalReleases = allReleases.length || 1
+  
+  const respondedReleases = new Map<string, Set<string>>()
   for (const r of responses) {
-    if (!respondedWeeks.has(r.userId)) respondedWeeks.set(r.userId, new Set())
-    respondedWeeks.get(r.userId)!.add(r.weekOf)
+    if (!respondedReleases.has(r.userId)) respondedReleases.set(r.userId, new Set())
+    respondedReleases.get(r.userId)!.add(r.weekOf)
   }
 
   // Deduplicate users by normalized name (first+last+org) to prevent
@@ -872,21 +1005,21 @@ export async function computeNonResponders(responses: RawResponse[], filterOrgId
     const lastName = ((data.lastName as string) ?? "").trim().toLowerCase()
     const orgId = (data.organizationId as string) ?? ""
     const dedupKey = `${firstName}|${lastName}|${orgId}`
-    const thisCount = respondedWeeks.get(u.id)?.size ?? 0
+    const thisCount = respondedReleases.get(u.id)?.size ?? 0
     userResponseCount.set(u.id, thisCount)
 
     if (firstName || lastName) {
       const existingId = seen.get(dedupKey)
       if (existingId) {
-        // Keep the account with more responses; merge response weeks
+        // Keep the account with more responses; merge response releases
         const existingCount = userResponseCount.get(existingId) ?? 0
         const keepId = thisCount >= existingCount ? u.id : existingId
         const mergeId = keepId === u.id ? existingId : u.id
-        // Merge weeks into the kept account
-        const keepWeeks = respondedWeeks.get(keepId) ?? new Set()
-        const mergeWeeks = respondedWeeks.get(mergeId) ?? new Set()
-        for (const w of mergeWeeks) keepWeeks.add(w)
-        respondedWeeks.set(keepId, keepWeeks)
+        // Merge releases into the kept account
+        const keepReleases = respondedReleases.get(keepId) ?? new Set()
+        const mergeReleases = respondedReleases.get(mergeId) ?? new Set()
+        for (const w of mergeReleases) keepReleases.add(w)
+        respondedReleases.set(keepId, keepReleases)
         seen.set(dedupKey, keepId)
         continue
       }
@@ -908,21 +1041,42 @@ export async function computeNonResponders(responses: RawResponse[], filterOrgId
   for (const u of allUsers) {
     if (!dedupedIds.has(u.id)) continue
     const data = u as Record<string, unknown>
-    const weeks = respondedWeeks.get(u.id)
-    const missedWeeks = totalWeeks - (weeks?.size ?? 0)
-    if (missedWeeks > 0) {
-      const lastWeek = weeks ? Array.from(weeks).sort().pop() ?? "Never" : "Never"
+    const userReleases = respondedReleases.get(u.id) ?? new Set()
+    const missedReleases = totalReleases - userReleases.size
+    
+    // Check if user missed the CURRENT (most recent) release
+    const missedCurrentRelease = mostRecentRelease ? !userReleases.has(mostRecentRelease) : false
+    
+    // Check if user is "dropped off" - missed 2 or more PREVIOUS releases
+    // (not counting the current one, as they may still be in progress)
+    // Users who only missed 1 week shouldn't be flagged as "dropped off"
+    const previousReleases = allReleases.slice(1) // All releases except the current one
+    const missedPreviousCount = previousReleases.filter(r => !userReleases.has(r)).length
+    const isDroppedOff = missedPreviousCount >= 2
+    
+    // Include user if they've missed ANY release (current or previous)
+    if (missedReleases > 0) {
+      const lastRelease = userReleases.size > 0 
+        ? Array.from(userReleases).sort().reverse()[0] 
+        : "Never"
       result.push({
         userId: u.id,
         name: `${(data.firstName as string) ?? ""} ${(data.lastName as string) ?? ""}`.trim() || ((data.email as string) ?? ""),
         department: (data.department as string) ?? "",
         orgName: orgNameMap.get((data.organizationId as string) ?? "") ?? "",
-        missedWeeks,
-        lastResponseWeek: lastWeek,
+        missedReleases,
+        lastResponseWeek: lastRelease,
+        isDroppedOff,
+        missedCurrentRelease,
       })
     }
   }
-  return result.sort((a, b) => b.missedWeeks - a.missedWeeks)
+  
+  // Sort: dropped off users first, then by most missed releases
+  return result.sort((a, b) => {
+    if (a.isDroppedOff !== b.isDroppedOff) return a.isDroppedOff ? -1 : 1
+    return b.missedReleases - a.missedReleases
+  })
 }
 
 // ── Trend: Score velocity ─────────────────────────────────────────────
@@ -1286,13 +1440,25 @@ export function computePersonalTrend(responses: RawResponse[], userId: string): 
   const weekMap = new Map<string, { my: number[]; dept: number[]; org: number[] }>()
   const allWeeks = new Set<string>()
 
+  // Helper to extract numeric values (handles string coercion)
+  const getNumericValues = (answers: Record<string, string | number>): number[] => {
+    const values: number[] = []
+    for (const v of Object.values(answers)) {
+      const num = typeof v === "string" ? parseFloat(v) : v
+      if (typeof num === "number" && !isNaN(num) && num >= 0) {
+        values.push(num)
+      }
+    }
+    return values
+  }
+
   for (const r of responses) {
     allWeeks.add(r.weekOf)
     if (!weekMap.has(r.weekOf)) weekMap.set(r.weekOf, { my: [], dept: [], org: [] })
     const entry = weekMap.get(r.weekOf)!
-    const scaleVals = Object.values(r.answers).filter((v) => typeof v === "number" && v >= 1 && v <= 10) as number[]
-    if (scaleVals.length === 0) continue
-    const avg = scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length
+    const numericVals = getNumericValues(r.answers)
+    if (numericVals.length === 0) continue
+    const avg = numericVals.reduce((a, b) => a + b, 0) / numericVals.length
     if (r.userId === userId) entry.my.push(avg)
     if (r.department === myDept) entry.dept.push(avg)
     if (r.organizationId === myOrg) entry.org.push(avg)
@@ -1320,10 +1486,22 @@ export function computePersonalBenchmark(responses: RawResponse[], userId: strin
   const myDept = myResponses[0].department
   const myOrg = myResponses[0].organizationId
 
+  // Helper to extract numeric values (handles string coercion)
+  const getNumericValues = (answers: Record<string, string | number>): number[] => {
+    const values: number[] = []
+    for (const v of Object.values(answers)) {
+      const num = typeof v === "string" ? parseFloat(v) : v
+      if (typeof num === "number" && !isNaN(num) && num >= 0) {
+        values.push(num)
+      }
+    }
+    return values
+  }
+
   // My avg
   const myScores: number[] = []
   for (const r of myResponses) {
-    const vals = Object.values(r.answers).filter((v) => typeof v === "number" && v >= 1 && v <= 10) as number[]
+    const vals = getNumericValues(r.answers)
     if (vals.length > 0) myScores.push(vals.reduce((a, b) => a + b, 0) / vals.length)
   }
   const myAvg = myScores.length > 0 ? myScores.reduce((a, b) => a + b, 0) / myScores.length : 0
@@ -1334,7 +1512,7 @@ export function computePersonalBenchmark(responses: RawResponse[], userId: strin
   const userAvgs = new Map<string, number[]>()
   for (const r of responses) {
     if (r.organizationId === myOrg) {
-      const vals = Object.values(r.answers).filter((v) => typeof v === "number" && v >= 1 && v <= 10) as number[]
+      const vals = getNumericValues(r.answers)
       if (vals.length === 0) continue
       const avg = vals.reduce((a, b) => a + b, 0) / vals.length
       orgScores.push(avg)
@@ -1460,7 +1638,7 @@ export async function findTimeSavingMinutesQuestionIds(): Promise<string[]> {
   return ids
 }
 
-// ── Helper: Find ALL confidence question IDs from templates ────────────────
+// ── Helper: Find ALL confidence question IDs from templates ─────��──────────
 // Looks for questions with type === "confidence" OR text containing "confidence"
 export async function findConfidenceQuestionIds(): Promise<string[]> {
   const templates = await fetchTemplates()
@@ -1497,7 +1675,7 @@ function getMonthBoundaries() {
   return { thisMonthStart, lastMonthStart, lastMonthEnd }
 }
 
-// ── Compute hours metrics for a single user ───────────────────────────
+// ── Compute hours metrics for a single user ──���────────────────────────
 export function computeUserHoursMetrics(
   responses: RawResponse[],
   userId: string,
@@ -1699,10 +1877,11 @@ export function computeOrgHoursMetrics(
   }
 }
 
-// ── Weekly hours trend (for chart) ────────────────────────────────────
+// ── Monthly hours trend (for chart) ────────────────────────────────────
+// Hours are multiplied by 4 to convert weekly scorecard hours to monthly estimates
 export interface WeeklyHoursTrend {
   week: string
-  hours: number
+  hours: number  // Monthly hours (weekly * 4)
   responses: number
 }
 
@@ -1730,7 +1909,8 @@ export function computeWeeklyHoursTrend(
       weekMap.set(week, { hours: 0, count: 0, date })
     }
     const entry = weekMap.get(week)!
-    entry.hours += responseHours
+    // Multiply by 4 to convert weekly hours to monthly estimate
+    entry.hours += responseHours * WEEKLY_TO_MONTHLY_MULTIPLIER
     entry.count += 1
   }
   

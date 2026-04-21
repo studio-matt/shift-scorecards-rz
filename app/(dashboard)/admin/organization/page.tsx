@@ -1077,14 +1077,32 @@ function OrgDetailView({
     }
   }
 
-  // Delete a single member
+  // Delete a single member - deletes from both Firestore AND Firebase Auth
   async function handleDeleteMember(memberId: string) {
     setDeletingMember(memberId)
     try {
-      // Find the member to determine which collection to delete from
       const member = members.find((m) => m.id === memberId)
-      const collection = member?.source === "invites" ? COLLECTIONS.INVITES : COLLECTIONS.USERS
-      await deleteDocument(collection, memberId)
+      
+      if (member?.source === "invites") {
+        // For invites, just delete from Firestore (no Firebase Auth account exists yet)
+        await deleteDocument(COLLECTIONS.INVITES, memberId)
+      } else {
+        // For actual users, delete from both Firestore AND Firebase Auth via API
+        const response = await fetch("/api/admin/delete-user", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: memberId,
+            email: member?.email,
+          }),
+        })
+        
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(error.error || "Failed to delete user")
+        }
+      }
+      
       setMembers((prev) => prev.filter((m) => m.id !== memberId))
       setSelectedMembers((prev) => {
         const newSet = new Set(prev)
@@ -1099,15 +1117,31 @@ function OrgDetailView({
     }
   }
 
-  // Bulk delete selected members
+  // Bulk delete selected members - deletes from both Firestore AND Firebase Auth
   async function handleBulkDelete() {
     try {
       const idsToDelete = Array.from(selectedMembers)
       for (const id of idsToDelete) {
-        // Find the member to determine which collection to delete from
         const member = members.find((m) => m.id === id)
-        const collection = member?.source === "invites" ? COLLECTIONS.INVITES : COLLECTIONS.USERS
-        await deleteDocument(collection, id)
+        
+        if (member?.source === "invites") {
+          // For invites, just delete from Firestore
+          await deleteDocument(COLLECTIONS.INVITES, id)
+        } else {
+          // For actual users, delete from both via API
+          const response = await fetch("/api/admin/delete-user", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: id,
+              email: member?.email,
+            }),
+          })
+          
+          if (!response.ok) {
+            console.error(`Failed to delete user ${id}`)
+          }
+        }
       }
       setMembers((prev) => prev.filter((m) => !selectedMembers.has(m.id)))
       setSelectedMembers(new Set())

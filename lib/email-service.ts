@@ -51,19 +51,82 @@ const DEFAULT_TEMPLATES: Record<EmailTemplateType, Omit<EmailTemplate, "updatedA
   weekly_digest: {
     id: "weekly_digest",
     name: "Weekly Digest",
-    description: "Weekly summary of performance and progress",
-    subject: "Your Weekly Progress Report",
+    description: "Weekly summary of personal performance and progress",
+    subject: "Your Weekly Progress Report - {{weekOf}}",
     body: `<h1>Hi {{firstName}},</h1>
 <p>Here's your weekly performance summary:</p>
 <ul>
-<li><strong>Weekly Score:</strong> {{weeklyScore}}</li>
-<li><strong>Percentile Rank:</strong> Top {{percentileRank}}%</li>
+<li><strong>Hours Saved:</strong> {{hoursSaved}} hours</li>
 <li><strong>Current Streak:</strong> {{streak}} weeks</li>
+<li><strong>Rank:</strong> #{{rank}} in your organization</li>
 </ul>
 <p>View your full dashboard for more insights:</p>
 <p><a href="{{dashboardLink}}" style="display: inline-block; padding: 12px 24px; background-color: #0066cc; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">View Dashboard</a></p>
 <p>Keep improving!<br/>{{organizationName}}</p>`,
-    enabled: false,
+    enabled: true,
+  },
+  leadership_report: {
+    id: "leadership_report",
+    name: "Leadership Report",
+    description: "Weekly organization performance report for leadership",
+    subject: "Weekly Leadership Report - {{organizationName}} - {{weekOf}}",
+    body: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+<h1 style="color: #111; margin-bottom: 24px;">Weekly Leadership Report</h1>
+<p style="color: #555; margin-bottom: 8px;"><strong>Organization:</strong> {{organizationName}}</p>
+<p style="color: #555; margin-bottom: 24px;"><strong>Week of:</strong> {{weekOf}}</p>
+
+<div style="background: #f8f9fa; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+<h2 style="color: #111; font-size: 16px; margin-bottom: 16px;">Key Metrics</h2>
+<table style="width: 100%; border-collapse: collapse;">
+<tr><td style="padding: 8px 0; color: #555;">Total Hours Saved</td><td style="padding: 8px 0; text-align: right; font-weight: bold; color: #111;">{{totalHoursSaved}}</td></tr>
+<tr><td style="padding: 8px 0; color: #555;">Productivity Gain</td><td style="padding: 8px 0; text-align: right; font-weight: bold; color: #111;">{{productivityGain}}%</td></tr>
+<tr><td style="padding: 8px 0; color: #555;">Participation Rate</td><td style="padding: 8px 0; text-align: right; font-weight: bold; color: #111;">{{participationRate}}%</td></tr>
+<tr><td style="padding: 8px 0; color: #555;">Value Created</td><td style="padding: 8px 0; text-align: right; font-weight: bold; color: #111;">\${{periodValue}}</td></tr>
+</table>
+</div>
+
+<div style="margin-bottom: 24px;">
+<h2 style="color: #111; font-size: 16px; margin-bottom: 12px;">Top Performers</h2>
+{{topPerformersList}}
+</div>
+
+<div style="margin-bottom: 24px;">
+<h2 style="color: #111; font-size: 16px; margin-bottom: 12px;">Engagement Alerts</h2>
+<p style="color: #555;">Non-responders this week: <strong>{{nonRespondersCount}}</strong></p>
+{{nonRespondersList}}
+</div>
+
+<p><a href="{{reportLink}}" style="display: inline-block; margin-top: 20px; padding: 12px 24px; background: #111; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 500;">View Full Report</a></p>
+</div>`,
+    enabled: true,
+  },
+  non_responder_alert: {
+    id: "non_responder_alert",
+    name: "Non-Responder Alert",
+    description: "Sent to admins when participation drops or users haven't completed scorecards",
+    subject: "Participation Alert - {{organizationName}} - {{weekOf}}",
+    body: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+<div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin-bottom: 24px; border-radius: 0 8px 8px 0;">
+<h1 style="color: #92400e; margin: 0 0 8px 0; font-size: 18px;">Participation Alert</h1>
+<p style="color: #92400e; margin: 0;">{{nonRespondersCount}} team members have not completed their scorecard this week.</p>
+</div>
+
+<p style="color: #555; margin-bottom: 8px;"><strong>Organization:</strong> {{organizationName}}</p>
+<p style="color: #555; margin-bottom: 8px;"><strong>Week of:</strong> {{weekOf}}</p>
+<p style="color: #555; margin-bottom: 24px;"><strong>Current Participation Rate:</strong> {{participationRate}}%</p>
+
+<div style="background: #f8f9fa; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+<h2 style="color: #111; font-size: 16px; margin: 0 0 16px 0;">Non-Responders</h2>
+{{nonRespondersList}}
+</div>
+
+<p><a href="{{dashboardLink}}" style="display: inline-block; padding: 12px 24px; background: #111; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 500;">View Dashboard</a></p>
+
+<p style="color: #999; font-size: 13px; margin-top: 32px;">
+You're receiving this because you have non-responder alerts enabled. <a href="{{settingsLink}}" style="color: #999;">Manage notification preferences</a>
+</p>
+</div>`,
+    enabled: false, // Off by default
   },
   member_invitation: {
     id: "member_invitation",

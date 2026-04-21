@@ -73,6 +73,7 @@ export default function ScorecardPage() {
   const [template, setTemplate] = useState<TemplateData | null>(null)
   const [expired, setExpired] = useState(false)
   const [noActive, setNoActive] = useState(false)
+  const [alreadyCompleted, setAlreadyCompleted] = useState(false)
 
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string | number>>({})
@@ -118,9 +119,28 @@ export default function ScorecardPage() {
         if (tmpl) {
           setTemplate(tmpl as unknown as TemplateData)
           
-          // Check for existing draft for this user + release
+          // Check for existing response (draft or completed) for this user + release
           if (user?.id) {
             const allResponses = await getDocuments(COLLECTIONS.RESPONSES)
+            
+            // First check if user already COMPLETED this release
+            const existingCompleted = allResponses.find((r) => {
+              const data = r as Record<string, unknown>
+              return (
+                data.userId === user.id &&
+                data.releaseId === rel.id &&
+                data.status === "completed"
+              )
+            })
+            
+            if (existingCompleted) {
+              // User already completed this scorecard - show "All Caught Up"
+              setAlreadyCompleted(true)
+              setLoading(false)
+              return
+            }
+            
+            // Check for existing draft
             const existingDraft = allResponses.find((r) => {
               const data = r as Record<string, unknown>
               return (
@@ -369,6 +389,31 @@ export default function ScorecardPage() {
         <Button className="mt-6" variant="outline" onClick={() => router.push("/dashboard")}>
           Go to Dashboard
         </Button>
+      </div>
+    )
+  }
+  
+  // User already completed the current scorecard - show "All Caught Up"
+  if (alreadyCompleted) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10">
+          <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+        </div>
+        <h2 className="text-xl font-bold text-foreground">{"You're All Caught Up!"}</h2>
+        <p className="mt-2 max-w-md text-muted-foreground">
+          Great job completing your most recent scorecard. To see your results, check your dashboard.
+        </p>
+        <Button 
+          className="mt-6 gap-2" 
+          onClick={() => router.push("/dashboard#results")}
+        >
+          View Your Results
+          <ArrowRight className="h-4 w-4" />
+        </Button>
+        <p className="mt-4 text-sm text-muted-foreground">
+          {"You'll be notified when a new scorecard is available."}
+        </p>
       </div>
     )
   }

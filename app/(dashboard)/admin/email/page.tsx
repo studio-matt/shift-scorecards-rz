@@ -210,6 +210,17 @@ export default function EmailSettingsPage() {
     loadData()
   }, [loadData])
 
+  // Handle URL parameter for direct template navigation
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      const templateParam = params.get("template")
+      if (templateParam && Object.keys(DEFAULT_TEMPLATES).includes(templateParam)) {
+        setSelectedTemplateId(templateParam as EmailTemplateType)
+      }
+    }
+  }, [])
+
   // Update editing template when selection changes
   useEffect(() => {
     const template = templates.find(t => t.id === selectedTemplateId)
