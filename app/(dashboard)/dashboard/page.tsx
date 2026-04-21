@@ -865,8 +865,12 @@ export default function DashboardPage() {
 
         <QuestionResults data={questionResults} />
 
-        {/* Filter to show only current user's scorecards */}
-        <RecentScorecardsCard data={recentScorecards.filter((sc) => sc.userId === user?.id)} />
+        {/* Show user's scorecards - filter to only this user's submissions */}
+        <RecentScorecardsCard data={recentScorecards.filter((sc) => {
+          // Try matching by user ID (Firestore doc ID) or by authId
+          const isMatch = sc.userId === user?.id || sc.userId === user?.authId
+          return isMatch
+        })} />
       </div>
     </div>
   )
