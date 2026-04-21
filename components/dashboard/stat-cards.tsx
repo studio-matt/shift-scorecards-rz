@@ -190,38 +190,6 @@ export function StatCards({
           </CardContent>
         </Card>
 
-        {/* Hours Saved */}
-        <Card className="relative border-border/50 bg-card/80 backdrop-blur-sm">
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
-          <CardContent className="relative flex items-start gap-4 p-5">
-            <div className="flex flex-col items-center gap-2">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-cyan-500/15 ring-1 ring-cyan-500/20">
-                <Clock className="h-5 w-5 text-cyan-400" />
-              </div>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button className="flex h-6 w-6 items-center justify-center rounded-full bg-muted border border-border hover:bg-muted/80 transition-colors">
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-[280px] text-xs z-50">
-                  <div className="space-y-1">
-                    <p className="font-semibold">Hours Saved</p>
-                    <p>Total hours you&apos;ve saved using AI tools this month.</p>
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-            <div>
-              <p className="text-sm font-medium leading-snug text-muted-foreground">Hours Saved</p>
-              <p className="text-2xl font-bold text-foreground">{formatHours(totalHours)}</p>
-              <p className="mt-1 text-xs text-emerald-400">
-                {formatValue(dollarValue)} value
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Productivity Gain */}
         <Card className="relative border-border/50 bg-card/80 backdrop-blur-sm">
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-transparent to-transparent" />
