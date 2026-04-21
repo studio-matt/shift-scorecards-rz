@@ -964,9 +964,9 @@ export interface NonResponder {
   orgName: string
   missedReleases: number  // Total releases missed (not arbitrary time windows)
   lastResponseWeek: string
-  isDroppedOff: boolean   // True if user has missed at least 1 previous release
+  isDroppedOff: boolean   // True if user has missed 2+ previous releases (not just 1)
   missedCurrentRelease: boolean  // True if user hasn't responded to the most recent release
-}
+  }
 
 export async function computeNonResponders(responses: RawResponse[], filterOrgId?: string): Promise<NonResponder[]> {
   const allUsersRaw = await getDocuments(COLLECTIONS.USERS)
@@ -1047,11 +1047,12 @@ export async function computeNonResponders(responses: RawResponse[], filterOrgId
     // Check if user missed the CURRENT (most recent) release
     const missedCurrentRelease = mostRecentRelease ? !userReleases.has(mostRecentRelease) : false
     
-    // Check if user is "dropped off" - missed at least 1 PREVIOUS release
+    // Check if user is "dropped off" - missed 2 or more PREVIOUS releases
     // (not counting the current one, as they may still be in progress)
+    // Users who only missed 1 week shouldn't be flagged as "dropped off"
     const previousReleases = allReleases.slice(1) // All releases except the current one
     const missedPreviousCount = previousReleases.filter(r => !userReleases.has(r)).length
-    const isDroppedOff = missedPreviousCount >= 1
+    const isDroppedOff = missedPreviousCount >= 2
     
     // Include user if they've missed ANY release (current or previous)
     if (missedReleases > 0) {
