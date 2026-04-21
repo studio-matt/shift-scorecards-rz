@@ -249,9 +249,9 @@ export default function LeadershipReportsPage() {
     })
     rows.push("")
     rows.push("Non-Responders")
-    rows.push("Name,Department,Missed Weeks,Last Response")
+    rows.push("Name,Department,Missed Releases,Last Response,Dropped Off")
     reportData.nonResponders.forEach(n => {
-      rows.push(`${n.name},${n.department},${n.missedWeeks},${n.lastResponseWeek}`)
+      rows.push(`${n.name},${n.department},${n.missedReleases},${n.lastResponseWeek},${n.isDroppedOff ? "Yes" : "No"}`)
     })
     
     const blob = new Blob([rows.join("\n")], { type: "text/csv" })
@@ -585,8 +585,8 @@ export default function LeadershipReportsPage() {
                               <p className="text-sm font-medium">{n.name}</p>
                               <p className="text-xs text-muted-foreground">{n.department}</p>
                             </div>
-                            <Badge variant="outline" className="text-xs">
-                              {n.missedWeeks} missed
+                            <Badge variant={n.isDroppedOff ? "destructive" : "outline"} className="text-xs">
+                              {n.missedReleases} missed{n.isDroppedOff ? " (dropped)" : ""}
                             </Badge>
                           </div>
                         ))}

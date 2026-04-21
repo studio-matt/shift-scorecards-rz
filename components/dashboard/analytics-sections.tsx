@@ -149,8 +149,8 @@ export function NonRespondersCard({ data }: { data: NonResponder[] }) {
                         <p className="text-xs text-muted-foreground">{n.orgName} / {n.department}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-bold text-orange-600">{n.missedWeeks} missed</p>
-                        <p className="text-[10px] text-muted-foreground">Last: Week {n.lastResponseWeek}</p>
+                        <p className="text-sm font-bold text-orange-600">{n.missedReleases} missed</p>
+                        <p className="text-[10px] text-muted-foreground">Last: {n.lastResponseWeek}</p>
                       </div>
                     </div>
                   ))}

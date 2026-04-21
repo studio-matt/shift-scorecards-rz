@@ -226,7 +226,7 @@ async function fetchTemplates(): Promise<TemplateDoc[]> {
   return docs as unknown as TemplateDoc[]
 }
 
-// ── Admin stat cards ───────────────��──────────────────────────────────
+// ── Admin stat cards ───────────────���──────────────────────────────────
 export interface AdminStats {
   avgScore: number
   avgScoreChange: number
@@ -571,6 +571,7 @@ export async function computeMostImproved(
 
 // ── Question results ──────────────────────────────────────────────────
 // Shows ALL numeric question types (scale, number, time_saving, confidence, rating)
+// Uses RELEASE-BASED grouping (by weekOf) instead of arbitrary time windows
 export async function computeQuestionResults(
   responses: RawResponse[],
 ): Promise<QuestionResult[]> {
@@ -603,23 +604,21 @@ export async function computeQuestionResults(
     return []
   }
 
-  // Sort responses by date to separate current vs previous period
-  const sortedResponses = [...responses].sort((a, b) => 
-    new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
-  )
+  // Group responses by release (weekOf) - NOT by arbitrary time windows
+  const releaseWeeks = Array.from(new Set(responses.map(r => r.weekOf))).sort().reverse()
   
-  // Use a 30-day window instead of just 1 week for better data coverage
-  const now = new Date()
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-  const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000)
+  // Get the most recent release and previous release (for change calculation)
+  const mostRecentRelease = releaseWeeks[0]
+  const previousRelease = releaseWeeks[1]
   
-  const recentResponses = sortedResponses.filter(r => new Date(r.completedAt) >= thirtyDaysAgo)
-  const previousResponses = sortedResponses.filter(r => {
-    const d = new Date(r.completedAt)
-    return d >= sixtyDaysAgo && d < thirtyDaysAgo
-  })
+  const recentResponses = mostRecentRelease 
+    ? responses.filter(r => r.weekOf === mostRecentRelease)
+    : responses // Fallback to all if no weekOf
+  const previousResponses = previousRelease 
+    ? responses.filter(r => r.weekOf === previousRelease)
+    : []
 
-  // Aggregate answers per question for each period
+  // Aggregate answers per question for each release period
   const aggregateByQuestion = (resps: RawResponse[]) => {
     const map = new Map<string, { total: number; count: number }>()
     for (const r of resps) {
@@ -656,7 +655,7 @@ export async function computeQuestionResults(
         ? previous.total / previous.count 
         : 0
       
-      // Calculate change (difference between recent and previous averages)
+      // Calculate change (difference between most recent release and previous release)
       const change = previous && previous.count > 0
         ? Math.round((currentAvg - previousAvg) * 10) / 10
         : 0
@@ -673,81 +672,59 @@ export async function computeQuestionResults(
 }
 
 // ── User Question Results (for individual user dashboard) ─────────────
-// Shows ALL numeric question responses for a specific user, not just time_saving
+// Shows answers from the user's LAST COMPLETED scorecard only
 export async function computeUserQuestionResults(
   responses: RawResponse[],
 ): Promise<QuestionResult[]> {
+  if (responses.length === 0) {
+    return []
+  }
+
   const templates = await fetchTemplates()
 
   // Build question text lookup for ALL numeric questions
   const questionTextMap = new Map<string, string>()
-  const numericQuestionIds = new Set<string>()
   for (const t of templates) {
     for (const q of t.questions || []) {
       questionTextMap.set(q.id, q.text)
-      // Include all numeric question types
-      if (q.type === "time_saving" || q.type === "number" || q.type === "scale" || q.type === "rating" || q.type === "confidence") {
-        numericQuestionIds.add(q.id)
-      }
     }
   }
 
-  // Also detect numeric questions from the actual response data (fallback)
-  for (const r of responses) {
-    for (const [qId, val] of Object.entries(r.answers)) {
-      if (typeof val === "number" && val >= 0) {
-        numericQuestionIds.add(qId)
-      }
-    }
-  }
-
-  // If still no numeric questions, return empty
-  if (numericQuestionIds.size === 0) {
-    return []
-  }
-
-  // Sort responses by date - no time restriction for user view
+  // Sort responses by date to find the LAST completed scorecard
   const sortedResponses = [...responses].sort((a, b) => 
     new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
   )
 
-  // Aggregate all responses for this user (no time restriction)
-  const aggregateByQuestion = (resps: RawResponse[]) => {
-    const map = new Map<string, { total: number; count: number }>()
-    for (const r of resps) {
-      for (const [qId, val] of Object.entries(r.answers)) {
-        if (typeof val !== "number" || val < 0) continue
-        if (!map.has(qId)) {
-          map.set(qId, { total: 0, count: 0 })
-        }
-        const entry = map.get(qId)!
-        entry.total += val
-        entry.count += 1
-      }
-    }
-    return map
+  // Get ONLY the most recent response (last completed scorecard)
+  const lastResponse = sortedResponses[0]
+  const previousResponse = sortedResponses[1] // For change calculation if exists
+  
+  if (!lastResponse) {
+    return []
   }
 
-  const allData = aggregateByQuestion(sortedResponses)
-
-  // Get questions with data
-  const questionsWithData = Array.from(allData.keys())
-
-  return questionsWithData
-    .map((qId) => {
-      const data = allData.get(qId)
-      
-      const avg = data && data.count > 0 
-        ? data.total / data.count 
-        : 0
-      
-      return {
-        question: questionTextMap.get(qId) ?? qId,
-        score: Math.round(avg * 10) / 10,
-        change: 0, // No comparison for single user view
-        responseCount: data?.count ?? 0,
-      }
+  // Extract answers from the last completed scorecard
+  const results: QuestionResult[] = []
+  
+  for (const [qId, val] of Object.entries(lastResponse.answers)) {
+    // Only include numeric answers
+    if (typeof val !== "number" || val < 0) continue
+    
+    // Get the previous value for this question (if exists) for change calculation
+    const previousVal = previousResponse?.answers?.[qId]
+    const change = typeof previousVal === "number" && previousVal >= 0
+      ? Math.round((val - previousVal) * 10) / 10
+      : 0
+    
+    results.push({
+      question: questionTextMap.get(qId) ?? qId,
+      score: Math.round(val * 10) / 10,
+      change,
+      responseCount: 1, // Single user's last response
     })
+  }
+
+  return results
     .filter(q => q.score > 0)
     .sort((a, b) => b.score - a.score)
 }
@@ -917,13 +894,17 @@ export async function computeStreaks(responses: RawResponse[], userNameMap?: Map
 }
 
 // ── Engagement: Non-responders ────────────────────────────────────────
+// Non-responder: Has NOT answered the MOST RECENT scorecard release
+// Dropped off: Has missed at least 1 scorecard that was assigned to them
 export interface NonResponder {
   userId: string
   name: string
   department: string
   orgName: string
-  missedWeeks: number
+  missedReleases: number  // Total releases missed (not arbitrary time windows)
   lastResponseWeek: string
+  isDroppedOff: boolean   // True if user has missed at least 1 previous release
+  missedCurrentRelease: boolean  // True if user hasn't responded to the most recent release
 }
 
 export async function computeNonResponders(responses: RawResponse[], filterOrgId?: string): Promise<NonResponder[]> {
@@ -941,12 +922,16 @@ export async function computeNonResponders(responses: RawResponse[], filterOrgId
   })
   const orgs = await getOrganizations()
   const orgNameMap = new Map(orgs.map((o) => [o.id, (o as Record<string, unknown>).name as string]))
-  const allWeeks = Array.from(new Set(responses.map((r) => r.weekOf))).sort()
-  const totalWeeks = allWeeks.length || 1
-  const respondedWeeks = new Map<string, Set<string>>()
+  
+  // Get all releases (sorted newest to oldest) - using weekOf as release identifier
+  const allReleases = Array.from(new Set(responses.map((r) => r.weekOf))).sort().reverse()
+  const mostRecentRelease = allReleases[0]
+  const totalReleases = allReleases.length || 1
+  
+  const respondedReleases = new Map<string, Set<string>>()
   for (const r of responses) {
-    if (!respondedWeeks.has(r.userId)) respondedWeeks.set(r.userId, new Set())
-    respondedWeeks.get(r.userId)!.add(r.weekOf)
+    if (!respondedReleases.has(r.userId)) respondedReleases.set(r.userId, new Set())
+    respondedReleases.get(r.userId)!.add(r.weekOf)
   }
 
   // Deduplicate users by normalized name (first+last+org) to prevent
@@ -959,21 +944,21 @@ export async function computeNonResponders(responses: RawResponse[], filterOrgId
     const lastName = ((data.lastName as string) ?? "").trim().toLowerCase()
     const orgId = (data.organizationId as string) ?? ""
     const dedupKey = `${firstName}|${lastName}|${orgId}`
-    const thisCount = respondedWeeks.get(u.id)?.size ?? 0
+    const thisCount = respondedReleases.get(u.id)?.size ?? 0
     userResponseCount.set(u.id, thisCount)
 
     if (firstName || lastName) {
       const existingId = seen.get(dedupKey)
       if (existingId) {
-        // Keep the account with more responses; merge response weeks
+        // Keep the account with more responses; merge response releases
         const existingCount = userResponseCount.get(existingId) ?? 0
         const keepId = thisCount >= existingCount ? u.id : existingId
         const mergeId = keepId === u.id ? existingId : u.id
-        // Merge weeks into the kept account
-        const keepWeeks = respondedWeeks.get(keepId) ?? new Set()
-        const mergeWeeks = respondedWeeks.get(mergeId) ?? new Set()
-        for (const w of mergeWeeks) keepWeeks.add(w)
-        respondedWeeks.set(keepId, keepWeeks)
+        // Merge releases into the kept account
+        const keepReleases = respondedReleases.get(keepId) ?? new Set()
+        const mergeReleases = respondedReleases.get(mergeId) ?? new Set()
+        for (const w of mergeReleases) keepReleases.add(w)
+        respondedReleases.set(keepId, keepReleases)
         seen.set(dedupKey, keepId)
         continue
       }
@@ -995,21 +980,41 @@ export async function computeNonResponders(responses: RawResponse[], filterOrgId
   for (const u of allUsers) {
     if (!dedupedIds.has(u.id)) continue
     const data = u as Record<string, unknown>
-    const weeks = respondedWeeks.get(u.id)
-    const missedWeeks = totalWeeks - (weeks?.size ?? 0)
-    if (missedWeeks > 0) {
-      const lastWeek = weeks ? Array.from(weeks).sort().pop() ?? "Never" : "Never"
+    const userReleases = respondedReleases.get(u.id) ?? new Set()
+    const missedReleases = totalReleases - userReleases.size
+    
+    // Check if user missed the CURRENT (most recent) release
+    const missedCurrentRelease = mostRecentRelease ? !userReleases.has(mostRecentRelease) : false
+    
+    // Check if user is "dropped off" - missed at least 1 PREVIOUS release
+    // (not counting the current one, as they may still be in progress)
+    const previousReleases = allReleases.slice(1) // All releases except the current one
+    const missedPreviousCount = previousReleases.filter(r => !userReleases.has(r)).length
+    const isDroppedOff = missedPreviousCount >= 1
+    
+    // Include user if they've missed ANY release (current or previous)
+    if (missedReleases > 0) {
+      const lastRelease = userReleases.size > 0 
+        ? Array.from(userReleases).sort().reverse()[0] 
+        : "Never"
       result.push({
         userId: u.id,
         name: `${(data.firstName as string) ?? ""} ${(data.lastName as string) ?? ""}`.trim() || ((data.email as string) ?? ""),
         department: (data.department as string) ?? "",
         orgName: orgNameMap.get((data.organizationId as string) ?? "") ?? "",
-        missedWeeks,
-        lastResponseWeek: lastWeek,
+        missedReleases,
+        lastResponseWeek: lastRelease,
+        isDroppedOff,
+        missedCurrentRelease,
       })
     }
   }
-  return result.sort((a, b) => b.missedWeeks - a.missedWeeks)
+  
+  // Sort: dropped off users first, then by most missed releases
+  return result.sort((a, b) => {
+    if (a.isDroppedOff !== b.isDroppedOff) return a.isDroppedOff ? -1 : 1
+    return b.missedReleases - a.missedReleases
+  })
 }
 
 // ── Trend: Score velocity ─────────────────────────────────────────────
@@ -1547,7 +1552,7 @@ export async function findTimeSavingMinutesQuestionIds(): Promise<string[]> {
   return ids
 }
 
-// ── Helper: Find ALL confidence question IDs from templates ────────────────
+// ── Helper: Find ALL confidence question IDs from templates ─────��──────────
 // Looks for questions with type === "confidence" OR text containing "confidence"
 export async function findConfidenceQuestionIds(): Promise<string[]> {
   const templates = await fetchTemplates()
