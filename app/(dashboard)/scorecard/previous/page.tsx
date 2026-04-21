@@ -110,6 +110,8 @@ export default function PreviousScorecardsPage() {
   
   // Check if user is super admin (can see all companies)
   const isSuperAdmin = user?.role === "super_admin"
+  // Check if user is any admin type (can filter by department)
+  const isAdmin = user?.role === "super_admin" || user?.role === "admin" || user?.role === "company_admin"
   const [orgs, setOrgs] = useState<Array<{ id: string; name: string }>>([])
   const [departments, setDepartments] = useState<string[]>([])
   const [templates, setTemplates] = useState<Array<{ id: string; name: string; questions: TemplateQuestion[] }>>([])
@@ -971,20 +973,22 @@ export default function PreviousScorecardsPage() {
           </Select>
         )}
 
-        {/* Department dropdown */}
-        <Select value={selectedDept} onValueChange={setSelectedDept}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="All Departments" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Departments</SelectItem>
-            {departments.filter(Boolean).map((dept) => (
-              <SelectItem key={dept} value={dept}>
-                {dept}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Department dropdown - only visible to admins */}
+        {isAdmin && (
+          <Select value={selectedDept} onValueChange={setSelectedDept}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="All Departments" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {departments.filter(Boolean).map((dept) => (
+                <SelectItem key={dept} value={dept}>
+                  {dept}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         {/* Time period dropdown */}
         <Select value={timePeriod} onValueChange={setTimePeriod}>
