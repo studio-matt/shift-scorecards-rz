@@ -319,7 +319,7 @@ export function DepartmentVarianceCard({ data, feedbackSettings }: { data: Depar
   )
 }
 
-// ── Question correlations ─────────────────────────────────────────────
+// ── Question correlations ────────────────────────────────────────────���
 function generateCorrelationInsight(c: QuestionCorrelation): string | null {
   const q1Short = c.question1.length > 40 ? c.question1.slice(0, 40).trim() + "..." : c.question1
   const q2Short = c.question2.length > 40 ? c.question2.slice(0, 40).trim() + "..." : c.question2
@@ -458,9 +458,9 @@ export function DeptOverTimeChart({ data }: { data: DeptOverTime[] }) {
       <CardHeader className="relative pb-3">
         <div className="flex items-start justify-between">
           <div>
-  <CardTitle className="text-sm font-semibold">Department Comparison Over Time</CardTitle>
+  <CardTitle className="text-sm font-semibold">Department Hours Saved Over Time</CardTitle>
   <p className="mt-0.5 text-xs text-muted-foreground">
-  Average scorecard rating (1-10 scale) by department per release
+  Average monthly hours saved per person by department
   </p>
   <p className="text-[10px] text-muted-foreground/70">
   Showing {activeDepts.length} of {departments.length} departments
