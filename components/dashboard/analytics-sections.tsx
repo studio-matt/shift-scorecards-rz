@@ -458,11 +458,14 @@ export function DeptOverTimeChart({ data }: { data: DeptOverTime[] }) {
       <CardHeader className="relative pb-3">
         <div className="flex items-start justify-between">
           <div>
-            <CardTitle className="text-sm font-semibold">Department Comparison Over Time</CardTitle>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Showing {activeDepts.length} of {departments.length} departments
-              {!showAll && !toggledDepts && " (top 3 + bottom 3)"}
-            </p>
+  <CardTitle className="text-sm font-semibold">Department Comparison Over Time</CardTitle>
+  <p className="mt-0.5 text-xs text-muted-foreground">
+  Average scorecard rating (1-10 scale) by department per release
+  </p>
+  <p className="text-[10px] text-muted-foreground/70">
+  Showing {activeDepts.length} of {departments.length} departments
+  {!showAll && !toggledDepts && " (top 3 + bottom 3)"}
+  </p>
           </div>
           {departments.length > 6 && (
             <button
