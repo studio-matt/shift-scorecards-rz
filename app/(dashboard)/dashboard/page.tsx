@@ -141,7 +141,7 @@ export default function DashboardPage() {
   }, [])
 
   // Handle cycling goal status (not-started -> in-progress -> completed -> not-started)
-  const handleCycleGoalStatus = useCallback((goalId: string, newStatus: "completed" | "in-progress" | "not-started") => {
+  const handleCycleGoalStatus = useCallback(async (goalId: string, newStatus: "completed" | "in-progress" | "not-started") => {
     setUserGoals(prev => prev.map(g => 
       g.id === goalId ? { 
         ...g, 
@@ -149,8 +149,19 @@ export default function DashboardPage() {
         completedAt: newStatus === "completed" ? new Date().toISOString() : undefined 
       } : g
     ))
-    // TODO: Persist to database
-  }, [])
+    
+    // Persist to user document in Firestore
+    if (user?.id) {
+      try {
+        const { updateDocument } = await import("@/lib/firestore")
+        await updateDocument(COLLECTIONS.USERS, user.id, {
+          [`goalStatuses.${goalId}`]: { status: newStatus, updatedAt: new Date().toISOString() }
+        })
+      } catch (err) {
+        console.error("Failed to save goal status:", err)
+      }
+    }
+  }, [user?.id])
 
   // Helper to filter responses by time period
   const filterByTimePeriod = useCallback((responses: Awaited<ReturnType<typeof fetchAllResponses>>, period: string) => {
@@ -319,6 +330,10 @@ export default function DashboardPage() {
           templateMap.set(template.id, template)
         }
         
+        // Load user's saved goal statuses from their document
+        const userDoc = await getDocument(COLLECTIONS.USERS, user.id)
+        const savedStatuses = (userDoc as Record<string, unknown>)?.goalStatuses as Record<string, { status: string }> | undefined
+        
         const userResponses = allResponses.filter(r => r.userId === user.id)
         const extractedGoals: GoalEntry[] = []
         
@@ -344,11 +359,14 @@ export default function DashboardPage() {
               // Skip if the text is too short (likely a raw value like "A", "B")
               if (goalText.length < 3) continue
               
+              const goalId = `${responseId}-${question.id}`
+              const savedStatus = savedStatuses?.[goalId]?.status as GoalEntry["status"] | undefined
+              
               extractedGoals.push({
-                id: `${responseId}-${question.id}`,
+                id: goalId,
                 text: goalText,
                 weekOf: response.weekOf || response.completedAt?.slice(0, 10) || "",
-                status: "in-progress",
+                status: savedStatus || "in-progress",
               })
             }
           }
