@@ -226,7 +226,7 @@ async function fetchTemplates(): Promise<TemplateDoc[]> {
   return docs as unknown as TemplateDoc[]
 }
 
-// ── Admin stat cards ───────────────�����──────────────────────────────────
+// ── Admin stat cards ───────────────������──────────────────────────────────
 export interface AdminStats {
   avgScore: number
   avgScoreChange: number
@@ -577,44 +577,24 @@ export async function computeQuestionResults(
 ): Promise<QuestionResult[]> {
   const templates = await fetchTemplates()
 
-  // Build question text lookup AND identify numeric questions
-  const questionTextMap = new Map<string, string>()
-  const numericQuestionIds = new Set<string>()
+  // Build question text lookup by ID and by index (position)
+  const questionTextById = new Map<string, string>()
+  const questionTextByIndex = new Map<number, string>() // index -> text (for fallback matching)
+  
+  // Build a comprehensive question text map from all templates
   for (const t of templates) {
-    for (const q of t.questions || []) {
-      questionTextMap.set(q.id, q.text)
-      // Include all numeric question types
-      if (q.type === "time_saving" || q.type === "scale" || q.type === "number" || q.type === "confidence" || q.type === "rating") {
-        numericQuestionIds.add(q.id)
-      }
-    }
-  }
-
-  // Also extract question text from embedded questions in responses
-  for (const r of responses) {
-    const responseData = r as unknown as Record<string, unknown>
-    const embeddedQuestions = responseData.questions as Array<{ id: string; text: string }> | undefined
-    if (embeddedQuestions && Array.isArray(embeddedQuestions)) {
-      for (const q of embeddedQuestions) {
-        if (q.id && q.text && !questionTextMap.has(q.id)) {
-          questionTextMap.set(q.id, q.text)
+    for (let i = 0; i < (t.questions || []).length; i++) {
+      const q = t.questions[i]
+      questionTextById.set(q.id, q.text)
+      // Also map by numeric index (for q1, q2, sr1, sr2 style IDs)
+      const numMatch = q.id.match(/\d+/)
+      if (numMatch) {
+        const idx = parseInt(numMatch[0], 10)
+        if (!questionTextByIndex.has(idx)) {
+          questionTextByIndex.set(idx, q.text)
         }
       }
     }
-  }
-
-  // Also detect numeric questions from actual response data (in case template types are missing)
-  for (const r of responses) {
-    for (const [qId, val] of Object.entries(r.answers)) {
-      if (typeof val === "number" && val >= 0) {
-        numericQuestionIds.add(qId)
-      }
-    }
-  }
-
-  // If no numeric questions found, return empty
-  if (numericQuestionIds.size === 0) {
-    return []
   }
 
   // Group responses by release (weekOf) - NOT by arbitrary time windows
@@ -651,12 +631,27 @@ export async function computeQuestionResults(
   const recentData = aggregateByQuestion(recentResponses)
   const previousData = aggregateByQuestion(previousResponses)
 
-  // Get all questions that have data (recent OR previous)
-  const questionsWithData = Array.from(numericQuestionIds).filter(
-    qId => recentData.has(qId) || previousData.has(qId)
-  )
+  // Get all question IDs that have data
+  const allQuestionIds = new Set([...recentData.keys(), ...previousData.keys()])
 
-  return questionsWithData
+  // Helper to get question text with fallback to index matching
+  const getQuestionText = (qId: string): string | null => {
+    // Try direct ID match first
+    let text = questionTextById.get(qId)
+    if (text) return text
+    
+    // Try matching by numeric part of ID (e.g., "q3" -> 3 -> sr3)
+    const numMatch = qId.match(/\d+/)
+    if (numMatch) {
+      const idx = parseInt(numMatch[0], 10)
+      text = questionTextByIndex.get(idx)
+      if (text) return text
+    }
+    
+    return null
+  }
+
+  return Array.from(allQuestionIds)
     .map((qId) => {
       const recent = recentData.get(qId)
       const previous = previousData.get(qId)
@@ -673,19 +668,17 @@ export async function computeQuestionResults(
         ? Math.round((currentAvg - previousAvg) * 10) / 10
         : 0
       
-      // Get question text - if not found in map, skip this question
-      const questionText = questionTextMap.get(qId)
+      // Get question text with fallback matching
+      const questionText = getQuestionText(qId)
       
       return {
-        question: questionText ?? null, // Will filter out nulls below
-        questionId: qId,
+        question: questionText,
         score: Math.round(currentAvg * 10) / 10,
         change,
         responseCount: recent?.count ?? 0,
       }
     })
     .filter(q => q.question !== null && (q.score > 0 || q.change !== 0)) // Only include questions with proper text
-    .map(({ questionId, ...rest }) => rest) // Remove questionId from final result
     .sort((a, b) => b.score - a.score) // Sort by highest score
 }
 
@@ -700,19 +693,6 @@ export async function computeUserQuestionResults(
 
   const templates = await fetchTemplates()
 
-  // Build question text lookup for ALL questions from ALL templates
-  const questionTextMap = new Map<string, string>()
-  const templateQuestionsMap = new Map<string, Map<string, string>>() // templateId -> (questionId -> text)
-  
-  for (const t of templates) {
-    const tmplQuestions = new Map<string, string>()
-    for (const q of t.questions || []) {
-      questionTextMap.set(q.id, q.text)
-      tmplQuestions.set(q.id, q.text)
-    }
-    templateQuestionsMap.set(t.id, tmplQuestions)
-  }
-
   // Sort responses by date to find the LAST completed scorecard
   const sortedResponses = [...responses].sort((a, b) => 
     new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
@@ -726,63 +706,65 @@ export async function computeUserQuestionResults(
     return []
   }
 
-  // Get question text lookup for this specific template
-  const templateQuestions = templateQuestionsMap.get(lastResponse.templateId)
+  // Get the template for this response
+  const template = templates.find(t => t.id === lastResponse.templateId)
+  const templateQuestions = template?.questions || []
   
-  // Also check if the response itself has questions embedded (some responses store this)
-  const responseData = lastResponse as unknown as Record<string, unknown>
-  const embeddedQuestions = responseData.questions as Array<{ id: string; text: string }> | undefined
-
-  // Build a comprehensive question text map for this response
-  const responseQuestionTextMap = new Map<string, string>()
+  // Build question ID to text map from the template
+  const questionIdToText = new Map<string, string>()
+  const questionIndexToText = new Map<number, string>()
+  const questionIndexToType = new Map<number, string>()
   
-  // First, try template questions
-  if (templateQuestions) {
-    for (const [qId, text] of templateQuestions) {
-      responseQuestionTextMap.set(qId, text)
-    }
+  for (let i = 0; i < templateQuestions.length; i++) {
+    const q = templateQuestions[i]
+    questionIdToText.set(q.id, q.text)
+    questionIndexToText.set(i, q.text)
+    questionIndexToType.set(i, q.type)
   }
-  
-  // Then try global template questions
-  for (const [qId, text] of questionTextMap) {
-    if (!responseQuestionTextMap.has(qId)) {
-      responseQuestionTextMap.set(qId, text)
-    }
-  }
-  
-  // Finally, try embedded questions in the response itself
-  if (embeddedQuestions && Array.isArray(embeddedQuestions)) {
-    for (const q of embeddedQuestions) {
-      if (q.id && q.text) {
-        responseQuestionTextMap.set(q.id, q.text)
-      }
-    }
-  }
-
-  // Debug: Log what we have
-  console.log("[v0] computeUserQuestionResults debug:", {
-    lastResponseId: lastResponse.id,
-    templateId: lastResponse.templateId,
-    answersKeys: Object.keys(lastResponse.answers),
-    answersCount: Object.keys(lastResponse.answers).length,
-    templateQuestionsFound: templateQuestions ? templateQuestions.size : 0,
-    globalQuestionsFound: questionTextMap.size,
-    embeddedQuestionsFound: embeddedQuestions?.length ?? 0,
-    responseQuestionTextMapSize: responseQuestionTextMap.size,
-    sampleQuestionIds: Array.from(responseQuestionTextMap.keys()).slice(0, 5),
-  })
 
   // Extract answers from the last completed scorecard
   const results: QuestionResult[] = []
+  const answerEntries = Object.entries(lastResponse.answers)
   
-  for (const [qId, val] of Object.entries(lastResponse.answers)) {
+  for (let i = 0; i < answerEntries.length; i++) {
+    const [qId, val] = answerEntries[i]
+    
     // Only include numeric answers
     if (typeof val !== "number" || val < 0) continue
     
-    // Get question text from our comprehensive map
-    const questionText = responseQuestionTextMap.get(qId)
-    console.log("[v0] Question lookup:", { qId, val, questionText: questionText ?? "NOT FOUND" })
-    if (!questionText) continue // Skip questions without proper text
+    // Try to get question text:
+    // 1. First try direct ID match
+    let questionText = questionIdToText.get(qId)
+    
+    // 2. If no match, try to extract number from ID and match by index
+    if (!questionText) {
+      const numMatch = qId.match(/\d+/)
+      if (numMatch) {
+        const idx = parseInt(numMatch[0], 10) - 1 // IDs are 1-based (q1, q2, sr1, sr2)
+        if (idx >= 0 && idx < templateQuestions.length) {
+          questionText = questionIndexToText.get(idx)
+        }
+      }
+    }
+    
+    // 3. If still no match, try matching by position in answers array
+    if (!questionText && i < templateQuestions.length) {
+      // Skip text-type questions when matching by position
+      let numericIndex = 0
+      for (let j = 0; j < templateQuestions.length; j++) {
+        const qType = templateQuestions[j].type
+        if (qType === "scale" || qType === "number" || qType === "time_saving" || qType === "confidence" || qType === "rating") {
+          if (numericIndex === i) {
+            questionText = templateQuestions[j].text
+            break
+          }
+          numericIndex++
+        }
+      }
+    }
+    
+    // Skip if we still can't find the question text
+    if (!questionText) continue
     
     // Get the previous value for this question (if exists) for change calculation
     const previousVal = previousResponse?.answers?.[qId]
@@ -794,7 +776,7 @@ export async function computeUserQuestionResults(
       question: questionText,
       score: Math.round(val * 10) / 10,
       change,
-      responseCount: 1, // Single user's last response
+      responseCount: 1,
     })
   }
 

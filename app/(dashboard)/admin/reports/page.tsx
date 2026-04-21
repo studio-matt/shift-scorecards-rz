@@ -41,7 +41,7 @@ import { getDocuments, COLLECTIONS, updateDocument, addDocument } from "@/lib/fi
 import {
   fetchAllResponses,
   computeOrgHoursMetrics,
-  computeUserStreaks,
+  computeStreaks,
   computeNonResponders,
   computeTopPerformers,
 } from "@/lib/dashboard-data"
@@ -130,7 +130,7 @@ export default function LeadershipReportsPage() {
       const hoursMetrics = await computeOrgHoursMetrics(responses, templates, 100) // Default hourly rate
       
       // Compute streaks, non-responders, top performers
-      const streaks = await computeUserStreaks(responses, allUsers)
+      const streaks = await computeStreaks(responses)
       const nonResponders = await computeNonResponders(responses, allUsers, orgs)
       const topPerformers = await computeTopPerformers(responses, allUsers, templates)
       
