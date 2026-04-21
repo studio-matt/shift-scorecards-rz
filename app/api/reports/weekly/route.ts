@@ -3,7 +3,7 @@ import { getDocuments, addDocument, COLLECTIONS } from "@/lib/firestore"
 import {
   fetchAllResponses,
   computeOrgHoursMetrics,
-  computeUserStreaks,
+  computeStreaks,
   computeNonResponders,
   computeTopPerformers,
 } from "@/lib/dashboard-data"
@@ -183,7 +183,7 @@ export async function POST(request: Request) {
           // Compute org data
           const responses = await fetchAllResponses(org.id, "all")
           const topPerformers = await computeTopPerformers(responses, allUsers, templates)
-          const streaks = await computeUserStreaks(responses, allUsers)
+          const streaks = await computeStreaks(responses)
 
           for (const user of orgUsers) {
             try {

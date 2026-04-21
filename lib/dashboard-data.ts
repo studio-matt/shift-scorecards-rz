@@ -226,7 +226,7 @@ async function fetchTemplates(): Promise<TemplateDoc[]> {
   return docs as unknown as TemplateDoc[]
 }
 
-// ── Admin stat cards ───────────────������──────────────────────────────────
+// ── Admin stat cards ───────────────�������──────────────────────────────────
 export interface AdminStats {
   avgScore: number
   avgScoreChange: number
@@ -615,8 +615,10 @@ export async function computeQuestionResults(
   const aggregateByQuestion = (resps: RawResponse[]) => {
     const map = new Map<string, { total: number; count: number }>()
     for (const r of resps) {
-      for (const [qId, val] of Object.entries(r.answers)) {
-        if (typeof val !== "number" || val < 0) continue
+      for (const [qId, rawVal] of Object.entries(r.answers)) {
+        // Coerce to number - values might be strings from form inputs
+        const val = typeof rawVal === "string" ? parseFloat(rawVal) : rawVal
+        if (typeof val !== "number" || isNaN(val) || val < 0) continue
         if (!map.has(qId)) {
           map.set(qId, { total: 0, count: 0 })
         }
@@ -722,19 +724,34 @@ export async function computeUserQuestionResults(
     questionIndexToType.set(i, q.type)
   }
 
+  // Debug: Log what we're working with
+  console.log("[v0] computeUserQuestionResults DEBUG:", {
+    lastResponseId: lastResponse.id,
+    templateId: lastResponse.templateId,
+    templateFound: !!template,
+    templateQuestionsCount: templateQuestions.length,
+    answerKeys: Object.keys(lastResponse.answers),
+    questionIdToTextKeys: Array.from(questionIdToText.keys()),
+    sampleAnswers: Object.entries(lastResponse.answers).slice(0, 3).map(([k, v]) => ({ key: k, value: v, type: typeof v })),
+  })
+
   // Extract answers from the last completed scorecard
   const results: QuestionResult[] = []
   const answerEntries = Object.entries(lastResponse.answers)
   
   for (let i = 0; i < answerEntries.length; i++) {
-    const [qId, val] = answerEntries[i]
+    const [qId, rawVal] = answerEntries[i]
     
-    // Only include numeric answers
-    if (typeof val !== "number" || val < 0) continue
+    // Coerce to number - values might be strings from form inputs
+    const val = typeof rawVal === "string" ? parseFloat(rawVal) : rawVal
+    
+    // Only include numeric answers (skip text answers and NaN)
+    if (typeof val !== "number" || isNaN(val) || val < 0) continue
     
     // Try to get question text:
     // 1. First try direct ID match
     let questionText = questionIdToText.get(qId)
+    console.log("[v0] Question lookup:", { qId, rawVal, val, directMatch: !!questionText })
     
     // 2. If no match, try to extract number from ID and match by index
     if (!questionText) {
