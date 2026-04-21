@@ -241,6 +241,10 @@ export default function DashboardPage() {
       const deptFromAll = computeDepartmentPerformance(allResponses)
       
       // Compute all aggregations in parallel using time-filtered responses
+      console.log("[v0] Admin dashboard responses:", {
+        count: responses.length,
+        sampleAnswers: responses.slice(0, 2).map(r => ({ id: r.id, answers: r.answers })),
+      })
       const [stats, trend, dept, performers, improved, questions, recent] =
         await Promise.all([
           computeAdminStats(responses),
@@ -251,6 +255,7 @@ export default function DashboardPage() {
           computeQuestionResults(responses),
           computeRecentScorecards(responses),
         ])
+      console.log("[v0] Question results computed:", questions.length, questions)
 
       setAdminStats(stats)
       setWeeklyTrend(trend)

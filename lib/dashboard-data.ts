@@ -570,27 +570,36 @@ export async function computeMostImproved(
 }
 
 // ── Question results ──────────────────────────────────────────────────
-// ONLY shows time_saving type questions - these are the only ones that count for hours saved
+// Shows ALL numeric question types (scale, number, time_saving, confidence, rating)
 export async function computeQuestionResults(
   responses: RawResponse[],
 ): Promise<QuestionResult[]> {
   const templates = await fetchTemplates()
 
-  // Build question text lookup AND identify time_saving questions ONLY
+  // Build question text lookup AND identify numeric questions
   const questionTextMap = new Map<string, string>()
-  const timeSavingQuestionIds = new Set<string>()
+  const numericQuestionIds = new Set<string>()
   for (const t of templates) {
     for (const q of t.questions || []) {
       questionTextMap.set(q.id, q.text)
-      // ONLY time_saving type questions count for hours saved metrics
-      if (q.type === "time_saving") {
-        timeSavingQuestionIds.add(q.id)
+      // Include all numeric question types
+      if (q.type === "time_saving" || q.type === "scale" || q.type === "number" || q.type === "confidence" || q.type === "rating") {
+        numericQuestionIds.add(q.id)
       }
     }
   }
 
-  // If no time_saving questions found, return empty
-  if (timeSavingQuestionIds.size === 0) {
+  // Also detect numeric questions from actual response data (in case template types are missing)
+  for (const r of responses) {
+    for (const [qId, val] of Object.entries(r.answers)) {
+      if (typeof val === "number" && val >= 0) {
+        numericQuestionIds.add(qId)
+      }
+    }
+  }
+
+  // If no numeric questions found, return empty
+  if (numericQuestionIds.size === 0) {
     return []
   }
 
@@ -599,24 +608,22 @@ export async function computeQuestionResults(
     new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
   )
   
-  // Split into this week vs last week (for more granular comparison)
+  // Use a 30-day window instead of just 1 week for better data coverage
   const now = new Date()
-  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-  const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+  const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000)
   
-  const thisWeekResponses = sortedResponses.filter(r => new Date(r.completedAt) >= oneWeekAgo)
-  const lastWeekResponses = sortedResponses.filter(r => {
+  const recentResponses = sortedResponses.filter(r => new Date(r.completedAt) >= thirtyDaysAgo)
+  const previousResponses = sortedResponses.filter(r => {
     const d = new Date(r.completedAt)
-    return d >= twoWeeksAgo && d < oneWeekAgo
+    return d >= sixtyDaysAgo && d < thirtyDaysAgo
   })
 
-  // Aggregate answers per question for each period - ONLY time_saving questions
+  // Aggregate answers per question for each period
   const aggregateByQuestion = (resps: RawResponse[]) => {
     const map = new Map<string, { total: number; count: number }>()
     for (const r of resps) {
       for (const [qId, val] of Object.entries(r.answers)) {
-        // ONLY include time_saving type questions
-        if (!timeSavingQuestionIds.has(qId)) continue
         if (typeof val !== "number" || val < 0) continue
         if (!map.has(qId)) {
           map.set(qId, { total: 0, count: 0 })
@@ -629,40 +636,40 @@ export async function computeQuestionResults(
     return map
   }
 
-  const thisWeekData = aggregateByQuestion(thisWeekResponses)
-  const lastWeekData = aggregateByQuestion(lastWeekResponses)
+  const recentData = aggregateByQuestion(recentResponses)
+  const previousData = aggregateByQuestion(previousResponses)
 
-  // Only use time_saving question IDs that have data
-  const questionsWithData = Array.from(timeSavingQuestionIds).filter(
-    qId => thisWeekData.has(qId) || lastWeekData.has(qId)
+  // Get all questions that have data (recent OR previous)
+  const questionsWithData = Array.from(numericQuestionIds).filter(
+    qId => recentData.has(qId) || previousData.has(qId)
   )
 
   return questionsWithData
     .map((qId) => {
-      const thisWeek = thisWeekData.get(qId)
-      const lastWeek = lastWeekData.get(qId)
+      const recent = recentData.get(qId)
+      const previous = previousData.get(qId)
       
-      const currentAvg = thisWeek && thisWeek.count > 0 
-        ? thisWeek.total / thisWeek.count 
+      const currentAvg = recent && recent.count > 0 
+        ? recent.total / recent.count 
         : 0
-      const previousAvg = lastWeek && lastWeek.count > 0 
-        ? lastWeek.total / lastWeek.count 
+      const previousAvg = previous && previous.count > 0 
+        ? previous.total / previous.count 
         : 0
       
-      // Calculate change (difference between this week and last week averages)
-      // Positive = saving more time this week
-      const change = lastWeek && lastWeek.count > 0
+      // Calculate change (difference between recent and previous averages)
+      const change = previous && previous.count > 0
         ? Math.round((currentAvg - previousAvg) * 10) / 10
         : 0
       
       return {
         question: questionTextMap.get(qId) ?? qId,
-        score: Math.round(currentAvg * 10) / 10, // Average minutes saved
+        score: Math.round(currentAvg * 10) / 10,
         change,
+        responseCount: recent?.count ?? 0,
       }
     })
     .filter(q => q.score > 0 || q.change !== 0) // Show questions with data or changes
-    .sort((a, b) => b.change - a.change) // Sort by biggest improvement
+    .sort((a, b) => b.score - a.score) // Sort by highest score
 }
 
 // ── User Question Results (for individual user dashboard) ─────────────
@@ -678,14 +685,14 @@ export async function computeUserQuestionResults(
   for (const t of templates) {
     for (const q of t.questions || []) {
       questionTextMap.set(q.id, q.text)
-      // Include time_saving and any other numeric question types
-      if (q.type === "time_saving" || q.type === "number" || q.type === "scale" || q.type === "rating") {
+      // Include all numeric question types
+      if (q.type === "time_saving" || q.type === "number" || q.type === "scale" || q.type === "rating" || q.type === "confidence") {
         numericQuestionIds.add(q.id)
       }
     }
   }
 
-  // Also detect numeric questions from the actual response data
+  // Also detect numeric questions from the actual response data (fallback)
   for (const r of responses) {
     for (const [qId, val] of Object.entries(r.answers)) {
       if (typeof val === "number" && val >= 0) {
@@ -694,6 +701,7 @@ export async function computeUserQuestionResults(
     }
   }
 
+  // If still no numeric questions, return empty
   if (numericQuestionIds.size === 0) {
     return []
   }
