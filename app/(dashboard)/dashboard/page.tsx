@@ -380,7 +380,16 @@ export default function DashboardPage() {
         
         // Compute question results for THIS USER's responses only
         const userOnlyResponses = allResponses.filter(r => r.userId === user.id || r.userId === user.authId)
+        console.log("[v0] Debug user question results:", {
+          userId: user.id,
+          authId: user.authId,
+          totalResponses: allResponses.length,
+          userResponseCount: userOnlyResponses.length,
+          sampleUserIds: allResponses.slice(0, 5).map(r => r.userId),
+          userResponseDates: userOnlyResponses.map(r => r.completedAt),
+        })
         const userQResults = await computeQuestionResults(userOnlyResponses)
+        console.log("[v0] User question results computed:", userQResults.length, userQResults)
         setUserQuestionResults(userQResults)
         }
         
