@@ -160,14 +160,25 @@ export default function PreviousScorecardsPage() {
       }
       
       // Build user department map and collect unique departments
+      // For non-super-admins, only include departments from their organization
       const userDeptMap = new Map<string, string>()
       const deptSet = new Set<string>()
       for (const u of userDocs) {
         const data = u as Record<string, unknown>
         const dept = (data.department as string) || ""
+        const userOrgIdField = (data.organizationId as string) || ""
+        const userCompany = (data.company as string) || ""
+        
+        // Match user to organization
+        const userBelongsToOrg = userOrgIdField === userOrgId || 
+          (userCompany && orgNameToIdMap.get(userCompany.toLowerCase()) === userOrgId)
+        
         if (dept) {
           userDeptMap.set(u.id, dept)
-          deptSet.add(dept)
+          // Only add to department list if super admin OR user belongs to same org
+          if (isSuperAdmin || userBelongsToOrg) {
+            deptSet.add(dept)
+          }
         }
       }
       setDepartments(Array.from(deptSet).sort())
