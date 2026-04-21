@@ -378,18 +378,10 @@ export default function DashboardPage() {
         
         setUserGoals(extractedGoals.slice(0, 10)) // Show last 10 goals
         
-        // Compute question results for THIS USER's responses only
-        const userOnlyResponses = allResponses.filter(r => r.userId === user.id || r.userId === user.authId)
-        console.log("[v0] Debug user question results:", {
-          userId: user.id,
-          authId: user.authId,
-          totalResponses: allResponses.length,
-          userResponseCount: userOnlyResponses.length,
-          sampleUserIds: allResponses.slice(0, 5).map(r => r.userId),
-          userResponseDates: userOnlyResponses.map(r => r.completedAt),
-        })
-        const userQResults = await computeQuestionResults(userOnlyResponses)
-        console.log("[v0] User question results computed:", userQResults.length, userQResults)
+        // Compute question results for THIS USER's responses only using user-specific function
+        // Reuse userResponses which is already filtered for this user
+        const { computeUserQuestionResults } = await import("@/lib/dashboard-data")
+        const userQResults = await computeUserQuestionResults(userResponses)
         setUserQuestionResults(userQResults)
         }
         

@@ -665,6 +665,85 @@ export async function computeQuestionResults(
     .sort((a, b) => b.change - a.change) // Sort by biggest improvement
 }
 
+// ── User Question Results (for individual user dashboard) ─────────────
+// Shows ALL numeric question responses for a specific user, not just time_saving
+export async function computeUserQuestionResults(
+  responses: RawResponse[],
+): Promise<QuestionResult[]> {
+  const templates = await fetchTemplates()
+
+  // Build question text lookup for ALL numeric questions
+  const questionTextMap = new Map<string, string>()
+  const numericQuestionIds = new Set<string>()
+  for (const t of templates) {
+    for (const q of t.questions || []) {
+      questionTextMap.set(q.id, q.text)
+      // Include time_saving and any other numeric question types
+      if (q.type === "time_saving" || q.type === "number" || q.type === "scale" || q.type === "rating") {
+        numericQuestionIds.add(q.id)
+      }
+    }
+  }
+
+  // Also detect numeric questions from the actual response data
+  for (const r of responses) {
+    for (const [qId, val] of Object.entries(r.answers)) {
+      if (typeof val === "number" && val >= 0) {
+        numericQuestionIds.add(qId)
+      }
+    }
+  }
+
+  if (numericQuestionIds.size === 0) {
+    return []
+  }
+
+  // Sort responses by date - no time restriction for user view
+  const sortedResponses = [...responses].sort((a, b) => 
+    new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
+  )
+
+  // Aggregate all responses for this user (no time restriction)
+  const aggregateByQuestion = (resps: RawResponse[]) => {
+    const map = new Map<string, { total: number; count: number }>()
+    for (const r of resps) {
+      for (const [qId, val] of Object.entries(r.answers)) {
+        if (typeof val !== "number" || val < 0) continue
+        if (!map.has(qId)) {
+          map.set(qId, { total: 0, count: 0 })
+        }
+        const entry = map.get(qId)!
+        entry.total += val
+        entry.count += 1
+      }
+    }
+    return map
+  }
+
+  const allData = aggregateByQuestion(sortedResponses)
+
+  // Get questions with data
+  const questionsWithData = Array.from(allData.keys())
+
+  return questionsWithData
+    .map((qId) => {
+      const data = allData.get(qId)
+      
+      const avg = data && data.count > 0 
+        ? data.total / data.count 
+        : 0
+      
+      return {
+        question: questionTextMap.get(qId) ?? qId,
+        score: Math.round(avg * 10) / 10,
+        change: 0, // No comparison for single user view
+        responseCount: data?.count ?? 0,
+      }
+    })
+    .filter(q => q.score > 0)
+    .sort((a, b) => b.score - a.score)
+}
+
 // ── Recent scorecards ─────────────────────────────────────────────────
 // Delta is calculated ONLY from time_saving type questions (minutes saved)
 export interface RecentScorecard {
