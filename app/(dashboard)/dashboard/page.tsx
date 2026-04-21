@@ -122,6 +122,7 @@ export default function DashboardPage() {
   const [userHoursMetrics, setUserHoursMetrics] = useState<UserHoursMetrics | null>(null)
   const [orgHoursMetrics, setOrgHoursMetrics] = useState<OrgHoursMetrics | null>(null)
   const [weeklyHoursTrend, setWeeklyHoursTrend] = useState<WeeklyHoursTrend[]>([])
+  const [userQuestionResults, setUserQuestionResults] = useState<QuestionResult[]>([])
   const [targets, setTargets] = useState({
     avgScore: 7.0,
     completionRate: 85,
@@ -376,9 +377,14 @@ export default function DashboardPage() {
         extractedGoals.sort((a, b) => b.weekOf.localeCompare(a.weekOf))
         
         setUserGoals(extractedGoals.slice(0, 10)) // Show last 10 goals
-      }
-      
-      // Fetch departments from users in the selected organization
+        
+        // Compute question results for THIS USER's responses only
+        const userOnlyResponses = allResponses.filter(r => r.userId === user.id || r.userId === user.authId)
+        const userQResults = await computeQuestionResults(userOnlyResponses)
+        setUserQuestionResults(userQResults)
+        }
+        
+        // Fetch departments from users in the selected organization
       if (selectedOrg && selectedOrg !== "all") {
         const orgUsers = await getUsersByOrg(selectedOrg)
         const userDepts = new Set<string>()
@@ -655,8 +661,8 @@ export default function DashboardPage() {
 
   // --- User Dashboard ---
 
-  // Derive weak categories for AI Action Plan & Prompt Packs
-  const weakCategories = questionResults
+  // Derive weak categories for AI Action Plan & Prompt Packs (use user's own question results)
+  const weakCategories = userQuestionResults
     .filter((q) => typeof q.score === "number" && q.score < 7)
     .sort((a, b) => a.score - b.score)
     .slice(0, 5)
@@ -863,7 +869,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <QuestionResults data={questionResults} />
+        <QuestionResults data={userQuestionResults} />
 
         {/* Show user's scorecards - filter to only this user's submissions */}
         <RecentScorecardsCard data={recentScorecards.filter((sc) => {
