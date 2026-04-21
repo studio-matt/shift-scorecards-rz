@@ -216,7 +216,7 @@ export default function PreviousScorecardsPage() {
       // Filter responses based on user role:
       // - Super admins see all responses (aggregated by org)
       // - Admin/company_admin see their org's responses (aggregated)
-      // - Regular users see ONLY their own responses (not aggregated)
+      // - Regular users see ONLY their own responses (grouped by week)
       let responses: RawResponse[]
       if (isSuperAdmin) {
         responses = allResponses
@@ -226,18 +226,18 @@ export default function PreviousScorecardsPage() {
           r.organizationId === userOrgId || r.userId === user?.id
         )
       } else {
-        // Regular users see ONLY their own responses (individual view, no aggregation)
+        // Regular users see ONLY their own responses, grouped by week
         responses = allResponses.filter((r) => r.userId === user?.id)
       }
       
-      // Group responses:
-      // - For admins: group by organization + weekOf (aggregated view)
-      // - For regular users: group by response ID (individual responses)
+      // Group responses by weekOf:
+      // - Admins: group by organization + weekOf (aggregated across org)
+      // - Regular users: group by weekOf only (their scorecards per week)
       const grouped = new Map<string, AggregatedScorecard>()
       
       for (const r of responses) {
-        // Regular users get individual responses, admins get aggregated by org+week
-        const key = isAdmin ? `${r.organizationId}__${r.weekOf}` : `user__${r.id}`
+        // Group by org+week for admins, just week for regular users
+        const key = isAdmin ? `${r.organizationId}__${r.weekOf}` : `user__${r.weekOf}`
         const userDept = userDeptMap.get(r.userId) || ""
         
         // Calculate hours from time_saving questions or questions with hour/time keywords
