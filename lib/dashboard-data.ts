@@ -1226,10 +1226,21 @@ export async function computeQuestionCorrelations(responses: RawResponse[]): Pro
   return results.sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation))
 }
 
-// ── Org Intelligence: Dept over time ──────────────────────────────────
+// ── Org Intelligence: Dept over time (HOURS SAVED) ──────────────────────────────────
 export interface DeptOverTime { week: string; [department: string]: string | number }
 
 export async function computeDeptOverTime(responses: RawResponse[]): Promise<DeptOverTime[]> {
+  // Get time-saving question IDs from templates
+  const templates = await fetchTemplates()
+  const timeSavingIds = new Set<string>()
+  for (const t of templates) {
+    for (const q of t.questions || []) {
+      if (q.type === "time_saving") {
+        timeSavingIds.add(q.id)
+      }
+    }
+  }
+
   // Fetch all users to get their current department assignments
   const allUsers = await getDocuments(COLLECTIONS.USERS)
   const userDeptMap = new Map<string, string>()
@@ -1250,11 +1261,21 @@ export async function computeDeptOverTime(responses: RawResponse[]): Promise<Dep
     if (!weekDeptMap.has(r.weekOf)) weekDeptMap.set(r.weekOf, new Map())
     const deptMap = weekDeptMap.get(r.weekOf)!
     if (!deptMap.has(dept)) deptMap.set(dept, { total: 0, count: 0 })
-    const scaleVals = Object.values(r.answers).filter((v) => typeof v === "number" && v >= 1 && v <= 10) as number[]
-    if (scaleVals.length === 0) continue
-    const avg = scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length
+    
+    // Sum only time_saving question values (hours saved)
+    let hoursTotal = 0
+    for (const qId of timeSavingIds) {
+      const val = r.answers[qId]
+      if (val !== undefined && val !== null && val !== "") {
+        hoursTotal += parseTimeValue(val)
+      }
+    }
+    
+    if (hoursTotal === 0) continue
     const entry = deptMap.get(dept)!
-    entry.total += avg; entry.count += 1
+    // Multiply by 4 for monthly hours (consistent with other charts)
+    entry.total += hoursTotal * WEEKLY_TO_MONTHLY_MULTIPLIER
+    entry.count += 1
   }
   return Array.from(weekDeptMap.keys()).sort().map((week) => {
     const row: DeptOverTime = { week }
@@ -1405,7 +1426,7 @@ export function computeAlerts(responses: RawResponse[], deptPerf: DepartmentPerf
 
 // ═══════════════════════════════════════════════════����══════════════════
 // USER-SPECIFIC METRICS (privacy-safe: only their data + anonymized avgs)
-// ══════════════════════════════════════════════════════════════════════
+// ════════════��═════════════════════════════════════════════════════════
 
 export interface UserPersonalStreak {
   currentStreak: number

@@ -213,24 +213,31 @@ export default function PreviousScorecardsPage() {
         }
       })
       
-      // Filter responses by organization for non-super-admin users
-      // If userOrgId can't be determined, show user's own responses only
+      // Filter responses based on user role:
+      // - Super admins see all responses (aggregated by org)
+      // - Admin/company_admin see their org's responses (aggregated)
+      // - Regular users see ONLY their own responses (grouped by week)
       let responses: RawResponse[]
       if (isSuperAdmin) {
         responses = allResponses
-      } else {
-        // For non-super-admins: show responses from their org OR their own responses
-        // This ensures users always see their own scorecards even if org filtering has issues
+      } else if (isAdmin) {
+        // Admins see their org's responses (aggregated view)
         responses = allResponses.filter((r) => 
           r.organizationId === userOrgId || r.userId === user?.id
         )
+      } else {
+        // Regular users see ONLY their own responses, grouped by week
+        responses = allResponses.filter((r) => r.userId === user?.id)
       }
       
-      // Group by organization + weekOf
+      // Group responses by weekOf:
+      // - Admins: group by organization + weekOf (aggregated across org)
+      // - Regular users: group by weekOf only (their scorecards per week)
       const grouped = new Map<string, AggregatedScorecard>()
       
       for (const r of responses) {
-        const key = `${r.organizationId}__${r.weekOf}`
+        // Group by org+week for admins, just week for regular users
+        const key = isAdmin ? `${r.organizationId}__${r.weekOf}` : `user__${r.weekOf}`
         const userDept = userDeptMap.get(r.userId) || ""
         
         // Calculate hours from time_saving questions or questions with hour/time keywords
@@ -591,13 +598,25 @@ export default function PreviousScorecardsPage() {
             <Badge variant="secondary" className="text-xs">
               Completed {formatShort(selected.latestCompletedAt)}
             </Badge>
-            <Badge variant="secondary" className="text-xs">
-              {selected.responseCount} response{selected.responseCount !== 1 ? "s" : ""}
-            </Badge>
-            <Badge className="bg-primary text-primary-foreground text-xs flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              {selected.avgHours} hrs avg
-            </Badge>
+            {/* Only show response count and avg for admins (aggregated view) */}
+            {isAdmin && (
+              <>
+                <Badge variant="secondary" className="text-xs">
+                  {selected.responseCount} response{selected.responseCount !== 1 ? "s" : ""}
+                </Badge>
+                <Badge className="bg-primary text-primary-foreground text-xs flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {selected.avgHours} hrs avg
+                </Badge>
+              </>
+            )}
+            {/* For regular users, show their total hours (not avg) */}
+            {!isAdmin && (
+              <Badge className="bg-primary text-primary-foreground text-xs flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {selected.totalHours} hrs saved
+              </Badge>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -692,21 +711,26 @@ export default function PreviousScorecardsPage() {
                         {(q.type === "scale" || q.type === "number" || q.type === "confidence" || q.type === "time_saving") && avg !== null && (
                           <div className="flex items-center gap-3">
                             <span className="rounded-md bg-primary/10 px-3 py-2 text-sm font-semibold text-primary">
-                              {avg} {q.type === "time_saving" ? "hrs" : ""} avg
+                              {/* For regular users (single response), show value directly. For admins (aggregated), show avg */}
+                              {isAdmin ? `${avg} ${q.type === "time_saving" ? "hrs" : ""} avg` : `${numericValues[0]} ${q.type === "time_saving" ? "hrs" : ""}`}
                             </span>
-                            <span className="text-xs text-muted-foreground">
-                              from {numericValues.length} response{numericValues.length !== 1 ? "s" : ""}
-                            </span>
+                            {/* Only show "from X responses" for admins */}
+                            {isAdmin && (
+                              <span className="text-xs text-muted-foreground">
+                                from {numericValues.length} response{numericValues.length !== 1 ? "s" : ""}
+                              </span>
+                            )}
                           </div>
                         )}
                         {q.type === "text" && textValues.length > 0 && (
                           <div className="flex flex-col gap-2">
-                            {textValues.slice(0, 3).map((val, i) => (
+                            {/* For regular users, show just their response. For admins, show up to 3 */}
+                            {(isAdmin ? textValues.slice(0, 3) : textValues.slice(0, 1)).map((val, i) => (
                               <p key={i} className="rounded-md bg-muted px-3 py-2 text-sm leading-relaxed text-foreground">
                                 {val as string}
                               </p>
                             ))}
-                            {textValues.length > 3 && (
+                            {isAdmin && textValues.length > 3 && (
                               <p className="text-xs text-muted-foreground">
                                 +{textValues.length - 3} more response{textValues.length - 3 !== 1 ? "s" : ""}
                               </p>
@@ -738,11 +762,11 @@ export default function PreviousScorecardsPage() {
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">
-            Previous Scorecards
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            View past scorecard submissions and results by organization.
-          </p>
+  Previous Scorecards
+  </h1>
+  <p className="mt-1 text-muted-foreground">
+  {isAdmin ? "View past scorecard submissions and results by organization." : "View your past scorecard submissions."}
+  </p>
         </div>
         
         {/* Import Button */}
@@ -1042,9 +1066,9 @@ export default function PreviousScorecardsPage() {
                 <CardTitle className="text-base">
                   {sc.weekOf ? `Week of ${sc.weekOf}` : sc.templateName || "Scorecard"}
                 </CardTitle>
-                <CardDescription className="mt-0.5">
-                  Completed {formatShort(sc.latestCompletedAt)} · {sc.responseCount} response{sc.responseCount !== 1 ? "s" : ""}
-                </CardDescription>
+  <CardDescription className="mt-0.5">
+  Completed {formatShort(sc.latestCompletedAt)}{isAdmin && ` · ${sc.responseCount} response${sc.responseCount !== 1 ? "s" : ""}`}
+  </CardDescription>
               </div>
               <div className="flex items-center gap-2">
                 <Badge className="bg-primary text-primary-foreground text-sm px-3 py-1 flex items-center gap-1">
