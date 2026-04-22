@@ -1436,13 +1436,23 @@ export interface UserPersonalStreak {
 }
 
 export function computePersonalStreak(responses: RawResponse[], userId: string): UserPersonalStreak {
-  const allWeeks = Array.from(new Set(responses.map((r) => r.weekOf))).sort()
-  const myWeeks = new Set(responses.filter((r) => r.userId === userId).map((r) => r.weekOf))
+  // Get user's organization from their responses
+  const myResponses = responses.filter((r) => r.userId === userId)
+  const myOrgId = myResponses.length > 0 ? myResponses[0].organizationId : null
+  
+  // Only count weeks from the user's organization (not all orgs)
+  const orgResponses = myOrgId ? responses.filter((r) => r.organizationId === myOrgId) : myResponses
+  const orgWeeks = Array.from(new Set(orgResponses.map((r) => r.weekOf))).sort()
+  const myWeeks = new Set(myResponses.map((r) => r.weekOf))
+  
   let maxStreak = 0, streak = 0
-  for (const w of allWeeks) {
+  for (const w of orgWeeks) {
     if (myWeeks.has(w)) { streak++; maxStreak = Math.max(maxStreak, streak) } else { streak = 0 }
   }
-  return { currentStreak: streak, maxStreak, totalResponses: myWeeks.size, totalWeeks: allWeeks.length }
+  
+  // For totalWeeks: use org weeks if user has responses, otherwise 0 (brand new user)
+  const totalWeeks = myResponses.length > 0 ? orgWeeks.length : 0
+  return { currentStreak: streak, maxStreak, totalResponses: myWeeks.size, totalWeeks }
 }
 
 export interface PersonalTrendPoint {
