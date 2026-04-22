@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getDocuments, addDocument, COLLECTIONS } from "@/lib/firestore"
+import { getDocuments, createDocument, COLLECTIONS } from "@/lib/firestore"
 import {
   fetchAllResponses,
   computeOrgHoursMetrics,
@@ -136,7 +136,7 @@ export async function POST(request: Request) {
           
           // Save to report history
           try {
-            await addDocument(COLLECTIONS.REPORT_HISTORY, {
+            await createDocument(COLLECTIONS.REPORT_HISTORY, {
               organizationId: org.id,
               reportType: "leadership",
               weekOf,
