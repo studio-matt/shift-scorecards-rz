@@ -182,9 +182,12 @@ export function StatCards({
             </div>
             <div>
               <p className="text-sm font-medium leading-snug text-muted-foreground">Completed</p>
-              <p className="text-2xl font-bold text-foreground">{completedSections}<span className="text-base text-muted-foreground">/{totalSections}</span></p>
+              <p className="text-2xl font-bold text-foreground">
+                {completedSections}
+                {totalSections > 0 && <span className="text-base text-muted-foreground">/{totalSections}</span>}
+              </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                scorecards this period
+                {totalSections > 0 ? "scorecards this period" : "scorecard coming soon"}
               </p>
             </div>
           </CardContent>
