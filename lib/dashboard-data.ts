@@ -412,9 +412,12 @@ export async function computeTopPerformers(
 
   for (const r of responses) {
     if (excludedUserIds.has(r.userId)) continue
+    
+    // Skip responses where we can't resolve a proper name (would show Firebase ID)
+    const resolvedName = userNameMap.get(r.userId) || r.userName
+    if (!resolvedName) continue
+    
     if (!userMap.has(r.userId)) {
-      // Prefer firstName/lastName from users collection, fallback to userName or userId
-      const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
       userMap.set(r.userId, {
         name: resolvedName,
         orgId: r.organizationId,
@@ -536,8 +539,11 @@ export async function computeMostImproved(
   >()
 
   for (const r of responses) {
+    // Skip responses where we can't resolve a proper name
+    const resolvedName = userNameMap.get(r.userId) || r.userName
+    if (!resolvedName) continue
+    
     if (!userWeeks.has(r.userId)) {
-      const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
       userWeeks.set(r.userId, {
         name: resolvedName,
         orgId: r.organizationId,
@@ -912,7 +918,8 @@ export async function computeRecentScorecards(
         ? Math.round((currentHours - previousHours) * 10) / 10 
         : undefined
 
-      const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
+      const resolvedName = userNameMap.get(r.userId) || r.userName
+      if (!resolvedName) return null // Skip responses with no valid name
       return {
         userId: r.userId,
         name: resolvedName,
@@ -929,6 +936,7 @@ export async function computeRecentScorecards(
         _completedAt: r.completedAt,
       }
     })
+    .filter((r): r is NonNullable<typeof r> => r !== null)
     .sort((a, b) => b._completedAt.localeCompare(a._completedAt))
     .slice(0, limit)
     .map(({ _completedAt: _, ...rest }) => rest)
@@ -962,8 +970,11 @@ export async function computeStreaks(responses: RawResponse[], userNameMap?: Map
 
   const userMap = new Map<string, { name: string; dept: string; weeks: Set<string>; total: number }>()
   for (const r of responses) {
+    // Skip responses where we can't resolve a proper name (would show Firebase ID)
+    const resolvedName = userNameMap.get(r.userId) || r.userName
+    if (!resolvedName) continue // Skip users with no name data
+    
     if (!userMap.has(r.userId)) {
-      const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
       userMap.set(r.userId, { name: resolvedName, dept: r.department, weeks: new Set(), total: 0 })
     }
     const entry = userMap.get(r.userId)!
@@ -1130,8 +1141,11 @@ export async function computeScoreVelocity(responses: RawResponse[]): Promise<Sc
 
   const userWeeks = new Map<string, { name: string; dept: string; weeks: Map<string, { total: number; count: number; date: string }> }>()
   for (const r of responses) {
+    // Skip responses where we can't resolve a proper name
+    const resolvedName = userNameMap.get(r.userId) || r.userName
+    if (!resolvedName) continue
+    
     if (!userWeeks.has(r.userId)) {
-      const resolvedName = userNameMap.get(r.userId) || r.userName || r.userId
       userWeeks.set(r.userId, { name: resolvedName, dept: r.department, weeks: new Map() })
     }
     const entry = userWeeks.get(r.userId)!
