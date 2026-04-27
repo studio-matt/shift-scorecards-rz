@@ -450,57 +450,60 @@ export function TopPerformers({ showCompany = false, data }: TopPerformersProps)
             return (
               <div
                 key={performer.id}
-                className={`flex items-center gap-3 rounded-lg border p-3 transition-colors ${
+                className={`flex flex-col rounded-lg border p-3 transition-colors ${
                   isTop3
                     ? "border-primary/20 bg-primary/5"
                     : "border-border"
                 }`}
               >
-                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                  index === 0
-                    ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
-                    : index === 1
-                      ? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"
-                      : index === 2
-                        ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
-                        : "bg-primary/10 text-primary"
-                }`}>
-                  {index + 1}
-                </span>
-                <Avatar className="h-9 w-9 shrink-0">
-                  <AvatarFallback className={`text-xs font-medium ${isTop3 ? "bg-primary/10 text-primary" : "bg-muted text-foreground"}`}>
-                    {showNames ? initials : "?"}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <Link href={`/admin/users/${performer.id}`} className="text-sm font-medium text-foreground hover:text-primary hover:underline">
-                    {displayName}
-                  </Link>
-                  {showCompany ? (
-                    <p className="truncate text-xs text-muted-foreground">
-                      {performer.company} &middot; {performer.department}
+                {/* Top row: rank, avatar, name, stats */}
+                <div className="flex items-center gap-3">
+                  <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                    index === 0
+                      ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                      : index === 1
+                        ? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                        : index === 2
+                          ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                          : "bg-primary/10 text-primary"
+                  }`}>
+                    {index + 1}
+                  </span>
+                  <Avatar className="h-9 w-9 shrink-0">
+                    <AvatarFallback className={`text-xs font-medium ${isTop3 ? "bg-primary/10 text-primary" : "bg-muted text-foreground"}`}>
+                      {showNames ? initials : "?"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <Link href={`/admin/users/${performer.id}`} className="text-sm font-medium text-foreground hover:text-primary hover:underline">
+                      {displayName}
+                    </Link>
+                    {showCompany ? (
+                      <p className="truncate text-xs text-muted-foreground">
+                        {performer.company} &middot; {performer.department}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        {performer.department}
+                      </p>
+                    )}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className={`text-sm font-bold ${performer.percentVsField >= 0 ? "text-emerald-500" : "text-orange-500"}`}>
+                      {performer.percentVsField >= 0 ? "+" : ""}{performer.percentVsField}%
                     </p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      {performer.department}
-                    </p>
-                  )}
-                  {/* Win narrative inline for top 3 */}
-                  {isTop3 && performer.winNarrative && (
-                    <p className="mt-1 text-[11px] italic leading-snug text-muted-foreground">
-                      {`"${performer.winNarrative}"`}
-                    </p>
-                  )}
+                    <p className="text-xs text-muted-foreground">{performer.avgScore} hrs saved</p>
+                  </div>
+                  <Badge variant="secondary" className="shrink-0 text-xs">
+                    {performer.streak} wk streak
+                  </Badge>
                 </div>
-                <div className="shrink-0 text-right">
-                  <p className={`text-sm font-bold ${performer.percentVsField >= 0 ? "text-emerald-500" : "text-orange-500"}`}>
-                    {performer.percentVsField >= 0 ? "+" : ""}{performer.percentVsField}%
+                {/* Win narrative below, full-width for top 3 */}
+                {isTop3 && performer.winNarrative && (
+                  <p className="mt-2 pl-9 text-[11px] italic leading-relaxed text-muted-foreground line-clamp-3">
+                    {`"${performer.winNarrative}"`}
                   </p>
-                  <p className="text-xs text-muted-foreground">{performer.avgScore} hrs saved</p>
-                </div>
-                <Badge variant="secondary" className="shrink-0 text-xs">
-                  {performer.streak} wk streak
-                </Badge>
+                )}
               </div>
             )
           })}

@@ -348,7 +348,7 @@ export async function computeDepartmentPerformance(
     .sort((a, b) => b.avgScore - a.avgScore)
 }
 
-// ── Top performers ────────────────────────────────────────────────────
+// ── Top performers (ranked by HOURS SAVED) ────────────────────────────────────────────────────
 export async function computeTopPerformers(
   responses: RawResponse[],
   limit = 10,
@@ -376,17 +376,38 @@ export async function computeTopPerformers(
     }
   }
 
-  // Fetch templates to identify win and goal question types
+  // Fetch templates to identify time_saving, win, and goal question types
   const templates = await fetchTemplates()
+  const templateTimeSavingIds = new Map<string, Set<string>>()
   const templateMap = new Map<string, { questions: Array<{ id: string; type: string }> }>()
   for (const t of templates) {
     const template = t as unknown as { id: string; questions: Array<{ id: string; type: string }> }
     templateMap.set(template.id, template)
+    const timeSavingIds = new Set<string>()
+    for (const q of template.questions || []) {
+      if (q.type === "time_saving") {
+        timeSavingIds.add(q.id)
+      }
+    }
+    templateTimeSavingIds.set(template.id, timeSavingIds)
+  }
+
+  // Helper to calculate hours saved from time_saving questions
+  const calculateHoursSaved = (answers: Record<string, unknown>, templateId: string): number => {
+    const timeSavingIds = templateTimeSavingIds.get(templateId) || new Set()
+    let totalHours = 0
+    for (const [qId, val] of Object.entries(answers)) {
+      if (!timeSavingIds.has(qId)) continue
+      if (val !== undefined && val !== null && val !== "") {
+        totalHours += parseTimeValue(val as number | string)
+      }
+    }
+    return totalHours
   }
 
   const userMap = new Map<
     string,
-    { name: string; orgId: string; dept: string; total: number; count: number; weeks: Set<string>; winAnswers: string[]; goalAnswers: string[] }
+    { name: string; orgId: string; dept: string; totalHours: number; responseCount: number; weeks: Set<string>; winAnswers: string[]; goalAnswers: string[] }
   >()
 
   for (const r of responses) {
@@ -398,17 +419,20 @@ export async function computeTopPerformers(
         name: resolvedName,
         orgId: r.organizationId,
         dept: r.department,
-        total: 0,
-        count: 0,
+        totalHours: 0,
+        responseCount: 0,
         weeks: new Set(),
         winAnswers: [],
         goalAnswers: [],
       })
     }
     const entry = userMap.get(r.userId)!
-    const scaleVals = Object.values(r.answers).filter(
-      (v) => typeof v === "number" && v >= 1 && v <= 10,
-    ) as number[]
+    
+    // Calculate hours saved from time_saving questions only
+    const hoursSaved = calculateHoursSaved(r.answers, r.templateId)
+    entry.totalHours += hoursSaved
+    entry.responseCount += 1
+    entry.weeks.add(r.weekOf)
     
     // Extract win and goal answers based on question type
     const template = templateMap.get(r.templateId)
@@ -424,12 +448,6 @@ export async function computeTopPerformers(
         }
       }
     }
-    
-    if (scaleVals.length === 0) continue
-    const avg = scaleVals.reduce((a, b) => a + b, 0) / scaleVals.length
-    entry.total += avg
-    entry.count += 1
-    entry.weeks.add(r.weekOf)
   }
 
   // Also load admin-set win narratives from settings
@@ -439,19 +457,27 @@ export async function computeTopPerformers(
     if (doc) adminNarratives = (doc as Record<string, unknown>).narratives as Record<string, string> ?? {}
   } catch { /* ignore */ }
 
-  // Calculate field average (all users' average scores)
+  // Calculate field average (average monthly hours saved per person)
   const userEntries = Array.from(userMap.entries())
-  const allAvgScores = userEntries.map(([, { total, count }]) => total / count)
-  const fieldAverage = allAvgScores.length > 0 
-    ? allAvgScores.reduce((a, b) => a + b, 0) / allAvgScores.length 
+  const allMonthlyHours = userEntries.map(([, { totalHours, responseCount }]) => {
+    // Average weekly hours * 4 = monthly hours
+    const avgWeeklyHours = responseCount > 0 ? totalHours / responseCount : 0
+    return avgWeeklyHours * WEEKLY_TO_MONTHLY_MULTIPLIER
+  })
+  const fieldAverageHours = allMonthlyHours.length > 0 
+    ? allMonthlyHours.reduce((a, b) => a + b, 0) / allMonthlyHours.length 
     : 0
 
   return userEntries
-    .map(([userId, { name, orgId, dept, total, count, weeks, winAnswers, goalAnswers }]) => {
-      const avgScore = Math.round((total / count) * 10) / 10
-      // Calculate % above/below field average
-      const percentVsField = fieldAverage > 0 
-        ? Math.round(((avgScore - fieldAverage) / fieldAverage) * 100) 
+    .map(([userId, { name, orgId, dept, totalHours, responseCount, weeks, winAnswers, goalAnswers }]) => {
+      // Calculate average monthly hours saved for this user
+      const avgWeeklyHours = responseCount > 0 ? totalHours / responseCount : 0
+      const monthlyHours = avgWeeklyHours * WEEKLY_TO_MONTHLY_MULTIPLIER
+      const avgScore = Math.round(monthlyHours * 10) / 10 // avgScore now represents monthly hours saved
+      
+      // Calculate % above/below field average hours
+      const percentVsField = fieldAverageHours > 0 
+        ? Math.round(((monthlyHours - fieldAverageHours) / fieldAverageHours) * 100) 
         : 0
       return {
         id: userId,
@@ -459,8 +485,8 @@ export async function computeTopPerformers(
         company: orgNameMap.get(orgId) ?? orgId,
         companyId: orgId,
         department: dept,
-        avgScore,
-        percentVsField,
+        avgScore, // Now represents monthly hours saved
+        percentVsField, // Now represents % above/below field average hours
         streak: weeks.size,
         // Prefer admin-set narrative, then most recent win answer
         winNarrative: adminNarratives[userId] || winAnswers[winAnswers.length - 1] || undefined,
