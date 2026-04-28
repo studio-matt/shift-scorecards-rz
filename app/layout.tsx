@@ -6,6 +6,9 @@ import { Providers } from "@/components/providers"
 
 import "./globals.css"
 
+// Initialize performance diagnostics (exposes window.perfSummary)
+import "@/lib/perf-diagnostic"
+
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 
 export const metadata: Metadata = {
