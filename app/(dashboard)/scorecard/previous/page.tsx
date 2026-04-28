@@ -249,8 +249,11 @@ export default function PreviousScorecardsPage() {
       // - Admin/company_admin see their org's responses (aggregated)
       // - Regular users see ONLY their own responses (grouped by week)
       let responses: RawResponse[]
+      console.log("[v0] User role:", user?.role, "isSuperAdmin:", isSuperAdmin, "isAdmin:", isAdmin)
+      console.log("[v0] Total responses fetched:", allResponses.length)
       if (isSuperAdmin) {
         responses = allResponses
+        console.log("[v0] Super admin - using all responses")
       } else if (isAdmin) {
         // Admins see their org's responses (aggregated view)
         responses = allResponses.filter((r) => 
@@ -329,6 +332,14 @@ export default function PreviousScorecardsPage() {
       const aggregated = Array.from(grouped.values()).sort(
         (a, b) => new Date(b.latestCompletedAt).getTime() - new Date(a.latestCompletedAt).getTime()
       )
+      
+      console.log("[v0] Grouped scorecards count:", aggregated.length)
+      console.log("[v0] First 5 grouped scorecards:", aggregated.slice(0, 5).map(s => ({
+        org: s.organizationName,
+        orgId: s.organizationId,
+        weekOf: s.weekOf,
+        count: s.responseCount
+      })))
       
       setScorecards(aggregated)
     } catch (err) {
