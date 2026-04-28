@@ -1,5 +1,6 @@
 import { getDocument, getDocuments, getOrganizations, COLLECTIONS } from "./firestore"
 import { logPerf, printPerfSummary } from "./perf-diagnostic"
+import { getAggregatesForRange, sumAggregates, type DailyAggregate } from "./aggregates"
 import type {
   WeeklyTrend,
   DepartmentPerformance,
@@ -131,6 +132,60 @@ export function parseMinuteValue(value: number | string): number {
  * If an organization uses weekly scorecards, multiply by 4 for monthly totals.
  */
 export const WEEKLY_TO_MONTHLY_MULTIPLIER = 4
+
+// ── Fast Dashboard Stats (using pre-computed aggregates) ──────────────
+
+/**
+ * Fetches dashboard stats from pre-computed aggregates instead of raw responses.
+ * Falls back to raw response calculation if aggregates don't exist.
+ * 
+ * This is MUCH faster: reads ~30 small aggregate docs instead of 35K+ responses.
+ */
+export async function fetchDashboardStatsFromAggregates(opts: {
+  organizationId?: string
+  department?: string
+  userId?: string
+  startDate: string   // "2026-04-01"
+  endDate: string     // "2026-04-28"
+}): Promise<{
+  totalHoursSaved: number
+  responseCount: number
+  avgConfidence: number
+  valueCreated: number
+  productivityGain: number
+  participantCount: number
+  fromAggregates: boolean
+} | null> {
+  const start = performance.now()
+  
+  try {
+    const aggregates = await getAggregatesForRange({
+      startDate: opts.startDate,
+      endDate: opts.endDate,
+      organizationId: opts.organizationId || "all",
+      department: opts.department || "all",
+      userId: opts.userId || "all",
+    })
+    
+    const elapsed = performance.now() - start
+    console.log(`[PERF] fetchDashboardStatsFromAggregates: ${elapsed.toFixed(0)}ms, ${aggregates.length} aggregate docs`)
+    
+    if (aggregates.length === 0) {
+      console.log(`[PERF] No aggregates found, falling back to raw responses`)
+      return null  // Signal to caller to use fallback
+    }
+    
+    const stats = sumAggregates(aggregates)
+    
+    return {
+      ...stats,
+      fromAggregates: true,
+    }
+  } catch (err) {
+    console.error("[PERF] Error fetching aggregates, falling back:", err)
+    return null
+  }
+}
 
 // ── Raw response shape from Firestore ─────────────────────────────────
 interface RawResponse {
