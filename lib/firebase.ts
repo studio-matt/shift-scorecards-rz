@@ -21,13 +21,14 @@ export const auth = getAuth(app)
 export const db = getFirestore(app)
 export const storage = getStorage(app)
 
-// Initialize Performance Monitoring (client-side only, with error handling)
+// Initialize Performance Monitoring (client-side only)
+// "Failed to fetch" console errors are from ad blockers - users without ad blockers will send data
 let perf: FirebasePerformance | null = null
 if (typeof window !== "undefined") {
   try {
     perf = getPerformance(app)
-  } catch (err) {
-    console.warn("Firebase Performance Monitoring failed to initialize:", err)
+  } catch {
+    // Silent fail - don't spam console
   }
 }
 export const performance = perf

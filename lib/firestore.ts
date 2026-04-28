@@ -16,6 +16,7 @@ import {
   type QueryConstraint,
 } from "firebase/firestore"
 import { db } from "./firebase"
+import { logPerf } from "./perf-diagnostic"
 
 // ─── Collection References ────────────────────────────────────────────
 export const COLLECTIONS = {
@@ -52,8 +53,11 @@ export async function getDocument<T = DocumentData>(
   collectionName: string,
   docId: string,
 ): Promise<(T & { id: string }) | null> {
+  const start = performance.now()
   const docRef = doc(db, collectionName, docId)
   const docSnap = await getDoc(docRef)
+  const elapsed = performance.now() - start
+  logPerf('getDocument', collectionName, elapsed, 1)
   if (!docSnap.exists()) return null
   return { id: docSnap.id, ...docSnap.data() } as T & { id: string }
 }
@@ -62,8 +66,12 @@ export async function getDocuments<T = DocumentData>(
   collectionName: string,
   ...constraints: QueryConstraint[]
 ): Promise<(T & { id: string })[]> {
+  const start = performance.now()
   const q = query(collection(db, collectionName), ...constraints)
   const snapshot = await getDocs(q)
+  const elapsed = performance.now() - start
+  const count = snapshot.docs.length
+  logPerf('getDocuments', collectionName, elapsed, count)
   return snapshot.docs.map(
     (d) => ({ id: d.id, ...d.data() }) as T & { id: string },
   )
