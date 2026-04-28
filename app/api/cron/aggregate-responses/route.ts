@@ -14,23 +14,12 @@
  */
 
 import { NextRequest, NextResponse } from "next/server"
-import { 
-  collection, 
-  getDocs, 
-  doc, 
-  getDoc, 
-  setDoc, 
-  query, 
-  where,
-  orderBy,
-  Timestamp 
-} from "firebase/firestore"
-import { db } from "@/lib/firebase"
+import { getAdminDb } from "@/lib/firebase-admin"
 import { 
   DailyAggregate, 
   buildAggregateId, 
   createEmptyAggregate,
-  saveAggregate 
+  saveAggregateAdmin
 } from "@/lib/aggregates"
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -103,15 +92,17 @@ async function processResponses(
   console.log(`[Aggregate] Target date: ${targetDate || "all dates"}`)
   
   try {
+    const adminDb = getAdminDb()
+    
     // ── Fetch all necessary data ──────────────────────────────────────
     
     // Get responses
-    const responsesSnapshot = await getDocs(collection(db, "responses"))
+    const responsesSnapshot = await adminDb.collection("responses").get()
     const allResponses = responsesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }))
     console.log(`[Aggregate] Total responses in DB: ${allResponses.length}`)
     
     // Get users for org/dept mapping
-    const usersSnapshot = await getDocs(collection(db, "users"))
+    const usersSnapshot = await adminDb.collection("users").get()
     const userMap = new Map<string, { orgId: string; dept: string; name: string }>()
     usersSnapshot.docs.forEach(d => {
       const data = d.data()
@@ -123,7 +114,7 @@ async function processResponses(
     })
     
     // Get organizations for name mapping
-    const orgsSnapshot = await getDocs(collection(db, "organizations"))
+    const orgsSnapshot = await adminDb.collection("organizations").get()
     const orgMap = new Map<string, string>()
     orgsSnapshot.docs.forEach(d => {
       const data = d.data()
@@ -131,7 +122,7 @@ async function processResponses(
     })
     
     // Get templates for hours calculation
-    const templatesSnapshot = await getDocs(collection(db, "templates"))
+    const templatesSnapshot = await adminDb.collection("templates").get()
     const templateQuestionMap = new Map<string, Array<{ id: string; type: string; text: string }>>()
     templatesSnapshot.docs.forEach(d => {
       const data = d.data()
@@ -283,7 +274,7 @@ async function processResponses(
     let savedCount = 0
     for (const [key, aggregate] of aggregatesMap) {
       try {
-        await saveAggregate(aggregate)
+        await saveAggregateAdmin(adminDb, aggregate)
         savedCount++
       } catch (err) {
         errors.push(`Error saving aggregate ${key}: ${String(err)}`)
@@ -294,8 +285,7 @@ async function processResponses(
     
     // ── Update last run timestamp ─────────────────────────────────────
     
-    const metaRef = doc(db, "aggregates", "_meta")
-    await setDoc(metaRef, {
+    await adminDb.collection("aggregates").doc("_meta").set({
       lastRunAt: new Date().toISOString(),
       lastProcessedCount: responsesToProcess.length,
       lastAggregatesUpdated: savedCount,
@@ -324,14 +314,22 @@ async function processResponses(
 
 export async function GET(request: NextRequest) {
   // Allow unauthenticated GET for status check
-  const metaRef = doc(db, "aggregates", "_meta")
-  const metaSnap = await getDoc(metaRef)
-  
-  return NextResponse.json({
-    status: "ok",
-    lastRun: metaSnap.exists() ? metaSnap.data() : null,
-    message: "Use POST to trigger aggregation",
-  })
+  try {
+    const adminDb = getAdminDb()
+    const metaSnap = await adminDb.collection("aggregates").doc("_meta").get()
+    
+    return NextResponse.json({
+      status: "ok",
+      lastRun: metaSnap.exists ? metaSnap.data() : null,
+      message: "Use POST to trigger aggregation",
+    })
+  } catch (err) {
+    return NextResponse.json({
+      status: "error",
+      error: String(err),
+      message: "Failed to get status - check FIREBASE_SERVICE_ACCOUNT_KEY env var",
+    })
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -346,10 +344,14 @@ export async function POST(request: NextRequest) {
   // Get last run timestamp (unless full reprocess requested)
   let sinceTimestamp: string | undefined = undefined
   if (!full) {
-    const metaRef = doc(db, "aggregates", "_meta")
-    const metaSnap = await getDoc(metaRef)
-    if (metaSnap.exists()) {
-      sinceTimestamp = metaSnap.data().lastRunAt
+    try {
+      const adminDb = getAdminDb()
+      const metaSnap = await adminDb.collection("aggregates").doc("_meta").get()
+      if (metaSnap.exists) {
+        sinceTimestamp = metaSnap.data()?.lastRunAt
+      }
+    } catch {
+      // If we can't get last run, process everything
     }
   }
   
