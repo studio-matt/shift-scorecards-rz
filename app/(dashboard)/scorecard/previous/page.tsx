@@ -58,6 +58,7 @@ interface AggregatedScorecard {
   responseCount: number
   avgHours: number
   departments: Set<string> // Track unique departments for filtering
+  userIds: Set<string> // Track unique users for filtering
 }
 
 interface TemplateQuestion {
@@ -106,14 +107,18 @@ export default function PreviousScorecardsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedOrg, setSelectedOrg] = useState("all")
   const [selectedDept, setSelectedDept] = useState("all")
+  const [selectedUser, setSelectedUser] = useState("all")
   const [timePeriod, setTimePeriod] = useState("all")
   
   // Check if user is super admin (can see all companies)
-  const isSuperAdmin = user?.role === "super_admin"
+  // Note: "admin" role = super admin in the database
+  const isSuperAdmin = user?.role === "admin"
   // Check if user is any admin type (can filter by department)
-  const isAdmin = user?.role === "super_admin" || user?.role === "admin" || user?.role === "company_admin"
+  const isAdmin = user?.role === "admin" || user?.role === "company_admin"
   const [orgs, setOrgs] = useState<Array<{ id: string; name: string }>>([])
   const [departments, setDepartments] = useState<string[]>([])
+  const [users, setUsers] = useState<Array<{ id: string; name: string; orgId: string; department: string }>>([])
+  const userOrgId = user?.organizationId
   const [templates, setTemplates] = useState<Array<{ id: string; name: string; questions: TemplateQuestion[] }>>([])
   
   // Import state
@@ -159,15 +164,23 @@ export default function PreviousScorecardsPage() {
         userOrgId = orgNameToIdMap.get(user.company.toLowerCase())
       }
       
-      // Build user department map and collect unique departments
-      // For non-super-admins, only include departments from their organization
+      // Build user department map, collect unique departments, and build users list for filtering
+      // For non-super-admins, only include departments/users from their organization
       const userDeptMap = new Map<string, string>()
       const deptSet = new Set<string>()
+      const usersList: Array<{ id: string; name: string; orgId: string; department: string }> = []
+      
       for (const u of userDocs) {
         const data = u as Record<string, unknown>
         const dept = (data.department as string) || ""
         const userOrgIdField = (data.organizationId as string) || ""
         const userCompany = (data.company as string) || ""
+        const firstName = (data.firstName as string) || ""
+        const lastName = (data.lastName as string) || ""
+        const fullName = `${firstName} ${lastName}`.trim()
+        
+        // Determine user's org ID
+        const userResolvedOrgId = userOrgIdField || orgNameToIdMap.get(userCompany.toLowerCase()) || ""
         
         // Match user to organization
         const userBelongsToOrg = userOrgIdField === userOrgId || 
@@ -180,8 +193,19 @@ export default function PreviousScorecardsPage() {
             deptSet.add(dept)
           }
         }
+        
+        // Build users list for admins to filter by user
+        if (fullName && (isSuperAdmin || userBelongsToOrg)) {
+          usersList.push({
+            id: u.id,
+            name: fullName,
+            orgId: userResolvedOrgId,
+            department: dept,
+          })
+        }
       }
       setDepartments(Array.from(deptSet).sort())
+      setUsers(usersList.sort((a, b) => a.name.localeCompare(b.name)))
       
       // Build template question map for finding time_saving questions
       const templateQuestionMap = new Map<string, TemplateQuestion[]>()
@@ -261,7 +285,9 @@ export default function PreviousScorecardsPage() {
         
         if (!grouped.has(key)) {
           const deptSet = new Set<string>()
+          const userIdSet = new Set<string>()
           if (userDept) deptSet.add(userDept)
+          userIdSet.add(r.userId)
           grouped.set(key, {
             key,
             organizationId: r.organizationId,
@@ -275,6 +301,7 @@ export default function PreviousScorecardsPage() {
             responseCount: 1,
             avgHours: hours,
             departments: deptSet,
+            userIds: userIdSet,
           })
         } else {
           const existing = grouped.get(key)!
@@ -283,6 +310,7 @@ export default function PreviousScorecardsPage() {
           existing.responseCount += 1
           existing.avgHours = Math.round((existing.totalHours / existing.responseCount) * 10) / 10
           if (userDept) existing.departments.add(userDept)
+          existing.userIds.add(r.userId)
           // Track latest completion
           if (new Date(r.completedAt) > new Date(existing.latestCompletedAt)) {
             existing.latestCompletedAt = r.completedAt
@@ -490,13 +518,16 @@ export default function PreviousScorecardsPage() {
     }
   }
   
-  // Filter scorecards by search query, org, department, and time period
+  // Filter scorecards by search query, org, department, user, and time period
   const filteredScorecards = scorecards.filter((sc) => {
     // Org filter
     if (selectedOrg !== "all" && sc.organizationId !== selectedOrg) return false
     
     // Department filter - scorecard has responses from this department
     if (selectedDept !== "all" && !sc.departments.has(selectedDept)) return false
+    
+    // User filter - scorecard has responses from this user
+    if (selectedUser !== "all" && !sc.userIds.has(selectedUser)) return false
     
     // Time period filter
     if (timePeriod !== "all") {
@@ -998,6 +1029,7 @@ export default function PreviousScorecardsPage() {
             onValueChange={(val) => {
               setSelectedOrg(val)
               setSelectedDept("all") // Reset dept when org changes
+              setSelectedUser("all") // Reset user when org changes
             }}
           >
             <SelectTrigger className="w-48">
@@ -1016,7 +1048,13 @@ export default function PreviousScorecardsPage() {
 
         {/* Department dropdown - only visible to admins */}
         {isAdmin && (
-          <Select value={selectedDept} onValueChange={setSelectedDept}>
+          <Select 
+            value={selectedDept} 
+            onValueChange={(val) => {
+              setSelectedDept(val)
+              setSelectedUser("all") // Reset user when dept changes
+            }}
+          >
             <SelectTrigger className="w-48">
               <SelectValue placeholder="All Departments" />
             </SelectTrigger>
@@ -1027,6 +1065,30 @@ export default function PreviousScorecardsPage() {
                   {dept}
                 </SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {/* User dropdown - only visible to admins */}
+        {isAdmin && (
+          <Select value={selectedUser} onValueChange={setSelectedUser}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="All Users" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Users</SelectItem>
+              {users
+                .filter((u) => {
+                  // Filter users by selected org/dept
+                  if (selectedOrg !== "all" && u.orgId !== selectedOrg) return false
+                  if (selectedDept !== "all" && u.department !== selectedDept) return false
+                  return true
+                })
+                .map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.name}
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
         )}

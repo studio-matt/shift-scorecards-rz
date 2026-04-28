@@ -30,7 +30,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Upload, ChevronDown, ChevronRight, Shield, Key, ZoomIn, RotateCw, Bell, Mail, FileText, Users, AlertTriangle, Loader2 } from "lucide-react"
 import { uploadAvatar } from "@/lib/storage"
-import { updateDocument, COLLECTIONS } from "@/lib/firestore"
+import { updateDocument, syncUserProfileMirror, COLLECTIONS } from "@/lib/firestore"
 import { DEFAULT_NOTIFICATION_PREFERENCES, type NotificationPreferences } from "@/lib/types"
 
 // ─── Canvas-based crop helper ────────────────────────────────────────
@@ -340,7 +340,7 @@ const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text
   const isAdmin = user?.role === "admin" || user?.role === "company_admin"
 
   async function handleSaveSettings() {
-    if (!user?.id) return
+    if (!user?.id || !user?.authId) return
     setSaving(true)
     setSaveMessage(null)
     
@@ -354,6 +354,14 @@ const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text
         timezone,
         notificationPreferences: notificationPrefs,
       })
+      
+      // Sync the userProfiles mirror for security rules
+      await syncUserProfileMirror(user.authId, user.id, {
+        firstName,
+        lastName,
+        department,
+      })
+      
       setSaveMessage({ type: "success", text: "Settings saved successfully!" })
       setTimeout(() => setSaveMessage(null), 3000)
     } catch (err) {

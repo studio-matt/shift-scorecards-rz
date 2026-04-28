@@ -20,7 +20,7 @@ import {
   type User as FirebaseUser,
 } from "firebase/auth"
 import { auth } from "./firebase"
-import { getUserByAuthId, getUserByEmail, createDocument, updateDocument, deleteDocument, getDocuments, COLLECTIONS } from "./firestore"
+import { getUserByAuthId, getUserByEmail, createDocument, updateDocument, deleteDocument, getDocuments, upsertUserProfile, COLLECTIONS } from "./firestore"
 import type { User, UserRole } from "./types"
 
 // Temp store for signup extras that get applied after profile creation
@@ -67,6 +67,19 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
     await updateDocument(COLLECTIONS.USERS, existingByAuthId.id, {
       lastLogin: new Date().toISOString(),
     })
+    
+    // Upsert the userProfiles mirror for security rules
+    const userData = existingByAuthId as Record<string, unknown>
+    await upsertUserProfile(fbUser.uid, existingByAuthId.id, {
+      role: userData.role as string,
+      organizationId: userData.organizationId as string,
+      department: userData.department as string,
+      email: userData.email as string,
+      firstName: userData.firstName as string,
+      lastName: userData.lastName as string,
+      status: userData.status as string,
+    })
+    
     return existingByAuthId as unknown as User
   }
 
@@ -82,6 +95,19 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
         // Update avatar if they signed in with OAuth and we have one
         ...(fbUser.photoURL ? { avatar: fbUser.photoURL } : {}),
       })
+      
+      // Upsert the userProfiles mirror for security rules
+      const userData = existingByEmail as Record<string, unknown>
+      await upsertUserProfile(fbUser.uid, existingByEmail.id, {
+        role: userData.role as string,
+        organizationId: userData.organizationId as string,
+        department: userData.department as string,
+        email: userData.email as string,
+        firstName: userData.firstName as string,
+        lastName: userData.lastName as string,
+        status: userData.status as string,
+      })
+      
       return { ...existingByEmail, authId: fbUser.uid } as unknown as User
     }
     
@@ -114,6 +140,18 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
       const docId = await createDocument(COLLECTIONS.USERS, newUserData)
       // Delete the old invite
       await deleteDocument(COLLECTIONS.INVITES, matchingInvite.id)
+      
+      // Upsert the userProfiles mirror for security rules
+      await upsertUserProfile(fbUser.uid, docId, {
+        role: newUserData.role,
+        organizationId: newUserData.organizationId,
+        department: newUserData.department,
+        email: newUserData.email,
+        firstName: newUserData.firstName,
+        lastName: newUserData.lastName,
+        status: newUserData.status,
+      })
+      
       return { id: docId, ...newUserData } as unknown as User
     }
   }

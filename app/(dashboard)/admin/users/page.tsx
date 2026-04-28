@@ -37,6 +37,7 @@ import {
   getOrganizations,
   createDocument,
   updateDocument,
+  syncUserProfileMirror,
   COLLECTIONS,
 } from "@/lib/firestore"
 import { useAuth } from "@/lib/auth-context"
@@ -178,6 +179,12 @@ export default function ManageUsersPage() {
       const updates: Record<string, unknown> = { role: newRole }
       if (autoExclude) updates.excludeFromReporting = true
       await updateDocument(COLLECTIONS.USERS, userId, updates)
+      
+      // Sync the userProfiles mirror for security rules (role is security-critical)
+      if (user?.authId) {
+        await syncUserProfileMirror(user.authId, userId, { role: newRole })
+      }
+      
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, role: newRole, excludeFromReporting: autoExclude ? true : u.excludeFromReporting } : u)),
       )
