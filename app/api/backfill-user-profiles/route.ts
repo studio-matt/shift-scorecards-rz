@@ -4,19 +4,93 @@
  * One-time migration endpoint to create /userProfiles/{authUid} documents
  * for all existing users who have an authId field.
  * 
- * This is a protected endpoint - only super admins can run it.
+ * PROTECTED ENDPOINT - Requires one of:
+ * 1. Firebase Auth session with super admin role (role === "admin")
+ * 2. X-Backfill-Secret header matching BACKFILL_SECRET env var
  * 
- * Usage: POST /api/backfill-user-profiles
+ * Usage: 
+ *   POST /api/backfill-user-profiles
+ *   Headers: X-Backfill-Secret: <your-secret>
+ * 
+ * ⚠️  DELETE OR DISABLE THIS ENDPOINT AFTER SUCCESSFUL RUN
  */
 
 import { NextResponse } from "next/server"
-import { getAdminDb } from "@/lib/firebase-admin"
+import { getAdminDb, getAdminAuth } from "@/lib/firebase-admin"
+import { cookies } from "next/headers"
+
+// Verify the caller is a super admin
+async function verifySuperAdmin(request: Request): Promise<{ authorized: boolean; reason?: string }> {
+  // Option 1: Check X-Backfill-Secret header
+  const secretHeader = request.headers.get("X-Backfill-Secret")
+  const envSecret = process.env.BACKFILL_SECRET
+  
+  if (envSecret && secretHeader === envSecret) {
+    console.log("[Backfill Auth] Authorized via BACKFILL_SECRET header")
+    return { authorized: true }
+  }
+  
+  // Option 2: Check Firebase Auth session
+  try {
+    const cookieStore = await cookies()
+    const sessionCookie = cookieStore.get("firebase-session")?.value
+    
+    if (!sessionCookie) {
+      return { authorized: false, reason: "No session cookie found" }
+    }
+    
+    // Verify the session cookie and get the user's UID
+    const auth = getAdminAuth()
+    const decodedToken = await auth.verifySessionCookie(sessionCookie, true)
+    const authUid = decodedToken.uid
+    
+    if (!authUid) {
+      return { authorized: false, reason: "Invalid session - no UID" }
+    }
+    
+    const db = getAdminDb()
+    
+    // First try: Check /userProfiles/{authUid} (preferred, keyed by auth UID)
+    const profileDoc = await db.collection("userProfiles").doc(authUid).get()
+    if (profileDoc.exists) {
+      const profileData = profileDoc.data()
+      if (profileData?.role === "admin") {
+        console.log(`[Backfill Auth] Authorized via userProfiles - user ${authUid}`)
+        return { authorized: true }
+      }
+      return { authorized: false, reason: `userProfiles role is "${profileData?.role}", not "admin"` }
+    }
+    
+    // Fallback: Check /users where authId == authUid (for bootstrap before userProfiles exists)
+    const usersQuery = await db.collection("users").where("authId", "==", authUid).limit(1).get()
+    if (!usersQuery.empty) {
+      const userData = usersQuery.docs[0].data()
+      if (userData?.role === "admin") {
+        console.log(`[Backfill Auth] Authorized via users collection fallback - user ${authUid}`)
+        return { authorized: true }
+      }
+      return { authorized: false, reason: `users role is "${userData?.role}", not "admin"` }
+    }
+    
+    return { authorized: false, reason: "User not found in userProfiles or users collection" }
+  } catch (err) {
+    console.error("[Backfill Auth] Error verifying session:", err)
+    return { authorized: false, reason: `Auth error: ${err}` }
+  }
+}
 
 export async function POST(request: Request) {
+  // Verify authorization
+  const authResult = await verifySuperAdmin(request)
+  if (!authResult.authorized) {
+    console.warn(`[Backfill] Unauthorized access attempt: ${authResult.reason}`)
+    return NextResponse.json(
+      { success: false, error: "Forbidden - Super admin access required", reason: authResult.reason },
+      { status: 403 }
+    )
+  }
+  
   try {
-    // Optional: Add auth check here if needed
-    // For now, we'll just run the backfill
-    
     const db = getAdminDb()
     const usersRef = db.collection("users")
     const userProfilesRef = db.collection("userProfiles")
@@ -77,7 +151,7 @@ export async function POST(request: Request) {
     
     return NextResponse.json({
       success: true,
-      message: "Backfill complete",
+      message: "Backfill complete. ⚠️ DELETE OR DISABLE THIS ENDPOINT NOW.",
       results,
     })
   } catch (error) {
@@ -89,10 +163,10 @@ export async function POST(request: Request) {
   }
 }
 
-// Also support GET for easy browser testing (remove in production)
+// Reject GET requests
 export async function GET() {
-  return NextResponse.json({
-    message: "POST to this endpoint to run the backfill",
-    warning: "This will create userProfiles documents for all users with authId",
-  })
+  return NextResponse.json(
+    { error: "Method not allowed. Use POST." },
+    { status: 405 }
+  )
 }
