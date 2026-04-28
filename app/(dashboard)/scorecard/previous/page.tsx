@@ -608,6 +608,15 @@ export default function PreviousScorecardsPage() {
     }
   }
 
+  // DEBUG: Temporary debug info - remove after fixing
+  const debugInfo = {
+    totalScorecards: scorecards.length,
+    filteredCount: filteredScorecards.length,
+    selectedOrg,
+    orgsAvailable: orgs.length,
+    scorecardsOrgs: [...new Set(scorecards.map(s => s.organizationId))],
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -1179,6 +1188,14 @@ export default function PreviousScorecardsPage() {
             <p className="mt-1 text-sm text-muted-foreground">
               {searchQuery ? "Try a different search term." : "Completed scorecards will appear here."}
             </p>
+            {/* DEBUG INFO - remove after fixing */}
+            <div className="mt-4 p-3 bg-muted/50 rounded text-xs text-left font-mono">
+              <p>DEBUG: Total scorecards loaded: {debugInfo.totalScorecards}</p>
+              <p>DEBUG: After filtering: {debugInfo.filteredCount}</p>
+              <p>DEBUG: Selected org filter: {debugInfo.selectedOrg}</p>
+              <p>DEBUG: Orgs in dropdown: {debugInfo.orgsAvailable}</p>
+              <p>DEBUG: Org IDs in scorecards: {debugInfo.scorecardsOrgs.join(", ") || "none"}</p>
+            </div>
           </CardContent>
         </Card>
       )}
