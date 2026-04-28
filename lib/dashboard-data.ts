@@ -1,4 +1,5 @@
 import { getDocument, getDocuments, getOrganizations, COLLECTIONS } from "./firestore"
+import { logPerf, printPerfSummary } from "./perf-diagnostic"
 import type {
   WeeklyTrend,
   DepartmentPerformance,
@@ -152,17 +153,25 @@ export async function fetchAllResponses(
   department?: string,
   userId?: string, // Include user's own responses regardless of org filter
 ): Promise<RawResponse[]> {
+  const totalStart = performance.now()
+  console.log('[PERF] fetchAllResponses starting...')
+  
   const docs = await getDocuments(COLLECTIONS.RESPONSES)
   let responses = docs.map((d) => ({ ...d } as unknown as RawResponse))
+  console.log(`[PERF] Fetched ${responses.length} responses`)
 
   // Build user profile maps for org/department filtering
   // This ensures we filter by user's ACTUAL org/dept, not what's stored on the response
   const allUsers = await getDocuments(COLLECTIONS.USERS)
+  console.log(`[PERF] Fetched ${allUsers.length} users`)
+  
   const userOrgMap = new Map<string, string>()
   const userDeptMap = new Map<string, string>()
   
   // Also build org name to ID mapping for matching by company name
   const orgDocs = await getDocuments(COLLECTIONS.ORGANIZATIONS)
+  console.log(`[PERF] Fetched ${orgDocs.length} organizations`)
+  
   const orgNameToIdMap = new Map<string, string>()
   for (const org of orgDocs) {
     const orgData = org as Record<string, unknown>
@@ -206,11 +215,15 @@ export async function fetchAllResponses(
       return userDept === department
     })
   }
-
+  
+  const totalElapsed = performance.now() - totalStart
+  console.log(`[PERF] fetchAllResponses TOTAL: ${totalElapsed.toFixed(0)}ms`)
+  logPerf('fetchAllResponses', 'TOTAL', totalElapsed, responses.length)
+  
   return responses
 }
-
-// ── Fetch all templates for question text lookup ──────────────────────
+  
+  // ── Fetch all templates for question text lookup ──────────────────────
 interface TemplateQuestion {
   id: string
   text: string
@@ -1619,7 +1632,7 @@ export function computePersonalBenchmark(responses: RawResponse[], userId: strin
   }
 }
 
-// ══════════════════════════════════════════════════════════════════════
+// ════════��═════════════════════════════════════════════════════════════
 // HOURS SAVED & CONFIDENCE METRICS (Time-centric approach)
 // ══════════════════════════════════════════════════════════════════════
 

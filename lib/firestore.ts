@@ -16,6 +16,7 @@ import {
   type QueryConstraint,
 } from "firebase/firestore"
 import { db } from "./firebase"
+import { logPerf } from "./perf-diagnostic"
 
 // ─── Collection References ────────────────────────────────────────────
 export const COLLECTIONS = {
@@ -56,9 +57,7 @@ export async function getDocument<T = DocumentData>(
   const docRef = doc(db, collectionName, docId)
   const docSnap = await getDoc(docRef)
   const elapsed = performance.now() - start
-  if (elapsed > 100) {
-    console.warn(`[Firestore] SLOW getDocument(${collectionName}/${docId}): ${elapsed.toFixed(0)}ms`)
-  }
+  logPerf('getDocument', collectionName, elapsed, 1)
   if (!docSnap.exists()) return null
   return { id: docSnap.id, ...docSnap.data() } as T & { id: string }
 }
@@ -72,9 +71,7 @@ export async function getDocuments<T = DocumentData>(
   const snapshot = await getDocs(q)
   const elapsed = performance.now() - start
   const count = snapshot.docs.length
-  if (elapsed > 200 || count > 100) {
-    console.warn(`[Firestore] SLOW getDocuments(${collectionName}): ${elapsed.toFixed(0)}ms, ${count} docs`)
-  }
+  logPerf('getDocuments', collectionName, elapsed, count)
   return snapshot.docs.map(
     (d) => ({ id: d.id, ...d.data() }) as T & { id: string },
   )
