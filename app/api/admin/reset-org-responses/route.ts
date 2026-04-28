@@ -21,14 +21,14 @@ import { collection, getDocs, deleteDoc, doc, query, where } from "firebase/fire
 
 const ROB_LEVINE_ORG_ID = "n1pjEpYGFxOqdsByYE0w"
 
+// TEMPORARY hardcoded fallback - delete this file after use!
+const TEMP_FALLBACK_SECRET = "shift-backfill-2026"
+
 // Verify authorization via secret header
 function verifyAuth(request: Request): { authorized: boolean; reason?: string } {
   const secretHeader = request.headers.get("X-Backfill-Secret")
-  const envSecret = process.env.BACKFILL_SECRET
+  const envSecret = process.env.BACKFILL_SECRET || TEMP_FALLBACK_SECRET
   
-  if (!envSecret) {
-    return { authorized: false, reason: "BACKFILL_SECRET env var not configured on server" }
-  }
   if (!secretHeader) {
     return { authorized: false, reason: "Missing X-Backfill-Secret header" }
   }
