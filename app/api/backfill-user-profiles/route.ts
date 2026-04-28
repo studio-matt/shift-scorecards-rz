@@ -25,9 +25,21 @@ async function verifySuperAdmin(request: Request): Promise<{ authorized: boolean
   const secretHeader = request.headers.get("X-Backfill-Secret")
   const envSecret = process.env.BACKFILL_SECRET
   
-  if (envSecret && secretHeader === envSecret) {
+  // Debug: Log what we're checking (mask the actual values for security)
+  console.log("[Backfill Auth] Checking secret header:", secretHeader ? `present (${secretHeader.length} chars)` : "missing")
+  console.log("[Backfill Auth] Env secret configured:", envSecret ? `yes (${envSecret.length} chars)` : "no")
+  
+  if (envSecret && secretHeader && secretHeader === envSecret) {
     console.log("[Backfill Auth] Authorized via BACKFILL_SECRET header")
     return { authorized: true }
+  }
+  
+  if (secretHeader && !envSecret) {
+    return { authorized: false, reason: "BACKFILL_SECRET env var not configured on server" }
+  }
+  
+  if (secretHeader && envSecret && secretHeader !== envSecret) {
+    return { authorized: false, reason: "Secret header does not match BACKFILL_SECRET env var" }
   }
   
   // Option 2: Check Firebase Auth session
