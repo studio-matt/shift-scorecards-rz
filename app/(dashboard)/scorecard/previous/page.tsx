@@ -237,13 +237,23 @@ export default function PreviousScorecardsPage() {
         }
       })
       
+      // Debug: Log org IDs in responses vs organizations
+      const responseOrgIds = new Set(allResponses.map(r => r.organizationId))
+      const knownOrgIds = new Set(orgsList.map(o => o.id))
+      console.log("[v0] Organizations in /organizations collection:", orgsList.map(o => ({ id: o.id, name: o.name })))
+      console.log("[v0] Organization IDs found in responses:", Array.from(responseOrgIds))
+      console.log("[v0] Response org IDs NOT in organizations collection:", Array.from(responseOrgIds).filter(id => !knownOrgIds.has(id)))
+      
       // Filter responses based on user role:
       // - Super admins see all responses (aggregated by org)
       // - Admin/company_admin see their org's responses (aggregated)
       // - Regular users see ONLY their own responses (grouped by week)
       let responses: RawResponse[]
+      console.log("[v0] User role:", user?.role, "isSuperAdmin:", isSuperAdmin, "isAdmin:", isAdmin)
+      console.log("[v0] Total responses fetched:", allResponses.length)
       if (isSuperAdmin) {
         responses = allResponses
+        console.log("[v0] Super admin - using all responses")
       } else if (isAdmin) {
         // Admins see their org's responses (aggregated view)
         responses = allResponses.filter((r) => 
@@ -322,6 +332,14 @@ export default function PreviousScorecardsPage() {
       const aggregated = Array.from(grouped.values()).sort(
         (a, b) => new Date(b.latestCompletedAt).getTime() - new Date(a.latestCompletedAt).getTime()
       )
+      
+      console.log("[v0] Grouped scorecards count:", aggregated.length)
+      console.log("[v0] First 5 grouped scorecards:", aggregated.slice(0, 5).map(s => ({
+        org: s.organizationName,
+        orgId: s.organizationId,
+        weekOf: s.weekOf,
+        count: s.responseCount
+      })))
       
       setScorecards(aggregated)
     } catch (err) {
@@ -588,6 +606,15 @@ export default function PreviousScorecardsPage() {
       console.error("Failed to delete scorecard:", err)
       alert("Failed to delete scorecard. Please try again.")
     }
+  }
+
+  // DEBUG: Temporary debug info - remove after fixing
+  const debugInfo = {
+    totalScorecards: scorecards.length,
+    filteredCount: filteredScorecards.length,
+    selectedOrg,
+    orgsAvailable: orgs.length,
+    scorecardsOrgs: [...new Set(scorecards.map(s => s.organizationId))],
   }
 
   if (loading) {
@@ -1161,6 +1188,14 @@ export default function PreviousScorecardsPage() {
             <p className="mt-1 text-sm text-muted-foreground">
               {searchQuery ? "Try a different search term." : "Completed scorecards will appear here."}
             </p>
+            {/* DEBUG INFO - remove after fixing */}
+            <div className="mt-4 p-3 bg-muted/50 rounded text-xs text-left font-mono">
+              <p>DEBUG: Total scorecards loaded: {debugInfo.totalScorecards}</p>
+              <p>DEBUG: After filtering: {debugInfo.filteredCount}</p>
+              <p>DEBUG: Selected org filter: {debugInfo.selectedOrg}</p>
+              <p>DEBUG: Orgs in dropdown: {debugInfo.orgsAvailable}</p>
+              <p>DEBUG: Org IDs in scorecards: {debugInfo.scorecardsOrgs.join(", ") || "none"}</p>
+            </div>
           </CardContent>
         </Card>
       )}
