@@ -2,6 +2,7 @@ import { initializeApp, getApps, getApp } from "firebase/app"
 import { getAuth } from "firebase/auth"
 import { getFirestore } from "firebase/firestore"
 import { getStorage } from "firebase/storage"
+import { getPerformance, type FirebasePerformance } from "firebase/performance"
 
 const firebaseConfig = {
   apiKey: "AIzaSyD_FPvDabLJFkD_fecfKQJw8YFptLEIxgQ",
@@ -20,13 +21,16 @@ export const auth = getAuth(app)
 export const db = getFirestore(app)
 export const storage = getStorage(app)
 
-// NOTE: Firebase Performance Monitoring disabled due to network errors
-// To re-enable, uncomment the following:
-// import { getPerformance, type FirebasePerformance } from "firebase/performance"
-// let perf: FirebasePerformance | null = null
-// if (typeof window !== "undefined") {
-//   try { perf = getPerformance(app) } catch (err) { console.warn("Perf init failed:", err) }
-// }
-// export const performance = perf
+// Initialize Performance Monitoring (client-side only)
+// "Failed to fetch" console errors are from ad blockers - users without ad blockers will send data
+let perf: FirebasePerformance | null = null
+if (typeof window !== "undefined") {
+  try {
+    perf = getPerformance(app)
+  } catch {
+    // Silent fail - don't spam console
+  }
+}
+export const performance = perf
 
 export default app
