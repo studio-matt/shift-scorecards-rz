@@ -21,10 +21,14 @@ export const auth = getAuth(app)
 export const db = getFirestore(app)
 export const storage = getStorage(app)
 
-// Initialize Performance Monitoring (client-side only)
+// Initialize Performance Monitoring (client-side only, with error handling)
 let perf: FirebasePerformance | null = null
 if (typeof window !== "undefined") {
-  perf = getPerformance(app)
+  try {
+    perf = getPerformance(app)
+  } catch (err) {
+    console.warn("Firebase Performance Monitoring failed to initialize:", err)
+  }
 }
 export const performance = perf
 
