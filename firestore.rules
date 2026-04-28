@@ -1,17 +1,36 @@
+// ============================================================================
+// TEMPORARY FIRESTORE SECURITY RULES
+// ============================================================================
+// These rules enable login and basic functionality while the /userProfiles
+// mirror collection is being populated via the backfill script.
+//
+// After running the backfill script and verifying data, deploy the production
+// rules from firestore.rules.production instead.
+// ============================================================================
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Users collection - needed for login flow
-    // Users can read any user doc (to find their profile by authId)
-    // Users can only update their own profile (where authId matches their Firebase Auth UID)
+    // ─── userProfiles Collection (Mirror) ─────────────────────────────────
+    // Keyed by authUid - used for security rules lookups
+    // Read: user can read their own profile
+    // Write: only via server-side (admin SDK) or auth context on login
+    match /userProfiles/{authUid} {
+      allow read: if request.auth != null && request.auth.uid == authUid;
+      allow write: if request.auth != null && request.auth.uid == authUid;
+    }
+    
+    // ─── Users Collection ─────────────────────────────────────────────────
+    // Users can read any user doc (needed for login flow to find profile by authId)
+    // Users can only update their own profile (where authId matches)
     match /users/{userId} {
       allow read: if request.auth != null;
       allow update: if request.auth != null && resource.data.authId == request.auth.uid;
-      allow create, delete: if false; // Admins use server-side admin SDK for these
+      allow create, delete: if false; // Admin SDK only
     }
     
-    // Responses collection - users can read/write their own responses
+    // ─── Responses Collection ─────────────────────────────────────────────
     match /responses/{responseId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
@@ -19,31 +38,55 @@ service cloud.firestore {
       allow delete: if false;
     }
     
-    // Organizations - read-only for authenticated users
+    // ─── Organizations ────────────────────────────────────────────────────
     match /organizations/{orgId} {
       allow read: if request.auth != null;
       allow write: if false; // Admin SDK only
     }
     
-    // Templates - read-only for authenticated users
+    // ─── Templates ────────────────────────────────────────────────────────
     match /templates/{templateId} {
       allow read: if request.auth != null;
       allow write: if false; // Admin SDK only
     }
     
-    // Settings - read-only for authenticated users
+    // ─── Schedules ────────────────────────────────────────────────────────
+    match /schedules/{scheduleId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Admin SDK only
+    }
+    
+    // ─── Settings ─────────────────────────────────────────────────────────
     match /settings/{settingId} {
       allow read: if request.auth != null;
       allow write: if false; // Admin SDK only
     }
     
-    // Report history - read-only for authenticated users
-    match /reportHistory/{reportId} {
+    // ─── Invites ──────────────────────────────────────────────────────────
+    match /invites/{inviteId} {
       allow read: if request.auth != null;
       allow write: if false; // Admin SDK only
     }
     
-    // Deny all other collections by default
+    // ─── Report History ───────────────────────────────────────────────────
+    match /report_history/{reportId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Admin SDK only
+    }
+
+    // ─── Webinars ─────────────────────────────────────────────────────────
+    match /webinars/{webinarId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Admin SDK only
+    }
+
+    // ─── Scorecards ───────────────────────────────────────────────────────
+    match /scorecards/{scorecardId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Admin SDK only
+    }
+
+    // ─── Deny All Other Collections ───────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }

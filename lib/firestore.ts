@@ -21,6 +21,7 @@ import { db } from "./firebase"
 export const COLLECTIONS = {
   ORGANIZATIONS: "organizations",
   USERS: "users",
+  USER_PROFILES: "userProfiles", // Mirror collection keyed by authUid for security rules
   TEMPLATES: "templates",
   SCORECARDS: "scorecards",
   RESPONSES: "responses",
@@ -30,6 +31,20 @@ export const COLLECTIONS = {
   WEBINARS: "webinars",
   REPORT_HISTORY: "report_history",
 } as const
+
+// ─── UserProfile Mirror Type ──────────────────────────────────────────
+// Minimal fields needed for Firestore Security Rules lookups
+export interface UserProfileMirror {
+  authId: string
+  userDocId: string
+  role: string
+  organizationId: string
+  department: string
+  email: string
+  name: string
+  status: string
+  updatedAt: Date
+}
 
 // ─── Generic Helpers ──────────────────────────────────────────────────
 
@@ -196,4 +211,105 @@ export async function getPendingInvites(orgId: string) {
     where("organizationId", "==", orgId),
     where("status", "==", "pending"),
   )
+}
+
+// ─── UserProfile Mirror Helpers ───────────────────────────────────────
+// These maintain the /userProfiles/{authUid} mirror collection for security rules
+
+/**
+ * Upsert the userProfiles mirror document.
+ * Called on login and whenever user profile data changes.
+ * Document ID = Firebase Auth UID (authId) for predictable security rules.
+ */
+export async function upsertUserProfile(
+  authId: string,
+  userDocId: string,
+  userData: {
+    role?: string
+    organizationId?: string
+    department?: string
+    email?: string
+    firstName?: string
+    lastName?: string
+    status?: string
+  }
+): Promise<void> {
+  const name = `${userData.firstName || ""} ${userData.lastName || ""}`.trim()
+  
+  const profileData: Omit<UserProfileMirror, "updatedAt"> & { updatedAt: ReturnType<typeof serverTimestamp> } = {
+    authId,
+    userDocId,
+    role: userData.role || "user",
+    organizationId: userData.organizationId || "",
+    department: userData.department || "",
+    email: userData.email || "",
+    name,
+    status: userData.status || "active",
+    updatedAt: serverTimestamp(),
+  }
+  
+  // Use setDoc with merge to upsert
+  await setDoc(doc(db, COLLECTIONS.USER_PROFILES, authId), profileData, { merge: true })
+}
+
+/**
+ * Get a user profile mirror by auth ID.
+ * Useful for security rules and quick lookups.
+ */
+export async function getUserProfile(authId: string): Promise<UserProfileMirror | null> {
+  const docSnap = await getDoc(doc(db, COLLECTIONS.USER_PROFILES, authId))
+  if (!docSnap.exists()) return null
+  return docSnap.data() as UserProfileMirror
+}
+
+/**
+ * Sync user profile mirror after updating user data.
+ * Call this after any updateDocument(COLLECTIONS.USERS, ...) that changes
+ * fields relevant to security rules (role, organizationId, department, status).
+ * 
+ * @param authId - Firebase Auth UID
+ * @param userDocId - The /users document ID
+ * @param updatedFields - The fields that were updated (partial)
+ */
+export async function syncUserProfileMirror(
+  authId: string,
+  userDocId: string,
+  updatedFields: Partial<{
+    role: string
+    organizationId: string
+    department: string
+    email: string
+    firstName: string
+    lastName: string
+    status: string
+  }>
+): Promise<void> {
+  // Only sync if security-relevant fields were updated
+  const relevantFields = ["role", "organizationId", "department", "email", "firstName", "lastName", "status"]
+  const hasRelevantUpdate = Object.keys(updatedFields).some((k) => relevantFields.includes(k))
+  
+  if (!hasRelevantUpdate) return
+  
+  // Build the update object with only the fields that were changed
+  const updateData: Record<string, unknown> = {
+    updatedAt: serverTimestamp(),
+  }
+  
+  if (updatedFields.role !== undefined) updateData.role = updatedFields.role
+  if (updatedFields.organizationId !== undefined) updateData.organizationId = updatedFields.organizationId
+  if (updatedFields.department !== undefined) updateData.department = updatedFields.department
+  if (updatedFields.email !== undefined) updateData.email = updatedFields.email
+  if (updatedFields.status !== undefined) updateData.status = updatedFields.status
+  
+  // Handle name (combined from firstName + lastName)
+  if (updatedFields.firstName !== undefined || updatedFields.lastName !== undefined) {
+    // We need to fetch current values to combine
+    const existingProfile = await getUserProfile(authId)
+    const firstName = updatedFields.firstName ?? existingProfile?.name?.split(" ")[0] ?? ""
+    const lastName = updatedFields.lastName ?? existingProfile?.name?.split(" ").slice(1).join(" ") ?? ""
+    updateData.name = `${firstName} ${lastName}`.trim()
+  }
+  
+  // Use setDoc with merge to update only changed fields
+  await setDoc(doc(db, COLLECTIONS.USER_PROFILES, authId), updateData, { merge: true })
 }

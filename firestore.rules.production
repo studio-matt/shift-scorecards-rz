@@ -1,0 +1,201 @@
+// ============================================================================
+// PRODUCTION FIRESTORE SECURITY RULES
+// ============================================================================
+// These rules use the /userProfiles/{authUid} mirror collection to enforce
+// role-based and organization-scoped access control.
+//
+// DO NOT deploy automatically. Review and test thoroughly first.
+//
+// Key design:
+// - /userProfiles/{authUid} is keyed by Firebase Auth UID for predictable lookups
+// - Users can only read/write their own profile (where authId matches)
+// - company_admin can access data within their organization
+// - admin (super admin) has global access
+// ============================================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ─── Helper Functions ─────────────────────────────────────────────────
+    
+    // Get the authenticated user's profile from the mirror collection
+    function getUserProfile() {
+      return get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data;
+    }
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if user is a super admin (role = "admin")
+    function isSuperAdmin() {
+      return isAuthenticated() && getUserProfile().role == "admin";
+    }
+    
+    // Check if user is a company admin (role = "company_admin")
+    function isCompanyAdmin() {
+      return isAuthenticated() && getUserProfile().role == "company_admin";
+    }
+    
+    // Check if user is any admin type
+    function isAnyAdmin() {
+      return isSuperAdmin() || isCompanyAdmin();
+    }
+    
+    // Check if user belongs to a specific organization
+    function belongsToOrg(orgId) {
+      return isAuthenticated() && getUserProfile().organizationId == orgId;
+    }
+    
+    // Check if user can access org-scoped data (super admin OR same org)
+    function canAccessOrg(orgId) {
+      return isSuperAdmin() || belongsToOrg(orgId);
+    }
+    
+    // ─── userProfiles Collection ──────────────────────────────────────────
+    // Mirror collection keyed by authUid - used for security rules lookups
+    // Only the user themselves can read their profile (via auth.uid == docId)
+    match /userProfiles/{authUid} {
+      // Users can read their own profile
+      allow read: if isAuthenticated() && request.auth.uid == authUid;
+      
+      // Only server-side (admin SDK) or the auth context can write
+      // Client writes are blocked - updates happen via server functions
+      allow write: if false;
+    }
+    
+    // ─── Users Collection ─────────────────────────────────────────────────
+    // Main user data - document IDs are NOT the auth UID
+    match /users/{userId} {
+      // Users can read their own user doc (where authId matches)
+      // Admins can read all users
+      // Company admins can read users in their org
+      allow read: if isAuthenticated() && (
+        resource.data.authId == request.auth.uid ||
+        isSuperAdmin() ||
+        (isCompanyAdmin() && resource.data.organizationId == getUserProfile().organizationId)
+      );
+      
+      // Users can update their own profile (limited fields)
+      // Admins can update any user
+      allow update: if isAuthenticated() && (
+        (resource.data.authId == request.auth.uid) ||
+        isSuperAdmin()
+      );
+      
+      // Only super admins can create/delete users
+      allow create, delete: if isSuperAdmin();
+    }
+    
+    // ─── Responses Collection ─────────────────────────────────────────────
+    // Scorecard responses - users can only access their own or org-scoped data
+    match /responses/{responseId} {
+      // Users can read their own responses
+      // Admins can read all responses
+      // Company admins can read responses in their org
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isSuperAdmin() ||
+        (isCompanyAdmin() && resource.data.organizationId == getUserProfile().organizationId)
+      );
+      
+      // Users can create responses (with their userId)
+      allow create: if isAuthenticated();
+      
+      // Users can update their own responses only
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      
+      // Only super admins can delete responses
+      allow delete: if isSuperAdmin();
+    }
+    
+    // ─── Organizations Collection ─────────────────────────────────────────
+    match /organizations/{orgId} {
+      // Users can read their own org, admins can read all
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        getUserProfile().organizationId == orgId
+      );
+      
+      // Only super admins can write
+      allow write: if isSuperAdmin();
+    }
+    
+    // ─── Templates Collection ─────────────────────────────────────────────
+    match /templates/{templateId} {
+      // All authenticated users can read templates
+      allow read: if isAuthenticated();
+      
+      // Only super admins can write
+      allow write: if isSuperAdmin();
+    }
+    
+    // ─── Schedules Collection ─────────────────────────────────────────────
+    match /schedules/{scheduleId} {
+      // All authenticated users can read schedules
+      allow read: if isAuthenticated();
+      
+      // Only super admins can write
+      allow write: if isSuperAdmin();
+    }
+    
+    // ─── Settings Collection ──────────────────────────────────────────────
+    match /settings/{settingId} {
+      // All authenticated users can read settings
+      allow read: if isAuthenticated();
+      
+      // Only super admins can write
+      allow write: if isSuperAdmin();
+    }
+    
+    // ─── Invites Collection ───────────────────────────────────────────────
+    match /invites/{inviteId} {
+      // Admins can read invites for their org, super admins can read all
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        (isCompanyAdmin() && resource.data.organizationId == getUserProfile().organizationId)
+      );
+      
+      // Any admin can create invites
+      allow create: if isAnyAdmin();
+      
+      // Any admin can update/delete invites in their org
+      allow update, delete: if isAuthenticated() && (
+        isSuperAdmin() ||
+        (isCompanyAdmin() && resource.data.organizationId == getUserProfile().organizationId)
+      );
+    }
+    
+    // ─── Report History Collection ────────────────────────────────────────
+    match /report_history/{reportId} {
+      // Only admins can access report history
+      allow read: if isAnyAdmin();
+      allow write: if isSuperAdmin();
+    }
+    
+    // ─── Webinars Collection ──────────────────────────────────────────────
+    match /webinars/{webinarId} {
+      // All authenticated users can read webinars
+      allow read: if isAuthenticated();
+      
+      // Only super admins can write
+      allow write: if isSuperAdmin();
+    }
+    
+    // ─── Scorecards Collection ────────────────────────────────────────────
+    match /scorecards/{scorecardId} {
+      // All authenticated users can read scorecards
+      allow read: if isAuthenticated();
+      
+      // Only super admins can write
+      allow write: if isSuperAdmin();
+    }
+    
+    // ─── Deny All Other Collections ───────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

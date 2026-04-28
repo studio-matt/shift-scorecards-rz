@@ -4,7 +4,7 @@ import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
-import { getDocument, updateDocument, getOrganizations, getDocuments, COLLECTIONS } from "@/lib/firestore"
+import { getDocument, updateDocument, syncUserProfileMirror, getOrganizations, getDocuments, COLLECTIONS } from "@/lib/firestore"
 import { fetchAllResponses, type RawResponse } from "@/lib/dashboard-data"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -165,6 +165,18 @@ export default function EditUserProfilePage({ params }: { params: Promise<{ id: 
         role,
         organizationId,
       })
+      
+      // Sync the userProfiles mirror for security rules
+      if (userData?.authId) {
+        await syncUserProfileMirror(userData.authId, userId, {
+          firstName,
+          lastName,
+          department,
+          role,
+          organizationId,
+        })
+      }
+      
       router.push("/admin/users")
     } catch (err) {
       console.error("Failed to save user:", err)
