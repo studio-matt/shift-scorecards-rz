@@ -334,8 +334,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   if (!verifyAuth(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+  return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
   }
+  
+  // Debug: Check if env var is available
+  const hasKey = !!process.env.FIREBASE_SERVICE_ACCOUNT_KEY
+  const keyLength = process.env.FIREBASE_SERVICE_ACCOUNT_KEY?.length || 0
+  console.log(`[Aggregate POST] FIREBASE_SERVICE_ACCOUNT_KEY exists: ${hasKey}, length: ${keyLength}`)
   
   const url = new URL(request.url)
   const targetDate = url.searchParams.get("date") || undefined
