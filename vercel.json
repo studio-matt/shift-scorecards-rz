@@ -1,4 +1,10 @@
 {
   "installCommand": "rm -f node_modules 2>/dev/null; npx pnpm@9.15.4 install",
-  "buildCommand": "npx pnpm@9.15.4 run build"
+  "buildCommand": "npx pnpm@9.15.4 run build",
+  "crons": [
+    {
+      "path": "/api/cron/aggregate-responses",
+      "schedule": "0 * * * *"
+    }
+  ]
 }
