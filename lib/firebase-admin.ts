@@ -32,7 +32,16 @@ function initializeAdmin(): App {
   }
 
   try {
-    const serviceAccount = JSON.parse(serviceAccountKey)
+    // Try to parse as JSON first, then as base64-encoded JSON
+    let jsonString = serviceAccountKey
+    
+    // If it doesn't start with '{', assume it's base64 encoded
+    if (!serviceAccountKey.trim().startsWith('{')) {
+      console.log(`[Firebase Admin] Key appears to be base64 encoded, decoding...`)
+      jsonString = Buffer.from(serviceAccountKey, 'base64').toString('utf8')
+    }
+    
+    const serviceAccount = JSON.parse(jsonString)
     console.log(`[Firebase Admin] Successfully parsed service account for project: ${serviceAccount.project_id}`)
     return initializeApp({
       credential: cert(serviceAccount),
