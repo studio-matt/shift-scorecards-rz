@@ -22,15 +22,26 @@ import { collection, getDocs, deleteDoc, doc, query, where } from "firebase/fire
 const ROB_LEVINE_ORG_ID = "n1pjEpYGFxOqdsByYE0w"
 
 // Verify authorization via secret header
-function verifyAuth(request: Request): boolean {
+function verifyAuth(request: Request): { authorized: boolean; reason?: string } {
   const secretHeader = request.headers.get("X-Backfill-Secret")
   const envSecret = process.env.BACKFILL_SECRET
-  return !!(envSecret && secretHeader && secretHeader === envSecret)
+  
+  if (!envSecret) {
+    return { authorized: false, reason: "BACKFILL_SECRET env var not configured on server" }
+  }
+  if (!secretHeader) {
+    return { authorized: false, reason: "Missing X-Backfill-Secret header" }
+  }
+  if (secretHeader !== envSecret) {
+    return { authorized: false, reason: "Secret does not match" }
+  }
+  return { authorized: true }
 }
 
 export async function GET(request: NextRequest) {
-  if (!verifyAuth(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+  const auth = verifyAuth(request)
+  if (!auth.authorized) {
+    return NextResponse.json({ error: "Unauthorized", reason: auth.reason }, { status: 403 })
   }
 
   const orgId = request.nextUrl.searchParams.get("orgId")
@@ -109,8 +120,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!verifyAuth(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+  const auth = verifyAuth(request)
+  if (!auth.authorized) {
+    return NextResponse.json({ error: "Unauthorized", reason: auth.reason }, { status: 403 })
   }
 
   const orgId = request.nextUrl.searchParams.get("orgId")
