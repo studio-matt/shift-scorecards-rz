@@ -1,6 +1,7 @@
 /**
  * Firebase Admin SDK initialization for server-side operations
  * Used for operations that require elevated privileges like deleting users from Firebase Auth
+ * Last updated: 2026-04-28 to fix env var loading
  */
 
 import { initializeApp, cert, getApps, getApp, type App } from "firebase-admin/app"
