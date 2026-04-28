@@ -237,6 +237,13 @@ export default function PreviousScorecardsPage() {
         }
       })
       
+      // Debug: Log org IDs in responses vs organizations
+      const responseOrgIds = new Set(allResponses.map(r => r.organizationId))
+      const knownOrgIds = new Set(orgsList.map(o => o.id))
+      console.log("[v0] Organizations in /organizations collection:", orgsList.map(o => ({ id: o.id, name: o.name })))
+      console.log("[v0] Organization IDs found in responses:", Array.from(responseOrgIds))
+      console.log("[v0] Response org IDs NOT in organizations collection:", Array.from(responseOrgIds).filter(id => !knownOrgIds.has(id)))
+      
       // Filter responses based on user role:
       // - Super admins see all responses (aggregated by org)
       // - Admin/company_admin see their org's responses (aggregated)
