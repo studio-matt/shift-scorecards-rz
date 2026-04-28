@@ -17,12 +17,22 @@ function initializeAdmin(): App {
   }
 
   const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
+  
+  // Debug: log first 50 chars to verify env var is set (not the full key for security)
+  console.log(`[Firebase Admin] FIREBASE_SERVICE_ACCOUNT_KEY exists: ${!!serviceAccountKey}`)
+  console.log(`[Firebase Admin] FIREBASE_SERVICE_ACCOUNT_KEY length: ${serviceAccountKey?.length || 0}`)
+  console.log(`[Firebase Admin] FIREBASE_SERVICE_ACCOUNT_KEY starts with: ${serviceAccountKey?.substring(0, 20) || 'N/A'}...`)
+  
   if (!serviceAccountKey) {
+    // List all env vars that start with FIREBASE to help debug
+    const firebaseEnvVars = Object.keys(process.env).filter(k => k.includes('FIREBASE'))
+    console.log(`[Firebase Admin] Available FIREBASE env vars: ${firebaseEnvVars.join(', ') || 'none'}`)
     throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set")
   }
 
   try {
     const serviceAccount = JSON.parse(serviceAccountKey)
+    console.log(`[Firebase Admin] Successfully parsed service account for project: ${serviceAccount.project_id}`)
     return initializeApp({
       credential: cert(serviceAccount),
     })
