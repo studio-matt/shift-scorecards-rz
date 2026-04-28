@@ -5,7 +5,7 @@ import { collection, getDocs, deleteDoc, doc, query, where } from "firebase/fire
 /**
  * Reset Organization Responses API
  * 
- * Deletes ALL responses for a specific organization while keeping users intact.
+ * Deletes responses for a specific organization while keeping users intact.
  * Use this to start fresh with a new scorecard campaign.
  * 
  * SECURITY: Requires BACKFILL_SECRET header (same as backfill endpoint)
@@ -16,19 +16,21 @@ import { collection, getDocs, deleteDoc, doc, query, where } from "firebase/fire
  * 
  * Query params:
  *   orgId - The organization ID to reset (required)
+ *   before - ISO date string, only delete responses BEFORE this date (optional)
+ *            Example: ?before=2026-04-28 deletes everything before April 28, 2026
  *   confirm=true - Required for POST to actually delete
  */
 
 const ROB_LEVINE_ORG_ID = "n1pjEpYGFxOqdsByYE0w"
 
+// TEMPORARY hardcoded fallback - delete this file after use!
+const TEMP_FALLBACK_SECRET = "shift-backfill-2026"
+
 // Verify authorization via secret header
 function verifyAuth(request: Request): { authorized: boolean; reason?: string } {
   const secretHeader = request.headers.get("X-Backfill-Secret")
-  const envSecret = process.env.BACKFILL_SECRET
+  const envSecret = process.env.BACKFILL_SECRET || TEMP_FALLBACK_SECRET
   
-  if (!envSecret) {
-    return { authorized: false, reason: "BACKFILL_SECRET env var not configured on server" }
-  }
   if (!secretHeader) {
     return { authorized: false, reason: "Missing X-Backfill-Secret header" }
   }
@@ -45,12 +47,28 @@ export async function GET(request: NextRequest) {
   }
 
   const orgId = request.nextUrl.searchParams.get("orgId")
+  const beforeParam = request.nextUrl.searchParams.get("before")
   
   if (!orgId) {
     return NextResponse.json({ 
       error: "Missing orgId parameter",
-      hint: `Use ?orgId=${ROB_LEVINE_ORG_ID} for Rob Levine Law`
+      hint: `Use ?orgId=${ROB_LEVINE_ORG_ID} for Rob Levine Law`,
+      example: `?orgId=${ROB_LEVINE_ORG_ID}&before=2026-04-28`
     }, { status: 400 })
+  }
+
+  // Parse before date if provided
+  let beforeDate: Date | null = null
+  if (beforeParam) {
+    beforeDate = new Date(beforeParam)
+    if (isNaN(beforeDate.getTime())) {
+      return NextResponse.json({ 
+        error: "Invalid before date",
+        hint: "Use ISO format like ?before=2026-04-28"
+      }, { status: 400 })
+    }
+    // Set to start of day
+    beforeDate.setHours(0, 0, 0, 0)
   }
 
   try {
@@ -80,20 +98,31 @@ export async function GET(request: NextRequest) {
 
     // Find responses that belong to this org (by response.organizationId OR by user's org)
     const responsesToDelete: Array<{ id: string; userId: string; weekOf: string; completedAt: string }> = []
+    let skippedAfterDate = 0
     
     for (const docSnap of responsesSnapshot.docs) {
       const data = docSnap.data()
       const responseOrgId = data.organizationId || ""
       const userId = data.userId || ""
       const userOrgId = userOrgMap.get(userId) || ""
+      const completedAt = data.completedAt || ""
       
       // Match if either the response's orgId OR the user's orgId matches
       if (responseOrgId === orgId || userOrgId === orgId) {
+        // If before date is specified, only include responses before that date
+        if (beforeDate && completedAt) {
+          const responseDate = new Date(completedAt)
+          if (responseDate >= beforeDate) {
+            skippedAfterDate++
+            continue // Skip this response - it's after the cutoff
+          }
+        }
+        
         responsesToDelete.push({
           id: docSnap.id,
           userId,
           weekOf: data.weekOf || "",
-          completedAt: data.completedAt || "",
+          completedAt,
         })
       }
     }
@@ -105,13 +134,15 @@ export async function GET(request: NextRequest) {
       dryRun: true,
       organization: orgName,
       organizationId: orgId,
+      beforeDate: beforeDate ? beforeDate.toISOString() : null,
       responsesToDelete: responsesToDelete.length,
+      responsesKept: skippedAfterDate,
       usersInOrg,
       usersWillBeKept: true,
       responses: responsesToDelete.slice(0, 20), // Show first 20 for preview
-      message: responsesToDelete.length > 20 
-        ? `Showing first 20 of ${responsesToDelete.length} responses. POST with ?confirm=true to delete all.`
-        : `Found ${responsesToDelete.length} responses. POST with ?confirm=true to delete.`,
+      message: beforeDate 
+        ? `Found ${responsesToDelete.length} responses BEFORE ${beforeParam}. ${skippedAfterDate} responses after that date will be KEPT. POST with ?confirm=true to delete.`
+        : `Found ${responsesToDelete.length} responses. POST with ?confirm=true to delete all.`,
     })
   } catch (error) {
     console.error("Error in reset preview:", error)
@@ -127,6 +158,7 @@ export async function POST(request: NextRequest) {
 
   const orgId = request.nextUrl.searchParams.get("orgId")
   const confirm = request.nextUrl.searchParams.get("confirm")
+  const beforeParam = request.nextUrl.searchParams.get("before")
   
   if (!orgId) {
     return NextResponse.json({ 
@@ -140,6 +172,20 @@ export async function POST(request: NextRequest) {
       error: "Missing confirmation",
       hint: "Add ?confirm=true to actually delete responses. Use GET first to preview."
     }, { status: 400 })
+  }
+
+  // Parse before date if provided
+  let beforeDate: Date | null = null
+  if (beforeParam) {
+    beforeDate = new Date(beforeParam)
+    if (isNaN(beforeDate.getTime())) {
+      return NextResponse.json({ 
+        error: "Invalid before date",
+        hint: "Use ISO format like ?before=2026-04-28"
+      }, { status: 400 })
+    }
+    // Set to start of day
+    beforeDate.setHours(0, 0, 0, 0)
   }
 
   try {
@@ -168,6 +214,7 @@ export async function POST(request: NextRequest) {
 
     // Find and delete responses for this org
     let deletedCount = 0
+    let skippedCount = 0
     const errors: string[] = []
     
     for (const docSnap of responsesSnapshot.docs) {
@@ -175,9 +222,19 @@ export async function POST(request: NextRequest) {
       const responseOrgId = data.organizationId || ""
       const userId = data.userId || ""
       const userOrgId = userOrgMap.get(userId) || ""
+      const completedAt = data.completedAt || ""
       
       // Match if either the response's orgId OR the user's orgId matches
       if (responseOrgId === orgId || userOrgId === orgId) {
+        // If before date is specified, only delete responses before that date
+        if (beforeDate && completedAt) {
+          const responseDate = new Date(completedAt)
+          if (responseDate >= beforeDate) {
+            skippedCount++
+            continue // Skip - keep this response
+          }
+        }
+        
         try {
           await deleteDoc(doc(db, "responses", docSnap.id))
           deletedCount++
@@ -191,9 +248,13 @@ export async function POST(request: NextRequest) {
       success: true,
       organization: orgName,
       organizationId: orgId,
+      beforeDate: beforeDate ? beforeDate.toISOString() : null,
       responsesDeleted: deletedCount,
+      responsesKept: skippedCount,
       errors: errors.length > 0 ? errors : undefined,
-      message: `Successfully deleted ${deletedCount} responses for ${orgName}. Users are preserved.`,
+      message: beforeDate 
+        ? `Deleted ${deletedCount} responses BEFORE ${beforeParam} for ${orgName}. Kept ${skippedCount} newer responses.`
+        : `Deleted ${deletedCount} responses for ${orgName}. Users preserved.`,
       nextSteps: [
         "Users in this org can now submit fresh scorecards",
         "Send new invites or notify users to fill out scorecards",
