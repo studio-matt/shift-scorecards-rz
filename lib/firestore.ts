@@ -52,8 +52,13 @@ export async function getDocument<T = DocumentData>(
   collectionName: string,
   docId: string,
 ): Promise<(T & { id: string }) | null> {
+  const start = performance.now()
   const docRef = doc(db, collectionName, docId)
   const docSnap = await getDoc(docRef)
+  const elapsed = performance.now() - start
+  if (elapsed > 100) {
+    console.warn(`[Firestore] SLOW getDocument(${collectionName}/${docId}): ${elapsed.toFixed(0)}ms`)
+  }
   if (!docSnap.exists()) return null
   return { id: docSnap.id, ...docSnap.data() } as T & { id: string }
 }
@@ -62,8 +67,14 @@ export async function getDocuments<T = DocumentData>(
   collectionName: string,
   ...constraints: QueryConstraint[]
 ): Promise<(T & { id: string })[]> {
+  const start = performance.now()
   const q = query(collection(db, collectionName), ...constraints)
   const snapshot = await getDocs(q)
+  const elapsed = performance.now() - start
+  const count = snapshot.docs.length
+  if (elapsed > 200 || count > 100) {
+    console.warn(`[Firestore] SLOW getDocuments(${collectionName}): ${elapsed.toFixed(0)}ms, ${count} docs`)
+  }
   return snapshot.docs.map(
     (d) => ({ id: d.id, ...d.data() }) as T & { id: string },
   )
