@@ -25,6 +25,7 @@ import {
   Timestamp
 } from "firebase/firestore"
 import { db } from "./firebase"
+import type { Firestore as AdminFirestore } from "firebase-admin/firestore"
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -223,7 +224,7 @@ export function sumAggregates(aggregates: DailyAggregate[]): {
 // ── Write Operations ──────────────────────────────────────────────────
 
 /**
- * Save an aggregate document
+ * Save an aggregate document (client-side)
  */
 export async function saveAggregate(aggregate: DailyAggregate): Promise<void> {
   const docId = buildAggregateId(
@@ -234,6 +235,26 @@ export async function saveAggregate(aggregate: DailyAggregate): Promise<void> {
   )
   const docRef = doc(db, AGGREGATES_COLLECTION, docId)
   await setDoc(docRef, {
+    ...aggregate,
+    lastUpdatedAt: new Date().toISOString(),
+  })
+}
+
+/**
+ * Save an aggregate document using Admin SDK (server-side)
+ * This bypasses security rules and should only be used in server contexts
+ */
+export async function saveAggregateAdmin(
+  adminDb: AdminFirestore,
+  aggregate: DailyAggregate
+): Promise<void> {
+  const docId = buildAggregateId(
+    aggregate.date,
+    aggregate.organizationId,
+    aggregate.department,
+    aggregate.userId
+  )
+  await adminDb.collection(AGGREGATES_COLLECTION).doc(docId).set({
     ...aggregate,
     lastUpdatedAt: new Date().toISOString(),
   })
