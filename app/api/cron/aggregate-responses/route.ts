@@ -225,9 +225,8 @@ async function processResponses(
           
           if (!aggregatesMap.has(key)) {
             // Try to load existing aggregate from DB
-            const docRef = doc(db, "aggregates", key)
-            const existing = await getDoc(docRef)
-            if (existing.exists()) {
+            const existing = await adminDb.collection("aggregates").doc(key).get()
+            if (existing.exists) {
               aggregatesMap.set(key, existing.data() as DailyAggregate)
             } else {
               aggregatesMap.set(key, createEmptyAggregate(
