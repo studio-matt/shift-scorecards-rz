@@ -1,0 +1,1 @@
+Production (scorecard.envoydesign.com) runs on Firebase App Hosting. The `vercel.json` `crons` array is not executed for that deployment. Scheduled aggregation is Google Cloud Scheduler HTTPS POST to `/api/cron/aggregate-responses` with `Authorization: Bearer <CRON_SECRET>` matching App Hosting. Do not rely on Vercel Cron for this product.

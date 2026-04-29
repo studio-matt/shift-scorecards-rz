@@ -37,11 +37,10 @@ import {
   createDocument,
   updateDocument,
   deleteDocument,
-  getDocuments,
+  getUserResponsesUnordered,
   COLLECTIONS,
 } from "@/lib/firestore"
 import {
-  fetchAllResponses,
   computePersonalBenchmark,
   computePersonalTrend,
 } from "@/lib/dashboard-data"
@@ -121,7 +120,7 @@ export default function ScorecardPage() {
           
           // Check for existing response (draft or completed) for this user + release
           if (user?.id) {
-            const allResponses = await getDocuments(COLLECTIONS.RESPONSES)
+            const allResponses = await getUserResponsesUnordered(user.id, 2000)
             
             // First check if user already COMPLETED this release
             const existingCompleted = allResponses.find((r) => {
@@ -945,9 +944,10 @@ const [loading, setLoading] = useState(true)
             : 0
 
         // 2. Fetch historical data for trend + benchmark
-        const allResponses = await fetchAllResponses()
-        const trend = computePersonalTrend(allResponses, userId)
-        const bench = computePersonalBenchmark(allResponses, userId)
+        const allResponses = await getUserResponsesUnordered(userId, 5000)
+        const allRaw = allResponses as unknown as import("@/lib/dashboard-data").RawResponse[]
+        const trend = computePersonalTrend(allRaw, userId)
+        const bench = computePersonalBenchmark(allRaw, userId)
         
         // Get previous hours from last submission
         const myResponses = allResponses.filter(r => r.userId === userId)

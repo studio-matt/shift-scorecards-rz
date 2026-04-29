@@ -1,26 +1,28 @@
 import { NextResponse } from "next/server"
 import { getDocuments, createDocument, COLLECTIONS } from "@/lib/firestore"
+import { loadResponsesForWeeklyOrg } from "@/lib/reporting-responses"
 import {
-  fetchAllResponses,
+  findTimeSavingQuestionIds,
+  findTimeSavingMinutesQuestionIds,
+  findConfidenceQuestionIds,
   computeOrgHoursMetrics,
   computeStreaks,
   computeNonResponders,
   computeTopPerformers,
 } from "@/lib/dashboard-data"
 import { getEmailSettings, getEmailTemplate, sendEmail } from "@/lib/email-service"
-import type { Organization, User, NotificationPreferences, DEFAULT_NOTIFICATION_PREFERENCES } from "@/lib/types"
+import type { Organization, User } from "@/lib/types"
 
-interface ReportRecipient {
-  user: User
-  organizationId: string
-  organizationName: string
-}
+const DEFAULT_APP_URL = "https://scorecard.envoydesign.com"
 
 // Send weekly leadership reports to admins
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { organizationId, type = "leadership" } = body as { organizationId?: string; type?: "leadership" | "user_digest" }
+    const { organizationId, type = "leadership" } = body as {
+      organizationId?: string
+      type?: "leadership" | "user_digest"
+    }
 
     // Get email settings
     const emailSettings = await getEmailSettings()
@@ -31,19 +33,16 @@ export async function POST(request: Request) {
     // Load organizations
     const orgDocs = await getDocuments(COLLECTIONS.ORGANIZATIONS)
     const organizations = orgDocs.map((d) => ({ ...d } as unknown as Organization))
-    
+
     // Filter to specific org if provided
-    const targetOrgs = organizationId 
-      ? organizations.filter(o => o.id === organizationId)
+    const targetOrgs = organizationId
+      ? organizations.filter((o) => o.id === organizationId)
       : organizations
 
     // Load all users
     const userDocs = await getDocuments(COLLECTIONS.USERS)
     const allUsers = userDocs.map((d) => ({ ...d } as unknown as User))
 
-    // Get templates
-    const templates = await getDocuments(COLLECTIONS.TEMPLATES)
-    
     const results: { sent: number; failed: number; errors: string[] } = {
       sent: 0,
       failed: 0,
@@ -60,68 +59,86 @@ export async function POST(request: Request) {
       for (const org of targetOrgs) {
         try {
           // Find admin users for this org who have leadership reports enabled
-          const orgAdmins = allUsers.filter(u => 
-            u.organizationId === org.id && 
-            (u.role === "admin" || u.role === "company_admin") &&
-            (u.notificationPreferences?.leadershipReport !== false) // Default to true
+          const orgAdmins = allUsers.filter(
+            (u) =>
+              u.organizationId === org.id &&
+              (u.role === "admin" || u.role === "company_admin") &&
+              u.notificationPreferences?.leadershipReport !== false, // Default to true
           )
 
           if (orgAdmins.length === 0) continue
 
-          // Compute metrics for this org
-          const responses = await fetchAllResponses(org.id, "all")
-          const hoursMetrics = await computeOrgHoursMetrics(responses, templates, org.hourlyRate || 100)
-          const topPerformers = await computeTopPerformers(responses, allUsers, templates)
-          const nonResponders = await computeNonResponders(responses, allUsers, [org])
+          const responses = await loadResponsesForWeeklyOrg(org.id)
+          const [timeSavingIds, minutesSavingIds, confidenceIds] = await Promise.all([
+            findTimeSavingQuestionIds(),
+            findTimeSavingMinutesQuestionIds(),
+            findConfidenceQuestionIds(),
+          ])
+          const hoursMetrics = computeOrgHoursMetrics(
+            responses,
+            timeSavingIds,
+            confidenceIds,
+            org.hourlyRate || 100,
+            minutesSavingIds,
+          )
+          const topPerformers = await computeTopPerformers(responses)
+          const nonResponders = await computeNonResponders(responses, org.id)
 
-          // Get current week
           const now = new Date()
           const weekStart = new Date(now)
           weekStart.setDate(now.getDate() - now.getDay())
-          const weekOf = weekStart.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+          const weekOf = weekStart.toLocaleDateString("en-US", {
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+          })
 
-          // Build top performers list HTML
-          const topPerformersList = topPerformers.slice(0, 5).map((p, i) => 
-            `<p style="margin: 4px 0; color: #555;">${i + 1}. ${p.name} - ${p.hoursSaved.toFixed(1)} hours saved</p>`
-          ).join("") || "<p style='color: #999;'>No data yet</p>"
+          const topPerformersList =
+            topPerformers
+              .slice(0, 5)
+              .map(
+                (p, i) =>
+                  `<p style="margin: 4px 0; color: #555;">${i + 1}. ${p.name} — ${p.avgScore.toFixed(1)} mo. hrs (equiv.)</p>`,
+              )
+              .join("") || "<p style='color: #999;'>No data yet</p>"
 
-          // Build non-responders list HTML
-          const orgNonResponders = nonResponders.filter(n => {
-            const u = allUsers.find(usr => usr.id === n.userId)
+          const orgNonResponders = nonResponders.filter((n) => {
+            const u = allUsers.find((usr) => usr.id === n.userId)
             return u?.organizationId === org.id
           })
-          const nonRespondersList = orgNonResponders.slice(0, 5).map(n => 
-            `<p style="margin: 4px 0; color: #555;">• ${n.name} (${n.department})</p>`
-          ).join("") || "<p style='color: #22c55e;'>Everyone responded!</p>"
+          const nonRespondersList =
+            orgNonResponders
+              .slice(0, 5)
+              .map((n) => `<p style="margin: 4px 0; color: #555;">• ${n.name} (${n.department})</p>`)
+              .join("") || "<p style='color: #22c55e;'>Everyone responded!</p>"
 
-          // Calculate participation
-          const orgUsers = allUsers.filter(u => u.organizationId === org.id)
-          const respondedUserIds = new Set(responses.map(r => r.userId))
-          const activeParticipants = orgUsers.filter(u => respondedUserIds.has(u.id)).length
-          const participationRate = orgUsers.length > 0 ? (activeParticipants / orgUsers.length) * 100 : 0
+          const orgUsers = allUsers.filter((u) => u.organizationId === org.id)
+          const respondedUserIds = new Set(responses.map((r) => r.userId))
+          const activeParticipants = orgUsers.filter((u) => respondedUserIds.has(u.id)).length
+          const participationRate =
+            orgUsers.length > 0 ? (activeParticipants / orgUsers.length) * 100 : 0
 
-          // Build variables for template
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || DEFAULT_APP_URL
           const variables = {
             organizationName: org.name,
             weekOf,
             totalHoursSaved: hoursMetrics.totalHoursSaved.toFixed(0),
             productivityGain: hoursMetrics.avgProductivityPercent.toFixed(1),
             participationRate: participationRate.toFixed(0),
-            periodValue: hoursMetrics.periodValue.toLocaleString(),
+            periodValue: hoursMetrics.monthlyValue.toLocaleString(),
             topPerformersList,
             nonRespondersCount: String(orgNonResponders.length),
             nonRespondersList,
-            reportLink: `${process.env.NEXT_PUBLIC_APP_URL || "https://shift-app.vercel.app"}/admin/reports`,
+            reportLink: `${baseUrl}/admin/reports`,
           }
 
-          // Send to each admin
           const sentEmails: string[] = []
           for (const admin of orgAdmins) {
             try {
               await sendEmail({
                 to: admin.email,
                 templateType: "leadership_report",
-                variables: {
+                data: {
                   ...variables,
                   firstName: admin.firstName,
                 },
@@ -133,8 +150,7 @@ export async function POST(request: Request) {
               results.errors.push(`Failed to send to ${admin.email}: ${err}`)
             }
           }
-          
-          // Save to report history
+
           try {
             await createDocument(COLLECTIONS.REPORT_HISTORY, {
               organizationId: org.id,
@@ -159,53 +175,55 @@ export async function POST(request: Request) {
         }
       }
     } else if (type === "user_digest") {
-      // Send user weekly digests
       const template = await getEmailTemplate("weekly_digest")
       if (!template?.enabled) {
         return NextResponse.json({ error: "Weekly digest template is disabled" }, { status: 400 })
       }
 
-      // Get current week
       const now = new Date()
       const weekStart = new Date(now)
       weekStart.setDate(now.getDate() - now.getDay())
-      const weekOf = weekStart.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+      const weekOf = weekStart.toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      })
+
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || DEFAULT_APP_URL
 
       for (const org of targetOrgs) {
         try {
-          const orgUsers = allUsers.filter(u => 
-            u.organizationId === org.id &&
-            (u.notificationPreferences?.weeklyDigest !== false) // Default to true
+          const orgUsers = allUsers.filter(
+            (u) =>
+              u.organizationId === org.id && u.notificationPreferences?.weeklyDigest !== false,
           )
 
           if (orgUsers.length === 0) continue
 
-          // Compute org data
-          const responses = await fetchAllResponses(org.id, "all")
-          const topPerformers = await computeTopPerformers(responses, allUsers, templates)
+          const responses = await loadResponsesForWeeklyOrg(org.id)
+          const topPerformers = await computeTopPerformers(responses)
           const streaks = await computeStreaks(responses)
 
           for (const user of orgUsers) {
             try {
-              // Find user's rank and streak
-              const userRank = topPerformers.findIndex(p => p.id === user.id) + 1
-              const userStreak = streaks.find(s => s.userId === user.id)
-              const userPerformer = topPerformers.find(p => p.id === user.id)
+              const userRank = topPerformers.findIndex((p) => p.id === user.id) + 1
+              const userStreak = streaks.find((s) => s.userId === user.id)
+              const userPerformer = topPerformers.find((p) => p.id === user.id)
 
               const variables = {
                 firstName: user.firstName,
                 organizationName: org.name,
                 weekOf,
-                hoursSaved: userPerformer?.hoursSaved.toFixed(1) || "0",
+                hoursSaved: userPerformer?.avgScore.toFixed(1) || "0",
                 streak: String(userStreak?.currentStreak || 0),
                 rank: userRank > 0 ? String(userRank) : "N/A",
-                dashboardLink: `${process.env.NEXT_PUBLIC_APP_URL || "https://shift-app.vercel.app"}/dashboard`,
+                dashboardLink: `${baseUrl}/dashboard`,
               }
 
               await sendEmail({
                 to: user.email,
                 templateType: "weekly_digest",
-                variables,
+                data: variables,
               })
               results.sent++
             } catch (err) {
@@ -226,9 +244,6 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.error("Weekly report error:", error)
-    return NextResponse.json(
-      { error: "Failed to send reports" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Failed to send reports" }, { status: 500 })
   }
 }

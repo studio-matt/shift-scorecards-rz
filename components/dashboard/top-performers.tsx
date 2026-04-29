@@ -500,14 +500,15 @@ export function TopPerformers({ showCompany = false, data }: TopPerformersProps)
                         <TooltipTrigger asChild>
                           <p
                             tabIndex={0}
-                            className={`cursor-help text-sm font-bold underline-offset-4 decoration-dotted underline ${performer.percentVsField >= 0 ? "text-emerald-500" : "text-orange-500"}`}
+                            className="cursor-help text-sm font-bold underline-offset-4 decoration-dotted underline text-emerald-500 dark:text-emerald-400"
                           >
-                            {performer.percentVsField >= 0 ? "+" : ""}{performer.percentVsField}% vs avg
+                            {performer.percentVsField}% vs 160&nbsp;h month
                           </p>
                         </TooltipTrigger>
-                        <TooltipContent side="left" className="max-w-[260px] text-xs">
-                          Percent above or below the <strong className="font-semibold text-foreground">cohort average</strong> estimated monthly hours (weekly claims × 4).
-                          Not a share of full-time monthly capacity (160&nbsp;h).
+                        <TooltipContent side="left" className="max-w-[280px] text-xs">
+                          Estimated AI time reclaimed as a share of one full‑time work month (**160&nbsp;h**
+                          — four 40&nbsp;h weeks). Monthly equivalent assumes weekly questionnaire claims &
+                          multiples by&nbsp;four; not a cohort comparison vs peers.
                         </TooltipContent>
                       </Tooltip>
                       <p className="text-xs text-muted-foreground">{performer.avgScore} hrs saved (est.)</p>

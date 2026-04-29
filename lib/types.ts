@@ -182,7 +182,7 @@ export interface TopPerformer {
   companyId: string
   department: string
   avgScore: number
-  percentVsField: number // % vs cohort mean monthly hours (not vs 160h capacity)
+  percentVsField: number // % of estimated monthly hours vs one FT month (160h); legacy field name kept
   streak: number
   winNarrative?: string
   goalNarrative?: string

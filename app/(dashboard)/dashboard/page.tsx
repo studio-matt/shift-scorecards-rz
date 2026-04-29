@@ -54,7 +54,6 @@ import {
   COLLECTIONS,
 } from "@/lib/firestore"
 import {
-  fetchAllResponses,
   computeAdminStats,
   computeWeeklyTrend,
   computeDepartmentPerformance,
@@ -114,6 +113,7 @@ import {
   getDepartmentPerformanceFromAggregates,
   getTopPerformersFromAggregates,
 } from "@/lib/aggregates"
+import { loadResponsesForDashboardFallback } from "@/lib/reporting-responses"
 import { Badge } from "@/components/ui/badge"
 
 import { LoadingSection } from "@/components/ui/section-loader"
@@ -199,7 +199,7 @@ export default function DashboardPage() {
   }, [user?.id])
 
   // Helper to filter responses by time period
-  const filterByTimePeriod = useCallback((responses: Awaited<ReturnType<typeof fetchAllResponses>>, period: string) => {
+  const filterByTimePeriod = useCallback((responses: RawResponse[], period: string) => {
     const now = new Date()
     let startDate: Date
     
@@ -569,9 +569,15 @@ export default function DashboardPage() {
         // This path will be used until aggregates are fully populated
         // ══════════════════════════════════════════════════════════════════════
         setUsingAggregates(false)
-        console.log("[v0] Fallback: No aggregates found, fetching raw responses")
-        
-        const allResponses = await fetchAllResponses(aggregateOrgScope, aggregateDeptScope, user?.id)
+        console.warn(
+          "[dashboard] Aggregates empty — using date-bounded Firestore reads (Tier C fallback)",
+        )
+
+        const allResponses = await loadResponsesForDashboardFallback(
+          aggregateOrgScope,
+          aggregateDeptScope,
+          user?.id,
+        )
         
         // Filter responses by selected time period
         const responses = filterByTimePeriod(allResponses, timePeriod)
@@ -658,13 +664,13 @@ export default function DashboardPage() {
         // User-specific metrics - fetch ALL responses (unfiltered) for user's personal data
         // This ensures the user sees their own data regardless of admin filters
         if (user?.id) {
-          const userAllResponses = await fetchAllResponses("all", "all")
-          setPersonalStreak(computePersonalStreak(userAllResponses, user.id))
-          setPersonalTrend(computePersonalTrend(userAllResponses, user.id))
-          setPersonalBenchmark(computePersonalBenchmark(userAllResponses, user.id))
-          
-          // Compute user-specific hours metrics (use userAllResponses for user's data)
-          const userHours = computeUserHoursMetrics(userAllResponses, user.id, timeSavingIds, confidenceIds)
+          const unordered = await getUserResponsesUnordered(user.id, 12000)
+          const myRaw = unordered as unknown as RawResponse[]
+          setPersonalStreak(computePersonalStreak(myRaw, user.id))
+          setPersonalTrend(computePersonalTrend(myRaw, user.id))
+          setPersonalBenchmark(computePersonalBenchmark(myRaw, user.id))
+
+          const userHours = computeUserHoursMetrics(myRaw, user.id, timeSavingIds, confidenceIds)
           setUserHoursMetrics(userHours)
 
           // Extract goals from user's responses based on question types
@@ -680,7 +686,7 @@ export default function DashboardPage() {
           const userDoc = await getDocument(COLLECTIONS.USERS, user.id)
           const savedStatuses = (userDoc as Record<string, unknown>)?.goalStatuses as Record<string, { status: string }> | undefined
           
-          const userResponses = userAllResponses.filter(r => r.userId === user.id)
+          const userResponses = myRaw.filter((r) => r.userId === user.id)
           const extractedGoals: GoalEntry[] = []
           
           for (const response of userResponses) {

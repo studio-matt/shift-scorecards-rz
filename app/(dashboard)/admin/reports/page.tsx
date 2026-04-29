@@ -37,17 +37,20 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Link from "next/link"
-import { getDocuments, COLLECTIONS, updateDocument, addDocument } from "@/lib/firestore"
+import { getDocuments, COLLECTIONS, updateDocument } from "@/lib/firestore"
+import { loadResponsesForDashboardFallback } from "@/lib/reporting-responses"
 import {
-  fetchAllResponses,
   computeOrgHoursMetrics,
   computeStreaks,
   computeNonResponders,
   computeTopPerformers,
+  findTimeSavingQuestionIds,
+  findTimeSavingMinutesQuestionIds,
+  findConfidenceQuestionIds,
 } from "@/lib/dashboard-data"
-import type { Organization, ReportSchedule, ReportHistory } from "@/lib/types"
+import type { Organization, ReportSchedule, ReportHistory, TopPerformer } from "@/lib/types"
 import { DEFAULT_REPORT_SCHEDULE } from "@/lib/types"
-import type { UserStreak, NonResponder, TopPerformer } from "@/lib/dashboard-data"
+import type { UserStreak, NonResponder } from "@/lib/dashboard-data"
 
 interface ReportData {
   weekOf: string
@@ -92,6 +95,8 @@ export default function LeadershipReportsPage() {
   const [savingSchedule, setSavingSchedule] = useState(false)
   const [scheduleMessage, setScheduleMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   
+  const [loadError, setLoadError] = useState<string | null>(null)
+  
   // History state
   const [reportHistory, setReportHistory] = useState<ReportHistory[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
@@ -100,6 +105,7 @@ export default function LeadershipReportsPage() {
 
   const loadData = useCallback(async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       // Load organizations
       const orgDocs = await getDocuments(COLLECTIONS.ORGANIZATIONS)
@@ -109,9 +115,8 @@ export default function LeadershipReportsPage() {
       // Determine which org to use
       const orgId = isSuperAdmin ? selectedOrg : (user?.organizationId || "all")
       
-      // Load responses
-      const responses = await fetchAllResponses(orgId, "all", user?.id)
-      
+      const responses = await loadResponsesForDashboardFallback(orgId, "all", user?.id)
+
       // Load all users
       const userDocs = await getDocuments(COLLECTIONS.USERS)
       const allUsers = userDocs.map((d) => ({ ...d } as unknown as { id: string; firstName: string; lastName: string; department?: string; organizationId?: string }))
@@ -125,14 +130,23 @@ export default function LeadershipReportsPage() {
       weekStart.setDate(now.getDate() - now.getDay())
       const weekOf = weekStart.toISOString().slice(0, 10)
       
-      // Compute metrics
-      const templates = await getDocuments(COLLECTIONS.TEMPLATES)
-      const hoursMetrics = await computeOrgHoursMetrics(responses, templates, 100) // Default hourly rate
+      const [timeSavingIds, minutesSavingIds, confidenceIds] = await Promise.all([
+        findTimeSavingQuestionIds(),
+        findTimeSavingMinutesQuestionIds(),
+        findConfidenceQuestionIds(),
+      ])
+      const hoursMetrics = computeOrgHoursMetrics(
+        responses,
+        timeSavingIds,
+        confidenceIds,
+        100,
+        minutesSavingIds,
+      )
       
       // Compute streaks, non-responders, top performers
       const streaks = await computeStreaks(responses)
-      const nonResponders = await computeNonResponders(responses, allUsers, orgs)
-      const topPerformers = await computeTopPerformers(responses, allUsers, templates)
+      const nonResponders = await computeNonResponders(responses, orgId === "all" ? undefined : orgId)
+      const topPerformers = await computeTopPerformers(responses)
       
       // Filter by org if needed
       const orgStreaks = orgId === "all" ? streaks : streaks.filter(s => {
@@ -171,8 +185,8 @@ export default function LeadershipReportsPage() {
           totalHoursSaved: hoursMetrics.totalHoursSaved,
           productivityGain: hoursMetrics.avgProductivityPercent,
           fteEquivalent: hoursMetrics.fteEquivalent,
-          periodValue: hoursMetrics.periodValue,
-          avgHoursPerUser: hoursMetrics.avgHoursPerUser,
+          periodValue: hoursMetrics.monthlyValue,
+          avgHoursPerUser: hoursMetrics.perPersonValue,
         },
         topPerformers: orgTopPerformers.slice(0, 10),
         streaks: orgStreaks.slice(0, 10),
@@ -184,6 +198,12 @@ export default function LeadershipReportsPage() {
       })
     } catch (err) {
       console.error("Failed to load report data:", err)
+      setReportData(null)
+      setLoadError(
+        err instanceof Error
+          ? err.message
+          : "Could not load report data. Try Refresh or pick a single organization.",
+      )
     } finally {
       setLoading(false)
     }
@@ -243,9 +263,9 @@ export default function LeadershipReportsPage() {
     rows.push(`Participation Rate,${reportData.organization.participationRate.toFixed(0)}%`)
     rows.push("")
     rows.push("Top Performers")
-    rows.push("Rank,Name,Hours Saved,Responses")
+    rows.push("Rank,Name,Mo. hrs (equiv.),Streak")
     reportData.topPerformers.forEach((p, i) => {
-      rows.push(`${i + 1},${p.name},${p.hoursSaved},${p.responseCount}`)
+      rows.push(`${i + 1},${p.name},${p.avgScore.toFixed(1)},${p.streak}`)
     })
     rows.push("")
     rows.push("Non-Responders")
@@ -379,6 +399,14 @@ export default function LeadershipReportsPage() {
           )}
         </div>
       </div>
+
+      {loadError && (
+        <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+          <strong className="font-semibold">Report data did not load.</strong>{" "}
+          {loadError} If you are a super admin on &quot;All Organizations&quot;, try selecting one org or Refresh—bounded
+          Firestore reads depend on indexes and browser rules matching your role.
+        </div>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList>
@@ -545,8 +573,8 @@ export default function LeadershipReportsPage() {
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-bold">{p.hoursSaved.toFixed(1)} hrs</p>
-                          <p className="text-xs text-muted-foreground">{p.responseCount} responses</p>
+                          <p className="text-sm font-bold">{p.avgScore.toFixed(1)} mo. hrs (equiv.)</p>
+                          <p className="text-xs text-muted-foreground">{p.streak} week streak</p>
                         </div>
                       </div>
                     ))}

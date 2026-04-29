@@ -195,6 +195,60 @@ export async function getResponsesByOrg(orgId: string) {
   )
 }
 
+/** Tier C: bounded org read (no order; includes rows missing completedAt). */
+export async function getResponsesForOrgLimited(organizationId: string, maxDocs = 15000) {
+  const cap = Math.min(Math.max(maxDocs, 1), 25000)
+  return getDocuments(
+    COLLECTIONS.RESPONSES,
+    where("organizationId", "==", organizationId),
+    limit(cap),
+  )
+}
+
+/**
+ * Tier C: org + completedAt window (requires composite index on organizationId + completedAt).
+ * Use for leadership email metrics and dashboard fallback (completed responses only).
+ */
+export async function getResponsesForOrgCompletedBetween(
+  organizationId: string,
+  completedAtMinInclusive: string,
+  completedAtMaxExclusive: string,
+  maxDocs = 25000,
+) {
+  const cap = Math.min(Math.max(maxDocs, 1), 50000)
+  return getDocuments(
+    COLLECTIONS.RESPONSES,
+    where("organizationId", "==", organizationId),
+    where("completedAt", ">=", completedAtMinInclusive),
+    where("completedAt", "<", completedAtMaxExclusive),
+    limit(cap),
+  )
+}
+
+/** Newest completions first — requires composite index (organizationId + completedAt desc). */
+export async function getResponsesForOrgRecent(organizationId: string, maxDocs = 12000) {
+  const cap = Math.min(Math.max(maxDocs, 1), 25000)
+  return getDocuments(
+    COLLECTIONS.RESPONSES,
+    where("organizationId", "==", organizationId),
+    orderBy("completedAt", "desc"),
+    limit(cap),
+  )
+}
+
+export async function getDocumentsByIds<T = DocumentData>(
+  collectionName: string,
+  ids: string[],
+): Promise<(T & { id: string })[]> {
+  const unique = [...new Set(ids)].filter(Boolean)
+  const rows: (T & { id: string })[] = []
+  for (const id of unique) {
+    const doc = await getDocument<T>(collectionName, id)
+    if (doc) rows.push(doc)
+  }
+  return rows
+}
+
 // ─── Release Helpers ──────────────────────────────────────────────────
 // NOTE: We fetch all releases in one query (no composite index needed)
 // and filter/sort client-side to avoid Firestore composite index requirements.

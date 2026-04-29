@@ -3,11 +3,17 @@
  * See MATH AUDIT comment block at top of dashboard-data.ts.
  */
 
-/** Leaderboard streak / TopPerformer: % above cohort mean of estimated monthly hours (not vs 160). */
-export function leaderboardPercentVsField(
-  monthlyHours: number,
-  fieldAverageHours: number,
-): number {
+/** One conventional full‑time calendar month (~4 × 40h weeks). Leaderboard KPI denominator. */
+export const FULL_TIME_MONTHLY_HOURS = 160
+
+/** Leaderboard: estimated monthly hours as % of one full‑time work month (160h); not cohort-relative. */
+export function leaderboardPctVsFullTimeMonth(monthlyHours: number): number {
+  if (!Number.isFinite(monthlyHours) || monthlyHours <= 0) return 0
+  return Math.round((monthlyHours / FULL_TIME_MONTHLY_HOURS) * 100)
+}
+
+/** @deprecated Prefer {@link leaderboardPctVsFullTimeMonth}; kept for old cohort math/tests. */
+export function leaderboardPercentVsField(monthlyHours: number, fieldAverageHours: number): number {
   return fieldAverageHours > 0
     ? Math.round(((monthlyHours - fieldAverageHours) / fieldAverageHours) * 100)
     : 0

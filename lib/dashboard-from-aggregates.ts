@@ -12,7 +12,7 @@ import type {
 } from "./dashboard-data"
 import { WEEKLY_TO_MONTHLY_MULTIPLIER } from "./dashboard-data"
 import {
-  leaderboardPercentVsField,
+  leaderboardPctVsFullTimeMonth,
   orgAvgProductivityPercent,
 } from "./dashboard-metrics-formulas"
 import type { DailyAggregate } from "./aggregates"
@@ -178,10 +178,6 @@ export function aggregateTopPerformersToTopPerformers(
       avgScore: Math.round(monthlyHours * 10) / 10,
     }
   })
-  const fieldAverageHours =
-    withMonthly.length > 0
-      ? withMonthly.reduce((s, r) => s + r.monthlyHours, 0) / withMonthly.length
-      : 0
 
   const ranked = withMonthly
     .map((r) => ({
@@ -191,7 +187,7 @@ export function aggregateTopPerformersToTopPerformers(
       companyId: r.organizationId,
       department: r.department,
       avgScore: r.avgScore,
-      percentVsField: leaderboardPercentVsField(r.monthlyHours, fieldAverageHours),
+      percentVsField: leaderboardPctVsFullTimeMonth(r.monthlyHours),
       streak: 0,
       winNarrative: undefined,
       goalNarrative: undefined,

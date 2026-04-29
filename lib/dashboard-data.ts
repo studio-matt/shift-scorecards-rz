@@ -8,7 +8,7 @@ import type {
   QuestionResult,
 } from "./types"
 import {
-  leaderboardPercentVsField,
+  leaderboardPctVsFullTimeMonth,
   orgAvgProductivityPercent,
   rollupMaxWeeklyHoursClaimPerUserWeek,
 } from "./dashboard-metrics-formulas"
@@ -18,8 +18,7 @@ import {
  *
  * | Metric | Symbol / field | Formula (conceptual) | Notes |
  * |--------|----------------|----------------------|-------|
- * | Leaderboard delta | `TopPerformer.percentVsField` | `((monthlyHours_i - fieldAverageHours) / fieldAverageHours) * 100`, where `monthlyHours_i = (sum weekly time_saving / responseCount_i) * WEEKLY_TO_MONTHLY` | Cohort-relative vs **peer mean** monthly hours; **not** "% of 160h capacity". **Unbounded** when `fieldAverageHours` is tiny. |
- * | Cohort mean | `fieldAverageHours` | Mean of each user’s `monthlyHours` across users in the leaderboard pool | Same `WEEKLY_TO_MONTHLY = 4` as elsewhere. |
+ * | Leaderboard delta | `TopPerformer.percentVsField` | `(monthlyHours_i / 160) * 100`, where `monthlyHours_i` is avg weekly × `WEEKLY_TO_MONTHLY` | % of estimated monthly savings **vs one full‑time month (160h)**, same basis as FT capacity framing elsewhere. Field name unchanged for compat. |
  * | Org productivity % | `OrgHoursMetrics.avgProductivityPercent` | `orgAvgProductivityPercent(monthlyHours, activeParticipants)` → `(monthlyHours / (activeParticipants * 160)) * 100`, with `monthlyHours = weeklyHoursSum * 4` | Denominator = **N × 160** (monthly capacity). Numerator rolls up **max** weekly hours claim per `(userId, weekOf)` then sums, then ×4. |
  * | Weekly → monthly | — | `weeklyHoursSum * WEEKLY_TO_MONTHLY_MULTIPLIER` (`4`) | Scorecard time questions are **weekly** estimates. |
  *
@@ -560,16 +559,7 @@ export async function computeTopPerformers(
     if (doc) adminNarratives = (doc as Record<string, unknown>).narratives as Record<string, string> ?? {}
   } catch { /* ignore */ }
 
-  // Calculate field average (average monthly hours saved per person)
   const userEntries = Array.from(userMap.entries())
-  const allMonthlyHours = userEntries.map(([, { totalHours, responseCount }]) => {
-    // Average weekly hours * 4 = monthly hours
-    const avgWeeklyHours = responseCount > 0 ? totalHours / responseCount : 0
-    return avgWeeklyHours * WEEKLY_TO_MONTHLY_MULTIPLIER
-  })
-  const fieldAverageHours = allMonthlyHours.length > 0 
-    ? allMonthlyHours.reduce((a, b) => a + b, 0) / allMonthlyHours.length 
-    : 0
 
   return userEntries
     .map(([userId, { name, orgId, dept, totalHours, responseCount, weeks, winAnswers, goalAnswers }]) => {
@@ -577,9 +567,8 @@ export async function computeTopPerformers(
       const avgWeeklyHours = responseCount > 0 ? totalHours / responseCount : 0
       const monthlyHours = avgWeeklyHours * WEEKLY_TO_MONTHLY_MULTIPLIER
       const avgScore = Math.round(monthlyHours * 10) / 10 // avgScore now represents monthly hours saved
-      
-      // Calculate % above/below field average hours
-      const percentVsField = leaderboardPercentVsField(monthlyHours, fieldAverageHours)
+
+      const percentVsField = leaderboardPctVsFullTimeMonth(monthlyHours)
       return {
         id: userId,
         name,
@@ -587,7 +576,7 @@ export async function computeTopPerformers(
         companyId: orgId,
         department: dept,
         avgScore, // Now represents monthly hours saved
-        percentVsField, // Now represents % above/below field average hours
+        percentVsField, // % of one 160h FT month — field name unchanged for compat
         streak: weeks.size,
         // Prefer admin-set narrative, then most recent win answer
         winNarrative: adminNarratives[userId] || winAnswers[winAnswers.length - 1] || undefined,

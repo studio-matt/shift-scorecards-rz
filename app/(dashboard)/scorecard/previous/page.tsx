@@ -30,7 +30,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { getDocuments, getDocument, deleteDocument, COLLECTIONS } from "@/lib/firestore"
+import {
+  getDocuments,
+  getDocument,
+  deleteDocument,
+  COLLECTIONS,
+  getResponsesForOrgLimited,
+  getDocumentsByIds,
+} from "@/lib/firestore"
 import { useAuth } from "@/lib/auth-context"
 import { parseTimeValue } from "@/lib/dashboard-data"
 import {
@@ -166,14 +173,13 @@ export default function PreviousScorecardsPage() {
     try {
       setLoading(true)
       
-      // Fetch responses, organizations, templates, and users
-      const [responseDocs, orgDocs, templateDocs, userDocs] = await Promise.all([
-        getDocuments(COLLECTIONS.RESPONSES),
+      // Fetch organizations, templates, and users (responses: org-scoped / capped — Tier C)
+      const [orgDocs, templateDocs, userDocs] = await Promise.all([
         getDocuments(COLLECTIONS.ORGANIZATIONS),
         getDocuments(COLLECTIONS.TEMPLATES),
         getDocuments(COLLECTIONS.USERS),
       ])
-      
+
       // Build org name map and populate orgs list
       const orgNameMap = new Map<string, string>()
       const orgNameToIdMap = new Map<string, string>() // For matching by company name
@@ -186,11 +192,29 @@ export default function PreviousScorecardsPage() {
         orgsList.push({ id: org.id, name })
       }
       setOrgs(orgsList.sort((a, b) => a.name.localeCompare(b.name)))
-      
+
       // Determine user's organization ID (by organizationId or by matching company name)
-      let userOrgId = user?.organizationId
-      if (!userOrgId && user?.company) {
-        userOrgId = orgNameToIdMap.get(user.company.toLowerCase())
+      const profile = user as { organizationId?: string; company?: string }
+      let userOrgResolved: string | undefined = profile.organizationId
+      if (!userOrgResolved && profile.company) {
+        userOrgResolved = orgNameToIdMap.get(profile.company.toLowerCase())
+      }
+
+      let responseDocs: Array<{ id: string } & Record<string, unknown>>
+      if (isSuperAdmin) {
+        const perOrgCap = Math.max(
+          3500,
+          Math.floor(40000 / Math.max(orgsList.length, 1)),
+        )
+        responseDocs = (
+          await Promise.all(
+            orgsList.map((o) => getResponsesForOrgLimited(o.id, perOrgCap)),
+          )
+        ).flat()
+      } else if (userOrgResolved) {
+        responseDocs = await getResponsesForOrgLimited(userOrgResolved, 22000)
+      } else {
+        responseDocs = []
       }
       
       // Build user department AND organization maps, collect unique departments, and build users list for filtering
@@ -225,8 +249,10 @@ export default function PreviousScorecardsPage() {
         }
         
         // Match user to organization
-        const userBelongsToOrg = userOrgIdField === userOrgId || 
-          (userCompany && orgNameToIdMap.get(userCompany.toLowerCase()) === userOrgId)
+        const userBelongsToOrg =
+          userOrgIdField === userOrgResolved ||
+          (userCompany &&
+            orgNameToIdMap.get(userCompany.toLowerCase()) === userOrgResolved)
         
         if (dept) {
           userDeptMap.set(u.id, dept)
@@ -289,8 +315,8 @@ export default function PreviousScorecardsPage() {
         responses = allResponses
       } else if (isAdmin) {
         // Admins see their org's responses (aggregated view)
-        responses = allResponses.filter((r) => 
-          r.organizationId === userOrgId || r.userId === user?.id
+        responses = allResponses.filter(
+          (r) => r.organizationId === userOrgResolved || r.userId === user?.id,
         )
       } else {
         // Regular users see ONLY their own responses, grouped by week
@@ -393,11 +419,8 @@ export default function PreviousScorecardsPage() {
         setQuestions(qs.sort((a, b) => a.order - b.order))
       }
       
-      // Load the individual responses for this aggregated scorecard
-      const responseDocs = await getDocuments(COLLECTIONS.RESPONSES)
-      let filtered = responseDocs
-        .filter((d) => sc.responseIds.includes(d.id))
-        .map((d) => {
+      const responseDocs = await getDocumentsByIds(COLLECTIONS.RESPONSES, sc.responseIds)
+      let filtered = responseDocs.map((d) => {
           const data = d as Record<string, unknown>
           return {
             id: d.id,

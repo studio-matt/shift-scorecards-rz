@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest"
 import {
   leaderboardPercentVsField,
+  leaderboardPctVsFullTimeMonth,
+  FULL_TIME_MONTHLY_HOURS,
   orgAvgProductivityPercent,
   rollupMaxWeeklyHoursClaimPerUserWeek,
   type MinimalResponseForHours,
@@ -14,17 +16,30 @@ function passthroughMinute(): number {
   return 0
 }
 
-describe("leaderboardPercentVsField", () => {
-  it("explodes upward when cohort mean is tiny", () => {
+describe("leaderboardPctVsFullTimeMonth", () => {
+  it("expresses estimated monthly hours as % of one 160h month", () => {
+    expect(leaderboardPctVsFullTimeMonth(160)).toBe(100)
+    expect(leaderboardPctVsFullTimeMonth(80)).toBe(50)
+    expect(leaderboardPctVsFullTimeMonth(304)).toBe(190) // e.g. 276hrs display ≈ ×4 pipeline elsewhere
+  })
+
+  it("returns 0 when non-positive or invalid", () => {
+    expect(leaderboardPctVsFullTimeMonth(0)).toBe(0)
+    expect(leaderboardPctVsFullTimeMonth(-5)).toBe(0)
+  })
+})
+
+describe("leaderboardPercentVsField (deprecated cohort-relative)", () => {
+  it("still supports legacy cohort deltas for tests/back-compat", () => {
     expect(leaderboardPercentVsField(10, 2)).toBe(400)
-  })
-
-  it("is zero below mean when cohort mean matches user", () => {
     expect(leaderboardPercentVsField(8, 8)).toBe(0)
-  })
-
-  it("handles zero field average", () => {
     expect(leaderboardPercentVsField(5, 0)).toBe(0)
+  })
+})
+
+describe("FULL_TIME_MONTHLY_HOURS", () => {
+  it("is 160", () => {
+    expect(FULL_TIME_MONTHLY_HOURS).toBe(160)
   })
 })
 
