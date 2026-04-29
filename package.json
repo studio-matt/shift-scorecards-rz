@@ -9,7 +9,9 @@
     "lint": "echo 'Lint skipped (Next 16 removed next lint)'",
     "test": "vitest run --config vitest.config.mjs",
     "firebase:indexes": "firebase deploy --only firestore:indexes --project shift-fe6e9 --non-interactive",
-    "cron:aggregate:help": "echo 'Optional one-off: export BASE_URL BACKFILL_SECRET then ./scripts/trigger-cron-aggregate.sh'"
+    "cron:aggregate:help": "echo 'Optional one-off: export BASE_URL BACKFILL_SECRET then ./scripts/trigger-cron-aggregate.sh'",
+    "cron:post-bearer": "sh ./scripts/post-cron-bearer.sh",
+    "cron:gcloud-set-scheduler-bearer": "sh ./scripts/gcloud-scheduler-set-cron-bearer.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

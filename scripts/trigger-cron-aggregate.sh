@@ -1,13 +1,12 @@
 #!/usr/bin/env sh
 # One-off POST to aggregate responses (seeds / updates `aggregates`).
 # Usage:
-#   export BASE_URL="https://your-deployment.vercel.app"
-#   export BACKFILL_SECRET="your-secret"   # must match BACKFILL_SECRET in Vercel / .env
+#   export BASE_URL="https://scorecard.envoydesign.com"
+#   export BACKFILL_SECRET="your-secret"   # must match App Hosting BACKFILL_SECRET
 #   ./scripts/trigger-cron-aggregate.sh
 #
-# Or with Vercel cron auth:
-#   curl -X POST "${BASE_URL}/api/cron/aggregate-responses" \
-#     -H "Authorization: Bearer ${CRON_SECRET}"
+# Bearer style (matches Cloud Scheduler + verifyAuth primary branch):
+#   export CRON_SECRET="..." ; ./scripts/post-cron-bearer.sh
 
 set -eu
 BASE_URL="${BASE_URL:-}"
