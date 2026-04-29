@@ -10,3 +10,7 @@ node_modules
 .next/
 .env*.local
 .DS_Store
+
+# npm (this repo uses pnpm + pnpm-lock.yaml; lockfiles must stay in sync)
+package-lock.json
+*.tsbuildinfo
