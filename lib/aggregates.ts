@@ -158,7 +158,19 @@ export async function getAggregate(
 export async function getAggregatesForRange(
   opts: AggregateQuery
 ): Promise<DailyAggregate[]> {
-  const { startDate, endDate, organizationId = "all", department = "all", userId = "all" } = opts
+  const { startDate, endDate, department = "all", userId = "all" } = opts
+  // Do not use `organizationId = "all"` default: object literal { organizationId: undefined }
+  // would incorrectly roll up to global "all" and every org filter would show all-company stats.
+  let organizationId: string
+  if (opts.organizationId === undefined || opts.organizationId === null) {
+    organizationId = "all"
+  } else {
+    const o = String(opts.organizationId).trim()
+    if (o === "") {
+      return []
+    }
+    organizationId = o
+  }
 
   try {
     const q = query(

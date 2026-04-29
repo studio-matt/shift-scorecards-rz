@@ -271,21 +271,35 @@ export async function fetchAllResponses(
     }
   }
 
-  if (orgId && orgId !== "all") {
+  const orgScope =
+    orgId === undefined ||
+    orgId === null ||
+    orgId === "all"
+      ? "all"
+      : String(orgId).trim()
+  if (orgScope === "") {
+    return []
+  }
+  if (orgScope !== "all") {
     // Filter by user's ACTUAL organization (from profile), not the response's stored orgId
     // Also include responses where the stored orgId matches (for backwards compatibility)
     // And always include current user's own responses
     responses = responses.filter((r) => {
       const userOrg = userOrgMap.get(r.userId)
-      return userOrg === orgId || r.organizationId === orgId || r.userId === userId
+      return userOrg === orgScope || r.organizationId === orgScope || r.userId === userId
     })
   }
   
   // Filter by department using user's CURRENT department from profile
-  if (department && department !== "all") {
+  const deptScope =
+    department === undefined || department === null || department === "all"
+      ? "all"
+      : String(department).trim()
+  if (deptScope !== "all") {
+    if (deptScope === "") return []
     responses = responses.filter((r) => {
       const userDept = userDeptMap.get(r.userId) || r.department || ""
-      return userDept === department
+      return userDept === deptScope
     })
   }
   

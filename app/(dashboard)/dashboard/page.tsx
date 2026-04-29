@@ -282,6 +282,26 @@ export default function DashboardPage() {
     
     // Get date range for current time period
     const { startDate, endDate } = getDateRange(timePeriod)
+
+    // Firestore aggregate queries treat missing org as global "all". Coerce dropdown state to an
+    // explicit "all" or a non-empty org id so org filters never accidentally roll up to all tenants.
+    let aggregateOrgScope: "all" | string
+    if (selectedOrg === "all") {
+      aggregateOrgScope = "all"
+    } else if (typeof selectedOrg === "string" && selectedOrg.trim() !== "") {
+      aggregateOrgScope = selectedOrg.trim()
+    } else {
+      return
+    }
+
+    let aggregateDeptScope: "all" | string
+    if (selectedDept === "all") {
+      aggregateDeptScope = "all"
+    } else if (typeof selectedDept === "string" && selectedDept.trim() !== "") {
+      aggregateDeptScope = selectedDept.trim()
+    } else {
+      aggregateDeptScope = "all"
+    }
     
     try {
       
@@ -299,8 +319,8 @@ export default function DashboardPage() {
       const orgLevelDailies = await getAggregatesForRange({
         startDate,
         endDate,
-        organizationId: selectedOrg === "all" ? "all" : selectedOrg,
-        department: selectedDept === "all" ? "all" : selectedDept,
+        organizationId: aggregateOrgScope,
+        department: aggregateDeptScope,
         userId: "all",
       })
 
@@ -321,7 +341,7 @@ export default function DashboardPage() {
       if (aggregateSummed && aggregateSummed.responseCount > 0) {
         setUsingAggregates(true)
 
-        const selectedOrgDocAgg = orgDocs.find((o) => o.id === selectedOrg) as unknown as
+        const selectedOrgDocAgg = orgDocs.find((o) => o.id === aggregateOrgScope) as unknown as
           | Organization
           | undefined
         const adminHourlyRateAgg = selectedOrgDocAgg?.hourlyRate ?? 100
@@ -331,13 +351,13 @@ export default function DashboardPage() {
           getDepartmentPerformanceFromAggregates({
             startDate,
             endDate,
-            organizationId: selectedOrg === "all" ? undefined : selectedOrg,
+            organizationId: aggregateOrgScope === "all" ? undefined : aggregateOrgScope,
           }),
           getTopPerformersFromAggregates({
             startDate,
             endDate,
-            organizationId: selectedOrg === "all" ? undefined : selectedOrg,
-            department: selectedDept === "all" ? undefined : selectedDept,
+            organizationId: aggregateOrgScope === "all" ? undefined : aggregateOrgScope,
+            department: aggregateDeptScope === "all" ? undefined : aggregateDeptScope,
           }),
         ])
 
@@ -368,7 +388,7 @@ export default function DashboardPage() {
 
         setLoadingStats(false)
 
-        const deptCombined = deptPerformanceRowsToDepartmentPerformance(deptPerfRows, selectedDept)
+        const deptCombined = deptPerformanceRowsToDepartmentPerformance(deptPerfRows, aggregateDeptScope)
         setDeptPerformance(deptCombined)
         setLoadingTrends(false)
 
@@ -434,7 +454,7 @@ export default function DashboardPage() {
         setUsingAggregates(false)
         console.log("[v0] Fallback: No aggregates found, fetching raw responses")
         
-        const allResponses = await fetchAllResponses(selectedOrg, selectedDept, user?.id)
+        const allResponses = await fetchAllResponses(aggregateOrgScope, aggregateDeptScope, user?.id)
         
         // Filter responses by selected time period
         const responses = filterByTimePeriod(allResponses, timePeriod)
@@ -472,7 +492,7 @@ export default function DashboardPage() {
         const [streakData, nonResp, dot, report] =
           await Promise.all([
             computeStreaks(responses),
-            computeNonResponders(responses, selectedOrg),
+            computeNonResponders(responses, aggregateOrgScope),
             Promise.resolve(computeDeptOverTime(responses)),
             computeFieldReport(responses),
           ])
@@ -509,7 +529,7 @@ export default function DashboardPage() {
         ])
         
         // For admin: compute org hours based on current filter
-        const selectedOrgDoc = orgDocs.find((o) => o.id === selectedOrg) as unknown as Organization | undefined
+        const selectedOrgDoc = orgDocs.find((o) => o.id === aggregateOrgScope) as unknown as Organization | undefined
         const adminHourlyRate = selectedOrgDoc?.hourlyRate ?? 100
         const adminOrgHours = computeOrgHoursMetrics(responses, timeSavingIds, confidenceIds, adminHourlyRate, minutesSavingIds)
         setOrgHoursMetrics(adminOrgHours)
