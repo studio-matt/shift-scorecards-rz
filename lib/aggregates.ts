@@ -260,6 +260,254 @@ export async function saveAggregateAdmin(
   })
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// DASHBOARD FUNCTIONS - Fast reads using pre-computed aggregates
+// ══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Get dashboard stats from aggregates (FAST - no raw response fetching)
+ * Returns main stat card data: hours saved, response count, participants, etc.
+ */
+export async function getDashboardStats(opts: {
+  startDate: string
+  endDate: string
+  organizationId?: string
+  department?: string
+}): Promise<{
+  totalHoursSaved: number
+  responseCount: number
+  avgConfidence: number
+  valueCreated: number
+  productivityGain: number
+  participantCount: number
+  uniqueParticipantIds: string[]
+} | null> {
+  const aggregates = await getAggregatesForRange({
+    startDate: opts.startDate,
+    endDate: opts.endDate,
+    organizationId: opts.organizationId || "all",
+    department: opts.department || "all",
+    userId: "all",
+  })
+  
+  if (aggregates.length === 0) return null
+  return sumAggregates(aggregates)
+}
+
+/**
+ * Get weekly trend from aggregates (FAST)
+ * Returns array of weekly stats for charting
+ */
+export async function getWeeklyTrendFromAggregates(opts: {
+  weeks: number  // Number of weeks to fetch
+  organizationId?: string
+  department?: string
+}): Promise<Array<{
+  weekLabel: string
+  weekStart: string
+  totalHoursSaved: number
+  responseCount: number
+  participantCount: number
+  avgConfidence: number
+}>> {
+  const results: Array<{
+    weekLabel: string
+    weekStart: string
+    totalHoursSaved: number
+    responseCount: number
+    participantCount: number
+    avgConfidence: number
+  }> = []
+  
+  const now = new Date()
+  
+  for (let i = opts.weeks - 1; i >= 0; i--) {
+    const weekEnd = new Date(now)
+    weekEnd.setDate(weekEnd.getDate() - (i * 7))
+    const weekStart = new Date(weekEnd)
+    weekStart.setDate(weekStart.getDate() - 6)
+    
+    const startStr = weekStart.toISOString().split('T')[0]
+    const endStr = weekEnd.toISOString().split('T')[0]
+    
+    const aggregates = await getAggregatesForRange({
+      startDate: startStr,
+      endDate: endStr,
+      organizationId: opts.organizationId || "all",
+      department: opts.department || "all",
+      userId: "all",
+    })
+    
+    const stats = sumAggregates(aggregates)
+    
+    results.push({
+      weekLabel: `Week of ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+      weekStart: startStr,
+      ...stats,
+    })
+  }
+  
+  return results
+}
+
+/**
+ * Get top performers from user-level aggregates (FAST)
+ * Returns ranked list of users by hours saved
+ */
+export async function getTopPerformersFromAggregates(opts: {
+  startDate: string
+  endDate: string
+  organizationId?: string
+  department?: string
+  limit?: number
+}): Promise<Array<{
+  userId: string
+  userName: string
+  organizationId: string
+  department: string
+  totalHoursSaved: number
+  responseCount: number
+  avgConfidence: number
+}>> {
+  // Query all user-level aggregates (userId != "all")
+  const allAggregates = await getAggregatesForRange({
+    startDate: opts.startDate,
+    endDate: opts.endDate,
+    organizationId: opts.organizationId || "all",
+    department: opts.department || "all",
+    userId: "all", // We'll filter for user-level below
+  })
+  
+  // Unfortunately we need to query user-level aggregates differently
+  // For now, let's query all aggregates and filter
+  const q = query(
+    collection(db, AGGREGATES_COLLECTION),
+    where("date", ">=", opts.startDate),
+    where("date", "<=", opts.endDate)
+  )
+  
+  const snapshot = await getDocs(q)
+  const allDocs = snapshot.docs.map(d => d.data() as DailyAggregate)
+  
+  // Filter to user-level aggregates only (userId != "all")
+  const userAggregates = allDocs.filter(a => 
+    a.userId !== "all" &&
+    (opts.organizationId === "all" || opts.organizationId === undefined || a.organizationId === opts.organizationId) &&
+    (opts.department === "all" || opts.department === undefined || a.department === opts.department)
+  )
+  
+  // Group by userId and sum
+  const userMap = new Map<string, {
+    userId: string
+    userName: string
+    organizationId: string
+    department: string
+    totalHoursSaved: number
+    responseCount: number
+    confidenceSum: number
+  }>()
+  
+  for (const agg of userAggregates) {
+    const existing = userMap.get(agg.userId)
+    if (existing) {
+      existing.totalHoursSaved += agg.totalHoursSaved
+      existing.responseCount += agg.responseCount
+      existing.confidenceSum += agg.confidenceSum
+    } else {
+      userMap.set(agg.userId, {
+        userId: agg.userId,
+        userName: agg.userName,
+        organizationId: agg.organizationId,
+        department: agg.department,
+        totalHoursSaved: agg.totalHoursSaved,
+        responseCount: agg.responseCount,
+        confidenceSum: agg.confidenceSum,
+      })
+    }
+  }
+  
+  // Sort by hours saved and limit
+  return Array.from(userMap.values())
+    .map(u => ({
+      ...u,
+      avgConfidence: u.responseCount > 0 ? u.confidenceSum / u.responseCount : 0,
+    }))
+    .sort((a, b) => b.totalHoursSaved - a.totalHoursSaved)
+    .slice(0, opts.limit || 10)
+}
+
+/**
+ * Get department performance from aggregates (FAST)
+ */
+export async function getDepartmentPerformanceFromAggregates(opts: {
+  startDate: string
+  endDate: string
+  organizationId?: string
+}): Promise<Array<{
+  department: string
+  totalHoursSaved: number
+  responseCount: number
+  participantCount: number
+  avgConfidence: number
+}>> {
+  // Query all department-level aggregates
+  const q = query(
+    collection(db, AGGREGATES_COLLECTION),
+    where("date", ">=", opts.startDate),
+    where("date", "<=", opts.endDate),
+    where("userId", "==", "all")
+  )
+  
+  const snapshot = await getDocs(q)
+  const allDocs = snapshot.docs.map(d => d.data() as DailyAggregate)
+  
+  // Filter to department-level (dept != "all", userId == "all")
+  const deptAggregates = allDocs.filter(a => 
+    a.department !== "all" &&
+    a.userId === "all" &&
+    (opts.organizationId === "all" || opts.organizationId === undefined || a.organizationId === opts.organizationId)
+  )
+  
+  // Group by department and sum
+  const deptMap = new Map<string, {
+    department: string
+    totalHoursSaved: number
+    responseCount: number
+    confidenceSum: number
+    participantIds: Set<string>
+  }>()
+  
+  for (const agg of deptAggregates) {
+    const existing = deptMap.get(agg.department)
+    if (existing) {
+      existing.totalHoursSaved += agg.totalHoursSaved
+      existing.responseCount += agg.responseCount
+      existing.confidenceSum += agg.confidenceSum
+      agg.uniqueParticipantIds.forEach(id => existing.participantIds.add(id))
+    } else {
+      deptMap.set(agg.department, {
+        department: agg.department,
+        totalHoursSaved: agg.totalHoursSaved,
+        responseCount: agg.responseCount,
+        confidenceSum: agg.confidenceSum,
+        participantIds: new Set(agg.uniqueParticipantIds),
+      })
+    }
+  }
+  
+  return Array.from(deptMap.values())
+    .map(d => ({
+      department: d.department,
+      totalHoursSaved: d.totalHoursSaved,
+      responseCount: d.responseCount,
+      participantCount: d.participantIds.size,
+      avgConfidence: d.responseCount > 0 ? d.confidenceSum / d.responseCount : 0,
+    }))
+    .sort((a, b) => b.totalHoursSaved - a.totalHoursSaved)
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+
 /**
  * Merge a new response into an existing aggregate
  */
