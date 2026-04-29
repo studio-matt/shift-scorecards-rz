@@ -4,8 +4,8 @@ import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
-import { getDocument, updateDocument, syncUserProfileMirror, getOrganizations, getDocuments, COLLECTIONS } from "@/lib/firestore"
-import { fetchAllResponses, type RawResponse } from "@/lib/dashboard-data"
+import { getDocument, updateDocument, syncUserProfileMirror, getOrganizations, getDocuments, getUserResponses, COLLECTIONS } from "@/lib/firestore"
+import type { RawResponse } from "@/lib/dashboard-data"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -79,16 +79,12 @@ export default function EditUserProfilePage({ params }: { params: Promise<{ id: 
           setOrgs(orgDocs)
         }
         
-        // Fetch user's past scorecards
-        const [allResponses, templateDocs] = await Promise.all([
-          fetchAllResponses("all", "all"),
+        // Past scorecards for this user only (indexed query)
+        const [responseDocs, templateDocs] = await Promise.all([
+          getUserResponses(userId),
           getDocuments(COLLECTIONS.TEMPLATES),
         ])
-        
-        // Filter to only this user's responses and sort by date descending
-        const thisUserResponses = allResponses
-          .filter(r => r.userId === userId)
-          .sort((a, b) => (b.completedAt || "").localeCompare(a.completedAt || ""))
+        const thisUserResponses = responseDocs as unknown as RawResponse[]
         setUserResponses(thisUserResponses)
         
         // Build template map

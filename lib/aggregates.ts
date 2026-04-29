@@ -150,32 +150,70 @@ export async function getAggregate(
 }
 
 /**
- * Fetch aggregates for a date range
- * Returns aggregates matching the filters
+ * Fetch aggregates for a date range with exact org/dept/user slice.
  *
- * Uses only a date range query (single-field index auto-created by Firestore) and
- * filters org/dept/user in memory — avoids composite indexes that require Console access.
+ * Prefers indexed queries (matches `organizationId`, `department`, `userId`, `date`)
+ * instead of scanning all aggregate docs by date-only.
  */
 export async function getAggregatesForRange(
   opts: AggregateQuery
 ): Promise<DailyAggregate[]> {
   const { startDate, endDate, organizationId = "all", department = "all", userId = "all" } = opts
 
+  try {
+    const q = query(
+      collection(db, AGGREGATES_COLLECTION),
+      where("organizationId", "==", organizationId),
+      where("department", "==", department),
+      where("userId", "==", userId),
+      where("date", ">=", startDate),
+      where("date", "<=", endDate),
+    )
+    const snapshot = await getDocs(q)
+    return snapshot.docs.map((d) => d.data() as DailyAggregate)
+  } catch (err) {
+    console.warn("[aggregates] Indexed slice query failed, falling back to date scan:", err)
+    const q = query(
+      collection(db, AGGREGATES_COLLECTION),
+      where("date", ">=", startDate),
+      where("date", "<=", endDate),
+    )
+    const snapshot = await getDocs(q)
+    return snapshot.docs
+      .map((d) => d.data() as DailyAggregate)
+      .filter(
+        (a) =>
+          a.organizationId === organizationId &&
+          a.department === department &&
+          a.userId === userId,
+      )
+  }
+}
+
+/**
+ * All daily rows for a user in a date range (userId + date index).
+ * User-level docs have a specific `department` (not `all`); org rollups have `userId` "all" and are excluded.
+ */
+export async function getAggregatesForUserDateRange(opts: {
+  startDate: string
+  endDate: string
+  userId: string
+  organizationId?: string
+}): Promise<DailyAggregate[]> {
   const q = query(
     collection(db, AGGREGATES_COLLECTION),
-    where("date", ">=", startDate),
-    where("date", "<=", endDate),
+    where("userId", "==", opts.userId),
+    where("date", ">=", opts.startDate),
+    where("date", "<=", opts.endDate),
   )
-
   const snapshot = await getDocs(q)
   return snapshot.docs
     .map((d) => d.data() as DailyAggregate)
-    .filter(
-      (a) =>
-        a.organizationId === organizationId &&
-        a.department === department &&
-        a.userId === userId,
-    )
+    .filter((a) => {
+      if (a.userId === "all") return false
+      if (opts.organizationId && a.organizationId !== opts.organizationId) return false
+      return a.department !== "all"
+    })
 }
 
 /**
@@ -195,7 +233,7 @@ export function sumAggregates(aggregates: DailyAggregate[]): {
   const totals = aggregates.reduce((acc, agg) => {
     acc.totalHoursSaved += agg.totalHoursSaved
     acc.responseCount += agg.responseCount
-    acc.confidenceSum += agg.confidenceSum
+    acc.confidenceSum += agg.confidenceSum ?? (agg.avgConfidence * agg.responseCount)
     acc.valueCreated += agg.valueCreated
     
     // Collect unique participants across all days
@@ -365,6 +403,7 @@ export async function getTopPerformersFromAggregates(opts: {
   endDate: string
   organizationId?: string
   department?: string
+  /** If set, cap list (for UI). Omit to return full cohort for % vs field. */
   limit?: number
 }): Promise<Array<{
   userId: string
@@ -375,39 +414,59 @@ export async function getTopPerformersFromAggregates(opts: {
   responseCount: number
   avgConfidence: number
 }>> {
-  const q = query(
-    collection(db, AGGREGATES_COLLECTION),
-    where("date", ">=", opts.startDate),
-    where("date", "<=", opts.endDate),
+  let allDocs: DailyAggregate[]
+
+  if (opts.organizationId && opts.organizationId !== "all") {
+    const q = query(
+      collection(db, AGGREGATES_COLLECTION),
+      where("organizationId", "==", opts.organizationId),
+      where("date", ">=", opts.startDate),
+      where("date", "<=", opts.endDate),
+    )
+    const snapshot = await getDocs(q)
+    allDocs = snapshot.docs.map((d) => d.data() as DailyAggregate)
+  } else {
+    const q = query(
+      collection(db, AGGREGATES_COLLECTION),
+      where("date", ">=", opts.startDate),
+      where("date", "<=", opts.endDate),
+    )
+    const snapshot = await getDocs(q)
+    allDocs = snapshot.docs.map((d) => d.data() as DailyAggregate)
+  }
+
+  // Filter to user-level aggregates only (userId != "all")
+  let userAggregates = allDocs.filter(
+    (a) =>
+      a.userId !== "all" &&
+      (opts.organizationId === "all" ||
+        opts.organizationId === undefined ||
+        a.organizationId === opts.organizationId) &&
+      (opts.department === "all" ||
+        opts.department === undefined ||
+        a.department === opts.department),
   )
 
-  const snapshot = await getDocs(q)
-  const allDocs = snapshot.docs.map(d => d.data() as DailyAggregate)
-  
-  // Filter to user-level aggregates only (userId != "all")
-  const userAggregates = allDocs.filter(a => 
-    a.userId !== "all" &&
-    (opts.organizationId === "all" || opts.organizationId === undefined || a.organizationId === opts.organizationId) &&
-    (opts.department === "all" || opts.department === undefined || a.department === opts.department)
-  )
-  
   // Group by userId and sum
-  const userMap = new Map<string, {
-    userId: string
-    userName: string
-    organizationId: string
-    department: string
-    totalHoursSaved: number
-    responseCount: number
-    confidenceSum: number
-  }>()
-  
+  const userMap = new Map<
+    string,
+    {
+      userId: string
+      userName: string
+      organizationId: string
+      department: string
+      totalHoursSaved: number
+      responseCount: number
+      confidenceSum: number
+    }
+  >()
+
   for (const agg of userAggregates) {
     const existing = userMap.get(agg.userId)
     if (existing) {
       existing.totalHoursSaved += agg.totalHoursSaved
       existing.responseCount += agg.responseCount
-      existing.confidenceSum += agg.confidenceSum
+      existing.confidenceSum += agg.confidenceSum ?? agg.avgConfidence * agg.responseCount
     } else {
       userMap.set(agg.userId, {
         userId: agg.userId,
@@ -416,19 +475,22 @@ export async function getTopPerformersFromAggregates(opts: {
         department: agg.department,
         totalHoursSaved: agg.totalHoursSaved,
         responseCount: agg.responseCount,
-        confidenceSum: agg.confidenceSum,
+        confidenceSum: agg.confidenceSum ?? agg.avgConfidence * agg.responseCount,
       })
     }
   }
-  
-  // Sort by hours saved and limit
-  return Array.from(userMap.values())
-    .map(u => ({
+
+  const sorted = Array.from(userMap.values())
+    .map((u) => ({
       ...u,
       avgConfidence: u.responseCount > 0 ? u.confidenceSum / u.responseCount : 0,
     }))
     .sort((a, b) => b.totalHoursSaved - a.totalHoursSaved)
-    .slice(0, opts.limit || 10)
+
+  if (opts.limit != null) {
+    return sorted.slice(0, opts.limit)
+  }
+  return sorted
 }
 
 /**
@@ -445,21 +507,35 @@ export async function getDepartmentPerformanceFromAggregates(opts: {
   participantCount: number
   avgConfidence: number
 }>> {
-  // Date range only (auto index); filter dept-level rows in memory
-  const q = query(
-    collection(db, AGGREGATES_COLLECTION),
-    where("date", ">=", opts.startDate),
-    where("date", "<=", opts.endDate),
-  )
+  let allDocs: DailyAggregate[]
 
-  const snapshot = await getDocs(q)
-  const allDocs = snapshot.docs.map(d => d.data() as DailyAggregate)
-  
+  if (opts.organizationId && opts.organizationId !== "all") {
+    const q = query(
+      collection(db, AGGREGATES_COLLECTION),
+      where("organizationId", "==", opts.organizationId),
+      where("date", ">=", opts.startDate),
+      where("date", "<=", opts.endDate),
+    )
+    const snapshot = await getDocs(q)
+    allDocs = snapshot.docs.map((d) => d.data() as DailyAggregate)
+  } else {
+    const q = query(
+      collection(db, AGGREGATES_COLLECTION),
+      where("date", ">=", opts.startDate),
+      where("date", "<=", opts.endDate),
+    )
+    const snapshot = await getDocs(q)
+    allDocs = snapshot.docs.map((d) => d.data() as DailyAggregate)
+  }
+
   // Filter to department-level (dept != "all", userId == "all")
-  const deptAggregates = allDocs.filter(a => 
-    a.department !== "all" &&
-    a.userId === "all" &&
-    (opts.organizationId === "all" || opts.organizationId === undefined || a.organizationId === opts.organizationId)
+  const deptAggregates = allDocs.filter(
+    (a) =>
+      a.department !== "all" &&
+      a.userId === "all" &&
+      (opts.organizationId === "all" ||
+        opts.organizationId === undefined ||
+        a.organizationId === opts.organizationId),
   )
   
   // Group by department and sum
@@ -476,14 +552,14 @@ export async function getDepartmentPerformanceFromAggregates(opts: {
     if (existing) {
       existing.totalHoursSaved += agg.totalHoursSaved
       existing.responseCount += agg.responseCount
-      existing.confidenceSum += agg.confidenceSum
+      existing.confidenceSum += agg.confidenceSum ?? agg.avgConfidence * agg.responseCount
       agg.uniqueParticipantIds.forEach(id => existing.participantIds.add(id))
     } else {
       deptMap.set(agg.department, {
         department: agg.department,
         totalHoursSaved: agg.totalHoursSaved,
         responseCount: agg.responseCount,
-        confidenceSum: agg.confidenceSum,
+        confidenceSum: agg.confidenceSum ?? agg.avgConfidence * agg.responseCount,
         participantIds: new Set(agg.uniqueParticipantIds),
       })
     }

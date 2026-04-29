@@ -206,7 +206,7 @@ export async function fetchDashboardStatsFromAggregates(opts: {
 }
 
 // ── Raw response shape from Firestore ─────────────────────────────────
-interface RawResponse {
+export interface RawResponse {
   id: string
   templateId: string
   releaseId: string
@@ -295,8 +295,8 @@ export async function fetchAllResponses(
   
   return responses
 }
-  
-  // ── Fetch all templates for question text lookup ──────────────────────
+
+// ── Fetch all templates for question text lookup ─────────────────────────
 interface TemplateQuestion {
   id: string
   text: string

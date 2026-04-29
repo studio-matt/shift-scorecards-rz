@@ -168,10 +168,14 @@ export async function getTemplates(orgId?: string) {
 
 // ─── Scorecard Response Helpers ───────────────────────────────────────
 
-export async function getUserResponses(userId: string) {
+/** User's scorecards only (indexed query + cap — avoids scanning all responses). */
+export async function getUserResponses(userId: string, maxDocs = 5000) {
+  const cap = Math.min(Math.max(maxDocs, 1), 10000)
   return getDocuments(
     COLLECTIONS.RESPONSES,
     where("userId", "==", userId),
+    orderBy("completedAt", "desc"),
+    limit(cap),
   )
 }
 

@@ -3,7 +3,7 @@
  * 
  * Processes responses and updates pre-computed aggregates for fast dashboard loading.
  * 
- * Schedule: Daily at midnight (configured in vercel.json for Vercel, Firebase Cloud Scheduler for Firebase)
+ * Schedule: Every 30 minutes (see vercel.json) or Firebase Cloud Scheduler POST to same URL
  * 
  * This job:
  * 1. Finds all responses modified since last run
@@ -16,6 +16,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server"
+import type { Firestore, Query, QueryDocumentSnapshot } from "firebase-admin/firestore"
 import { getAdminDb } from "@/lib/firebase-admin"
 import { 
   DailyAggregate, 
@@ -23,6 +24,7 @@ import {
   createEmptyAggregate,
   saveAggregateAdmin
 } from "@/lib/aggregates"
+import { parseMinuteValue, parseTimeValue } from "@/lib/dashboard-data"
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -71,37 +73,141 @@ function extractDateFromTimestamp(timestamp: string): string {
   return timestamp.split("T")[0]
 }
 
-function parseTimeValue(val: unknown): number {
-  if (typeof val === "number") return val
-  if (typeof val === "string") {
-    const num = parseFloat(val)
-    return isNaN(num) ? 0 : num
+/** Next calendar day UTC for YYYY-MM-DD (exclusive upper bound for `completedAt`). */
+function utcDayExclusiveEnd(yyyymmdd: string): string {
+  const parts = yyyymmdd.split("-").map(Number)
+  const y = parts[0] ?? 1970
+  const mo = parts[1] ?? 1
+  const da = parts[2] ?? 1
+  return new Date(Date.UTC(y, mo - 1, da + 1)).toISOString()
+}
+
+const RESPONSE_PAGE_SIZE = 500
+
+/**
+ * Full collection read when `full`; otherwise Firestore `completedAt` range + pagination.
+ * Matches prior behavior: `full` always loads all responses then optional in-memory `targetDate` filter.
+ */
+async function loadResponsesForAggregation(
+  adminDb: Firestore,
+  opts: { full: boolean; sinceTimestamp?: string; targetDate?: string },
+): Promise<Array<{ id: string; [key: string]: unknown }>> {
+  const { full, sinceTimestamp, targetDate } = opts
+  const hasTarget = Boolean(targetDate && /^\d{4}-\d{2}-\d{2}$/.test(targetDate!))
+  const hasSince = Boolean(sinceTimestamp)
+
+  if (full) {
+    const responsesSnapshot = await adminDb.collection("responses").get()
+    let rows = responsesSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
+    if (hasTarget) {
+      rows = rows.filter(
+        (r) => extractDateFromTimestamp(r.completedAt as string) === targetDate,
+      )
+    }
+    return rows
   }
-  return 0
+
+  /** Cold start: no `_meta.lastRunAt` yet — one-time full read */
+  if (!hasSince && !hasTarget) {
+    const responsesSnapshot = await adminDb.collection("responses").get()
+    return responsesSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
+  }
+
+  let lowerBound: string
+  let upperExclusive: string | null = null
+
+  if (hasTarget) {
+    const dayStart = `${targetDate}T00:00:00.000Z`
+    upperExclusive = utcDayExclusiveEnd(targetDate!)
+    lowerBound = hasSince && sinceTimestamp! > dayStart ? sinceTimestamp! : dayStart
+  } else {
+    lowerBound = sinceTimestamp!
+  }
+
+  const out: Array<{ id: string; [key: string]: unknown }> = []
+
+  try {
+    let lastDoc: QueryDocumentSnapshot | null = null
+    while (true) {
+      let q: Query = adminDb
+        .collection("responses")
+        .where("completedAt", ">=", lowerBound)
+      if (upperExclusive !== null) {
+        q = q.where("completedAt", "<", upperExclusive)
+      }
+      q = q.orderBy("completedAt", "asc")
+      if (lastDoc) q = q.startAfter(lastDoc)
+      const snap = await q.limit(RESPONSE_PAGE_SIZE).get()
+      if (snap.empty) break
+      for (const d of snap.docs) {
+        out.push({ id: d.id, ...d.data() })
+      }
+      lastDoc = snap.docs[snap.docs.length - 1]!
+      if (snap.docs.length < RESPONSE_PAGE_SIZE) break
+    }
+  } catch (e) {
+    console.error(
+      "[Aggregate] Incremental responses query failed; falling back to full collection read:",
+      e,
+    )
+    const responsesSnapshot = await adminDb.collection("responses").get()
+    let filtered = responsesSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
+    filtered = filtered.filter((r) => typeof r.completedAt === "string" && r.completedAt)
+    filtered = filtered.filter((r) => {
+      const c = r.completedAt as string
+      if (upperExclusive !== null && c >= upperExclusive) return false
+      return c >= lowerBound
+    })
+    if (hasTarget && targetDate) {
+      filtered = filtered.filter(
+        (r) => extractDateFromTimestamp(r.completedAt as string) === targetDate,
+      )
+    }
+    return filtered
+  }
+
+  return out
+}
+
+async function persistMetaRun(
+  adminDb: Firestore,
+  processedCount: number,
+  aggregatesSaved: number,
+): Promise<void> {
+  await adminDb.collection("aggregates").doc("_meta").set(
+    {
+      lastRunAt: new Date().toISOString(),
+      lastProcessedCount: processedCount,
+      lastAggregatesUpdated: aggregatesSaved,
+    },
+    { merge: true },
+  )
 }
 
 // ── Main Processing ───────────────────────────────────────────────────
 
 async function processResponses(
-  sinceTimestamp?: string,
-  targetDate?: string  // Optional: only process responses for this date
+  sinceTimestamp: string | undefined,
+  targetDate: string | undefined,
+  fullMode: boolean,
 ): Promise<AggregationResult> {
   const startTime = Date.now()
   const errors: string[] = []
   
   console.log(`[Aggregate] Starting aggregation...`)
-  console.log(`[Aggregate] Since: ${sinceTimestamp || "all time"}`)
-  console.log(`[Aggregate] Target date: ${targetDate || "all dates"}`)
+  console.log(`[Aggregate] Full: ${fullMode}, since: ${sinceTimestamp || "none"}, target date: ${targetDate || "all"}`)
   
   try {
     const adminDb = getAdminDb()
     
-    // ── Fetch all necessary data ──────────────────────────────────────
-    
-    // Get responses
-    const responsesSnapshot = await adminDb.collection("responses").get()
-    const allResponses = responsesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }))
-    console.log(`[Aggregate] Total responses in DB: ${allResponses.length}`)
+    const allResponses = await loadResponsesForAggregation(adminDb, {
+      full: fullMode,
+      sinceTimestamp: fullMode ? undefined : sinceTimestamp,
+      targetDate,
+    })
+    console.log(
+      `[Aggregate] Responses loaded for this run (after load strategy): ${allResponses.length}`,
+    )
     
     // Get users for org/dept mapping
     const usersSnapshot = await adminDb.collection("users").get()
@@ -136,27 +242,15 @@ async function processResponses(
       templateQuestionMap.set(d.id, questions)
     })
     
-    // ── Filter responses to process ───────────────────────────────────
-    
-    let responsesToProcess = allResponses.filter(r => {
+    const responsesToProcess = allResponses.filter((r) => {
       const completedAt = r.completedAt as string
-      if (!completedAt) return false
-      
-      // Filter by sinceTimestamp if provided
-      if (sinceTimestamp && completedAt < sinceTimestamp) return false
-      
-      // Filter by targetDate if provided
-      if (targetDate) {
-        const responseDate = extractDateFromTimestamp(completedAt)
-        if (responseDate !== targetDate) return false
-      }
-      
-      return true
+      return Boolean(completedAt)
     })
     
     console.log(`[Aggregate] Responses to process: ${responsesToProcess.length}`)
     
     if (responsesToProcess.length === 0) {
+      await persistMetaRun(adminDb, 0, 0)
       return {
         processedCount: 0,
         aggregatesUpdated: 0,
@@ -184,28 +278,34 @@ async function processResponses(
         const dept = userInfo.dept || "Unknown"
         const orgName = orgMap.get(orgId) || "Unknown"
         
-        // Calculate hours saved from answers
+        // Hours + confidence — align with dashboard parsing (time_saving / minutes / confidence)
         let hoursSaved = 0
         let confidence = 0
         const questions = templateQuestionMap.get(templateId) || []
         
         for (const q of questions) {
+          const val = answers[q.id]
+          if (val === undefined || val === null || val === "") continue
+          
           const text = (q.text || "").toLowerCase()
-          const isTimeSaving = q.type === "time_saving" ||
+          
+          if (q.type === "time_saving") {
+            hoursSaved += parseTimeValue(val as number | string)
+          } else if (q.type === "time_saving_minutes") {
+            hoursSaved += parseMinuteValue(val as number | string) / 60
+          } else if (
             text.includes("hour") ||
             text.includes("time saved") ||
             text.includes("time saving") ||
             text.includes("minutes saved")
+          ) {
+            hoursSaved += parseTimeValue(val as number | string)
+          }
           
-          const isConfidence = q.type === "confidence" || text.includes("confidence")
-          
-          const val = answers[q.id]
-          if (val !== undefined && val !== null && val !== "") {
-            if (isTimeSaving) {
-              hoursSaved += parseTimeValue(val)
-            }
-            if (isConfidence) {
-              confidence = parseTimeValue(val)
+          if (q.type === "confidence" || text.includes("confidence")) {
+            const n = typeof val === "number" ? val : parseFloat(String(val))
+            if (!Number.isNaN(n) && n >= 1 && n <= 10) {
+              confidence = n
             }
           }
         }
@@ -284,13 +384,7 @@ async function processResponses(
     
     console.log(`[Aggregate] Saved ${savedCount} aggregates`)
     
-    // ── Update last run timestamp ─────────────────────────────────────
-    
-    await adminDb.collection("aggregates").doc("_meta").set({
-      lastRunAt: new Date().toISOString(),
-      lastProcessedCount: responsesToProcess.length,
-      lastAggregatesUpdated: savedCount,
-    }, { merge: true })
+    await persistMetaRun(adminDb, responsesToProcess.length, savedCount)
     
     return {
       processedCount: responsesToProcess.length,
@@ -363,7 +457,11 @@ export async function POST(request: NextRequest) {
   
   console.log(`[Aggregate] POST triggered. Full: ${full}, Date: ${targetDate || "all"}`)
   
-  const result = await processResponses(full ? undefined : sinceTimestamp, targetDate)
+  const result = await processResponses(
+    full ? undefined : sinceTimestamp,
+    targetDate,
+    full,
+  )
   
   return NextResponse.json({
     success: result.errors.length === 0,

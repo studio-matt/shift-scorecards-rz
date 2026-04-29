@@ -22,6 +22,7 @@ import { ArrowLeft, Clock, TrendingUp, Award, CalendarDays, Loader2 } from "luci
 import {
   getDocument,
   getDocuments,
+  getUserResponses,
   COLLECTIONS,
 } from "@/lib/firestore"
 import { useAuth } from "@/lib/auth-context"
@@ -111,7 +112,7 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
       
       // Fetch user's scorecard responses
       const [responseDocs, templateDocs] = await Promise.all([
-        getDocuments(COLLECTIONS.RESPONSES),
+        getUserResponses(userId),
         getDocuments(COLLECTIONS.TEMPLATES),
       ])
       

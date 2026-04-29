@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "echo 'Lint skipped (Next 16 removed next lint)'",
-    "test": "vitest run --config vitest.config.mjs"
+    "test": "vitest run --config vitest.config.mjs",
+    "firebase:indexes": "firebase deploy --only firestore:indexes --project shift-fe6e9 --non-interactive",
+    "cron:aggregate:help": "echo 'Optional one-off: export BASE_URL BACKFILL_SECRET then ./scripts/trigger-cron-aggregate.sh'"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -71,7 +73,8 @@
     "postcss": "^8.5",
     "tailwindcss": "^3.4.17",
     "typescript": "5.7.3",
-    "vitest": "^4.1.5"
+    "vite": "^5.4.11",
+    "vitest": "^2.1.9"
   },
   "pnpm": {
     "overrides": {
