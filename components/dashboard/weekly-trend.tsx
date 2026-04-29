@@ -226,7 +226,7 @@ export function HoursTrendChart({ data }: HoursTrendChartProps) {
       <CardHeader className="relative flex flex-row items-start justify-between">
         <div>
           <CardTitle className="text-base font-semibold">
-            Monthly Hours Saved Trend - Last {data.length} Months
+            Monthly hours saved · last {data.length} buckets
           </CardTitle>
           <p className="mt-1 text-xs text-muted-foreground">
             Total: <span className="font-semibold text-foreground">{formatHours(totalHours)} hrs/month</span>

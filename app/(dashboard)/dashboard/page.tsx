@@ -89,12 +89,7 @@ import type {
   TopPerformer,
   QuestionResult,
 } from "@/lib/types"
-import {
-  getDashboardStats,
-  getWeeklyTrendFromAggregates,
-  getTopPerformersFromAggregates,
-  getDepartmentPerformanceFromAggregates,
-} from "@/lib/aggregates"
+import { getDashboardStats } from "@/lib/aggregates"
 import { Badge } from "@/components/ui/badge"
 
 import { LoadingSection } from "@/components/ui/section-loader"
@@ -277,7 +272,7 @@ export default function DashboardPage() {
       // This avoids fetching 35K+ raw responses for dashboard stats
       // ══════════════════════════════════════════════════════════════════════
       
-      const [orgDocs, targetsDoc, aggregateStats, platformUsers] = await Promise.all([
+      const [orgDocs, targetsDoc, aggregateStats] = await Promise.all([
         getOrganizations(),
         getDocument(COLLECTIONS.SETTINGS, "dashboardTargets"),
         getDashboardStats({
@@ -286,7 +281,6 @@ export default function DashboardPage() {
           organizationId: selectedOrg === "all" ? undefined : selectedOrg,
           department: selectedDept === "all" ? undefined : selectedDept,
         }),
-        getDocuments(COLLECTIONS.USERS),
       ])
       
       if (targetsDoc) {
@@ -301,169 +295,106 @@ export default function DashboardPage() {
       }
       setOrgs(orgDocs as unknown as Organization[])
       
-      // If we have aggregate data, use the fast path
+      // If aggregates exist for this window, skip the giant raw path *only* after we gate.
+      // All KPIs/charts/leaderboards use the SAME functions as the raw path on time-filtered
+      // responses so numbers match pre-aggregate behavior (TopPerformer needs id/percentVsField/etc.).
       if (aggregateStats && aggregateStats.responseCount > 0) {
         setUsingAggregates(true)
-        console.log("[v0] Using fast aggregate path - no raw response fetch needed")
-        
-        // Load aggregate-powered data in parallel
-        const [aggTrend, aggPerformers, aggDepts] = await Promise.all([
-          getWeeklyTrendFromAggregates({
-            weeks: 8,
-            organizationId: selectedOrg === "all" ? undefined : selectedOrg,
-            department: selectedDept === "all" ? undefined : selectedDept,
-          }),
-          getTopPerformersFromAggregates({
-            startDate,
-            endDate,
-            organizationId: selectedOrg === "all" ? undefined : selectedOrg,
-            department: selectedDept === "all" ? undefined : selectedDept,
-            limit: 10,
-          }),
-          getDepartmentPerformanceFromAggregates({
-            startDate,
-            endDate,
-            organizationId: selectedOrg === "all" ? undefined : selectedOrg,
-          }),
-        ])
-        
-        // Full AdminStats shape — fallback cards use totalOrgs / totalUsers (.toString)
-        const hourlyForAgg =
-          (
-            orgDocs.find((o) => o.id === selectedOrg) as unknown as Organization | undefined
-          )?.hourlyRate ?? 100
-        const monthlyValueApprox =
-          aggregateStats.valueCreated || aggregateStats.totalHoursSaved * hourlyForAgg
+        console.log("[v0] Aggregate gate OK — computing dashboard from responses (aligned with raw path)")
 
-        setAdminStats({
-          avgScore: aggregateStats.avgConfidence,
-          avgScoreChange: 0,
-          completionRate: 0,
-          completionRateChange: 0,
-          activeUsers: aggregateStats.participantCount,
-          activeUsersChange: 0,
-          scorecardsSent: aggregateStats.responseCount,
-          scorecardsSentChange: 0,
-          totalOrgs: orgDocs.length,
-          totalUsers: platformUsers.length,
-        })
-
-        setOrgHoursMetrics({
-          totalHoursSaved: aggregateStats.totalHoursSaved,
-          monthlyHours: aggregateStats.totalHoursSaved,
-          lastMonthHours: 0,
-          monthOverMonthChange: 0,
-          monthOverMonthPercent: 0,
-          avgProductivityPercent:
-            aggregateStats.participantCount > 0
-              ? Math.min(
-                  100,
-                  (aggregateStats.totalHoursSaved / (aggregateStats.participantCount * 160)) * 100,
-                )
-              : 0,
-          avgConfidence: aggregateStats.avgConfidence,
-          lastMonthConfidence: 0,
-          confidenceChange: 0,
-          fteEquivalent: aggregateStats.totalHoursSaved / 160,
-          annualRunRate: aggregateStats.totalHoursSaved * 12,
-          monthlyValue: monthlyValueApprox,
-          annualValue: monthlyValueApprox * 12,
-          perPersonValue:
-            aggregateStats.participantCount > 0
-              ? monthlyValueApprox / aggregateStats.participantCount
-              : 0,
-          activeParticipants: aggregateStats.participantCount,
-          thisMonthResponses: aggregateStats.responseCount,
-          lastMonthResponses: 0,
-        })
-
-        setWeeklyHoursTrend(
-          aggTrend.map((w) => ({
-            week: w.weekLabel,
-            hours: w.totalHoursSaved,
-            responses: w.responseCount,
-          })),
-        )
-        setLoadingStats(false) // Stats section ready
-        
-        // Set weekly trend from aggregates
-        setWeeklyTrend(aggTrend.map(w => ({
-          week: w.weekLabel,
-          avgScore: w.avgConfidence,
-          responses: w.responseCount,
-        })))
-        
-        // Set top performers from aggregates
-        setTopPerformers(aggPerformers.map(p => ({
-          name: p.userName,
-          organization: p.organizationId,
-          department: p.department,
-          score: p.avgConfidence,
-          streak: p.responseCount,
-          hoursSaved: p.totalHoursSaved,
-        })))
-        
-        // Set department performance from aggregates
-        setDeptPerformance(aggDepts.map(d => ({
-          department: d.department,
-          avgScore: d.avgConfidence,
-          participants: d.participantCount,
-          trend: 0,
-        })))
-        setLoadingTrends(false) // Trends section ready
-        
-        // For features that still need raw responses (limited fetch for recent only)
-        // These fetch minimal data - just what's needed for these specific features
         const limitedResponses = await fetchAllResponses(selectedOrg, selectedDept, user?.id)
-        const recentOnly = limitedResponses.slice(0, 50) // Only need recent for these
-        
-        const [improved, questions, recent] = await Promise.all([
-          computeMostImproved(limitedResponses),
-          computeQuestionResults(limitedResponses),
-          computeRecentScorecards(recentOnly),
+        const periodResponses = filterByTimePeriod(limitedResponses, timePeriod)
+
+        const [timeSavingIds, minutesSavingIds, confidenceIds] = await Promise.all([
+          findTimeSavingQuestionIds(),
+          findTimeSavingMinutesQuestionIds(),
+          findConfidenceQuestionIds(),
         ])
-        
+
+        const selectedOrgDocAgg = orgDocs.find((o) => o.id === selectedOrg) as unknown as Organization | undefined
+        const adminHourlyRateAgg = selectedOrgDocAgg?.hourlyRate ?? 100
+
+        const [
+          stats,
+          trend,
+          performers,
+          improved,
+          questions,
+          recent,
+          streakData,
+          nonResp,
+          dot,
+          report,
+          deptFiltered,
+          deptFromAll,
+        ] = await Promise.all([
+          computeAdminStats(periodResponses),
+          Promise.resolve(computeWeeklyTrend(periodResponses)),
+          computeTopPerformers(periodResponses, 10),
+          computeMostImproved(periodResponses),
+          computeQuestionResults(periodResponses),
+          computeRecentScorecards(periodResponses),
+          computeStreaks(periodResponses),
+          computeNonResponders(periodResponses, selectedOrg),
+          Promise.resolve(computeDeptOverTime(periodResponses)),
+          computeFieldReport(periodResponses),
+          computeDepartmentPerformance(periodResponses),
+          computeDepartmentPerformance(limitedResponses),
+        ])
+
+        setAdminStats(stats)
+        setOrgHoursMetrics(
+          computeOrgHoursMetrics(periodResponses, timeSavingIds, confidenceIds, adminHourlyRateAgg, minutesSavingIds),
+        )
+        setWeeklyHoursTrend(computeWeeklyHoursTrend(periodResponses, timeSavingIds))
+
+        setLoadingStats(false)
+
+        setWeeklyTrend(trend)
+        setDeptPerformance(periodResponses.length > 0 ? deptFiltered : deptFromAll)
+        setLoadingTrends(false)
+
+        setTopPerformers(performers)
         setMostImproved(improved)
         setQuestionResults(questions)
         setRecentScorecards(recent)
-        setLoadingChampions(false) // Champions section ready
-        setLoadingQuestions(false) // Questions section ready
-        
-        // Additional analytics that still need raw data
-        const [streakData, nonResp, dot, report] = await Promise.all([
-          computeStreaks(limitedResponses),
-          computeNonResponders(limitedResponses, selectedOrg),
-          Promise.resolve(computeDeptOverTime(limitedResponses)),
-          computeFieldReport(limitedResponses),
-        ])
+        setLoadingChampions(false)
+        setLoadingQuestions(false)
+
         setStreaks(streakData)
         setNonResponders(nonResp)
         setDeptOverTime(dot)
         setFieldReport(report)
-        setAlerts(computeAlerts(limitedResponses, aggDepts.map(d => ({
-          department: d.department,
-          avgScore: d.avgConfidence,
-          participants: d.participantCount,
-          trend: 0,
-        })), []))
-        setLoadingEngagement(false) // Engagement section ready
-        
-        // User-specific metrics for aggregate path
+        setAlerts(computeAlerts(periodResponses, deptFiltered, []))
+        setLoadingEngagement(false)
+
+        if (periodResponses.length > 0) {
+          let totalScore = 0
+          let totalCount = 0
+          for (const r of periodResponses) {
+            for (const v of Object.values(r.answers)) {
+              if (typeof v === "number" && v >= 1 && v <= 10) {
+                totalScore += v
+                totalCount++
+              }
+            }
+          }
+          if (totalCount > 0) {
+            const realFieldAvg = Math.round((totalScore / totalCount) * 10) / 10
+            setTargets((prev) => ({ ...prev, fieldAverage: realFieldAvg }))
+          }
+        }
+
         if (user?.id) {
-          const [timeSavingIds, confidenceIds] = await Promise.all([
-            findTimeSavingQuestionIds(),
-            findConfidenceQuestionIds(),
-          ])
-          
           setPersonalStreak(computePersonalStreak(limitedResponses, user.id))
           setPersonalTrend(computePersonalTrend(limitedResponses, user.id))
           setPersonalBenchmark(computePersonalBenchmark(limitedResponses, user.id))
-          
-          const userHours = computeUserHoursMetrics(limitedResponses, user.id, timeSavingIds, confidenceIds)
-          setUserHoursMetrics(userHours)
-          setLoadingPersonal(false) // Personal section ready
+          setUserHoursMetrics(
+            computeUserHoursMetrics(limitedResponses, user.id, timeSavingIds, confidenceIds),
+          )
+          setLoadingPersonal(false)
         } else {
-          setLoadingPersonal(false) // No user, mark as complete
+          setLoadingPersonal(false)
         }
         
       } else {
