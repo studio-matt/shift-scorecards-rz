@@ -152,24 +152,30 @@ export async function getAggregate(
 /**
  * Fetch aggregates for a date range
  * Returns aggregates matching the filters
+ *
+ * Uses only a date range query (single-field index auto-created by Firestore) and
+ * filters org/dept/user in memory — avoids composite indexes that require Console access.
  */
 export async function getAggregatesForRange(
   opts: AggregateQuery
 ): Promise<DailyAggregate[]> {
   const { startDate, endDate, organizationId = "all", department = "all", userId = "all" } = opts
-  
-  // Query all aggregates matching org/dept/user filters within date range
+
   const q = query(
     collection(db, AGGREGATES_COLLECTION),
-    where("organizationId", "==", organizationId),
-    where("department", "==", department),
-    where("userId", "==", userId),
     where("date", ">=", startDate),
-    where("date", "<=", endDate)
+    where("date", "<=", endDate),
   )
-  
+
   const snapshot = await getDocs(q)
-  return snapshot.docs.map(d => d.data() as DailyAggregate)
+  return snapshot.docs
+    .map((d) => d.data() as DailyAggregate)
+    .filter(
+      (a) =>
+        a.organizationId === organizationId &&
+        a.department === department &&
+        a.userId === userId,
+    )
 }
 
 /**
@@ -369,23 +375,12 @@ export async function getTopPerformersFromAggregates(opts: {
   responseCount: number
   avgConfidence: number
 }>> {
-  // Query all user-level aggregates (userId != "all")
-  const allAggregates = await getAggregatesForRange({
-    startDate: opts.startDate,
-    endDate: opts.endDate,
-    organizationId: opts.organizationId || "all",
-    department: opts.department || "all",
-    userId: "all", // We'll filter for user-level below
-  })
-  
-  // Unfortunately we need to query user-level aggregates differently
-  // For now, let's query all aggregates and filter
   const q = query(
     collection(db, AGGREGATES_COLLECTION),
     where("date", ">=", opts.startDate),
-    where("date", "<=", opts.endDate)
+    where("date", "<=", opts.endDate),
   )
-  
+
   const snapshot = await getDocs(q)
   const allDocs = snapshot.docs.map(d => d.data() as DailyAggregate)
   
@@ -450,14 +445,13 @@ export async function getDepartmentPerformanceFromAggregates(opts: {
   participantCount: number
   avgConfidence: number
 }>> {
-  // Query all department-level aggregates
+  // Date range only (auto index); filter dept-level rows in memory
   const q = query(
     collection(db, AGGREGATES_COLLECTION),
     where("date", ">=", opts.startDate),
     where("date", "<=", opts.endDate),
-    where("userId", "==", "all")
   )
-  
+
   const snapshot = await getDocs(q)
   const allDocs = snapshot.docs.map(d => d.data() as DailyAggregate)
   
