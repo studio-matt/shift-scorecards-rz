@@ -223,7 +223,8 @@ export async function getAggregatesForUserDateRange(opts: {
     .map((d) => d.data() as DailyAggregate)
     .filter((a) => {
       if (a.userId === "all") return false
-      if (opts.organizationId && a.organizationId !== opts.organizationId) return false
+      // Per-user docs are keyed by Firestore user id; do not filter by opts.organizationId —
+      // profile org and aggregate org can drift (e.g. invite / data entry), which would hide all rows.
       return a.department !== "all"
     })
 }

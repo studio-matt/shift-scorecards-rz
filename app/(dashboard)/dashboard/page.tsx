@@ -43,7 +43,15 @@ import {
   ProductivityHero,
   type ProductivityHeroData,
 } from "@/components/dashboard/user-analytics"
-import { getOrganizations, getDocument, getDocuments, getUsersByOrg, COLLECTIONS } from "@/lib/firestore"
+import {
+  getOrganizations,
+  getDocument,
+  getDocuments,
+  getUsersByOrg,
+  getUserResponses,
+  getResponsesByOrg,
+  COLLECTIONS,
+} from "@/lib/firestore"
 import {
   fetchAllResponses,
   computeAdminStats,
@@ -81,6 +89,7 @@ import {
   type UserHoursMetrics,
   type OrgHoursMetrics,
   type WeeklyHoursTrend,
+  type RawResponse,
 } from "@/lib/dashboard-data"
 import {
   aggregateDocsToWeeklyHoursTrend,
@@ -90,9 +99,6 @@ import {
   deptPerformanceRowsToDepartmentPerformance,
   orgHoursMetricsFromAggregateStats,
   personalBenchmarkApprox,
-  personalTrendFromUserAggregates,
-  streakApproxFromUserAggregates,
-  userHoursMetricsFromUserAggregates,
 } from "@/lib/dashboard-from-aggregates"
 import type {
   Organization,
@@ -106,7 +112,6 @@ import {
   sumAggregates,
   getDepartmentPerformanceFromAggregates,
   getTopPerformersFromAggregates,
-  getAggregatesForUserDateRange,
 } from "@/lib/aggregates"
 import { Badge } from "@/components/ui/badge"
 
@@ -417,30 +422,118 @@ export default function DashboardPage() {
         }))
 
         if (user?.id) {
-          const userDays = await getAggregatesForUserDateRange({
-            startDate,
-            endDate,
-            userId: user.id,
-            organizationId: user.organizationId,
-          })
-
           const cohortAvg = aggregateSummed.avgConfidence
-          const uhm = userHoursMetricsFromUserAggregates({
-            periodDays: userDays,
-            userId: user.id,
-          })
-          setUserHoursMetrics(uhm)
-          setPersonalTrend(personalTrendFromUserAggregates(userDays, cohortAvg))
-          setPersonalBenchmark(
-            personalBenchmarkApprox({
-              myAvgConfidence: uhm.confidenceScore,
-              orgAvgConfidence: cohortAvg,
-              departmentLabel: user.department ?? "",
-            }),
+
+          // Personal metrics must come from raw responses: org aggregates update on a cron delay,
+          // so "caught up" on the scorecard page could still show 0/1 here otherwise.
+          const [userResponseDocs, timeSavingIds, confidenceIds, templateDocs] = await Promise.all([
+            getUserResponses(user.id),
+            findTimeSavingQuestionIds(),
+            findConfidenceQuestionIds(),
+            getDocuments(COLLECTIONS.TEMPLATES),
+          ])
+
+          const toRaw = (
+            docs: Awaited<ReturnType<typeof getUserResponses>>,
+          ): RawResponse[] => docs.map((d) => ({ ...d } as unknown as RawResponse))
+
+          let orgSliceRaw: RawResponse[] = toRaw(userResponseDocs)
+          if (user.organizationId) {
+            try {
+              orgSliceRaw = toRaw(await getResponsesByOrg(user.organizationId))
+            } catch (e) {
+              console.warn("[dashboard] getResponsesByOrg failed; using user responses only", e)
+            }
+          }
+
+          const orgCompleted = orgSliceRaw.filter(
+            (r) =>
+              (r as unknown as { status?: string }).status === "completed" || Boolean(r.completedAt),
           )
-          setPersonalStreak(streakApproxFromUserAggregates(userDays))
-          setUserGoals([])
-          setUserQuestionResults([])
+
+          const myCompleted = orgCompleted.filter((r) => r.userId === user.id)
+
+          const uhm = computeUserHoursMetrics(myCompleted, user.id, timeSavingIds, confidenceIds)
+          setUserHoursMetrics(uhm)
+          setPersonalStreak(computePersonalStreak(orgCompleted, user.id))
+          setPersonalTrend(computePersonalTrend(orgCompleted, user.id))
+          setPersonalBenchmark(
+            computePersonalBenchmark(orgCompleted, user.id) ??
+              personalBenchmarkApprox({
+                myAvgConfidence: uhm.confidenceScore,
+                orgAvgConfidence: cohortAvg,
+                departmentLabel: user.department ?? "",
+              }),
+          )
+
+          const userDoc = await getDocument(COLLECTIONS.USERS, user.id)
+          const savedStatuses = (userDoc as Record<string, unknown>)?.goalStatuses as
+            | Record<string, { status: string }>
+            | undefined
+
+          const templateMap = new Map<
+            string,
+            {
+              questions: Array<{
+                id: string
+                type: string
+                text?: string
+                options?: Array<{ label: string; value: string }>
+              }>
+            }
+          >()
+          for (const t of templateDocs) {
+            const template = t as unknown as {
+              id: string
+              questions: Array<{
+                id: string
+                type: string
+                text?: string
+                options?: Array<{ label: string; value: string }>
+              }>
+            }
+            templateMap.set(template.id, template)
+          }
+
+          const extractedGoals: GoalEntry[] = []
+          for (const response of myCompleted) {
+            const responseId =
+              (response as unknown as { id: string }).id || `${response.userId}-${response.completedAt}`
+            const template = templateMap.get(response.templateId)
+            if (!template?.questions) continue
+
+            for (const question of template.questions) {
+              const answer = response.answers?.[question.id]
+              if (!answer || typeof answer !== "string" || !answer.trim()) continue
+
+              if (question.type === "goals" || question.type === "goal") {
+                let goalText = answer
+                if (question.options && question.options.length > 0) {
+                  const option = question.options.find((opt) => opt.value === answer)
+                  if (option) goalText = option.label
+                }
+                if (goalText.length < 3) continue
+
+                const goalId = `${responseId}-${question.id}`
+                const savedStatus = savedStatuses?.[goalId]?.status as GoalEntry["status"] | undefined
+
+                extractedGoals.push({
+                  id: goalId,
+                  text: goalText,
+                  weekOf: response.weekOf || response.completedAt?.slice(0, 10) || "",
+                  status: savedStatus || "in-progress",
+                })
+              }
+            }
+          }
+          extractedGoals.sort((a, b) => b.weekOf.localeCompare(a.weekOf))
+          setUserGoals(extractedGoals.slice(0, 10))
+
+          const { computeUserQuestionResults } = await import("@/lib/dashboard-data")
+          const userQResults = await computeUserQuestionResults(myCompleted)
+          setUserQuestionResults(userQResults)
+          setRecentScorecards(await computeRecentScorecards(myCompleted))
+
           setLoadingPersonal(false)
         } else {
           setLoadingPersonal(false)
