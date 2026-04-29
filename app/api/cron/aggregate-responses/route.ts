@@ -3,14 +3,16 @@
  * 
  * Processes responses and updates pre-computed aggregates for fast dashboard loading.
  * 
- * Schedule: Hourly M-F 6am-8pm, every 4 hours otherwise (configured in vercel.json)
+ * Schedule: Daily at midnight (configured in vercel.json for Vercel, Firebase Cloud Scheduler for Firebase)
  * 
  * This job:
  * 1. Finds all responses modified since last run
  * 2. Computes aggregates at org, dept, and user levels
  * 3. Stores aggregates in /aggregates collection
  * 
- * Security: Protected by CRON_SECRET environment variable
+ * Security: Protected by BACKFILL_SECRET header
+ * 
+ * Last updated: 2026-04-29
  */
 
 import { NextRequest, NextResponse } from "next/server"
