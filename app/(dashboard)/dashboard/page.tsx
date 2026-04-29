@@ -96,7 +96,8 @@ import {
   getDepartmentPerformanceFromAggregates,
 } from "@/lib/aggregates"
 import { Badge } from "@/components/ui/badge"
-import { Loader2 } from "lucide-react"
+
+import { LoadingSection } from "@/components/ui/section-loader"
 
 export default function DashboardPage() {
   const { isAdmin, isSuperAdmin, isCompanyAdmin, user } = useAuth()
@@ -109,8 +110,15 @@ export default function DashboardPage() {
 
   // Data state
   const [orgs, setOrgs] = useState<Organization[]>([])
-  const [loading, setLoading] = useState(true)
   const [usingAggregates, setUsingAggregates] = useState(false) // Track if using fast aggregates
+  
+  // Individual section loading states - page loads immediately, sections load progressively
+  const [loadingStats, setLoadingStats] = useState(true)
+  const [loadingTrends, setLoadingTrends] = useState(true)
+  const [loadingEngagement, setLoadingEngagement] = useState(true)
+  const [loadingChampions, setLoadingChampions] = useState(true)
+  const [loadingQuestions, setLoadingQuestions] = useState(true)
+  const [loadingPersonal, setLoadingPersonal] = useState(true)
   const [adminStats, setAdminStats] = useState<AdminStats | null>(null)
   const [weeklyTrend, setWeeklyTrend] = useState<WeeklyTrend[]>([])
   const [deptPerformance, setDeptPerformance] = useState<DepartmentPerformance[]>([])
@@ -251,11 +259,18 @@ export default function DashboardPage() {
       return // Wait for useEffect to set the correct org
     }
     
+    // Reset all section loading states - page structure loads immediately
+    setLoadingStats(true)
+    setLoadingTrends(true)
+    setLoadingEngagement(true)
+    setLoadingChampions(true)
+    setLoadingQuestions(true)
+    setLoadingPersonal(true)
+    
+    // Get date range for current time period
+    const { startDate, endDate } = getDateRange(timePeriod)
+    
     try {
-      setLoading(true)
-      
-      // Get date range for current time period
-      const { startDate, endDate } = getDateRange(timePeriod)
       
       // ══════════════════════════════════════════════════════════════════════
       // FAST PATH: Try to load from pre-computed aggregates first
@@ -320,6 +335,7 @@ export default function DashboardPage() {
           hoursSaved: aggregateStats.totalHoursSaved,
           valueCreated: aggregateStats.valueCreated,
         })
+        setLoadingStats(false) // Stats section ready
         
         // Set weekly trend from aggregates
         setWeeklyTrend(aggTrend.map(w => ({
@@ -345,6 +361,7 @@ export default function DashboardPage() {
           participants: d.participantCount,
           trend: 0,
         })))
+        setLoadingTrends(false) // Trends section ready
         
         // For features that still need raw responses (limited fetch for recent only)
         // These fetch minimal data - just what's needed for these specific features
@@ -360,6 +377,8 @@ export default function DashboardPage() {
         setMostImproved(improved)
         setQuestionResults(questions)
         setRecentScorecards(recent)
+        setLoadingChampions(false) // Champions section ready
+        setLoadingQuestions(false) // Questions section ready
         
         // Additional analytics that still need raw data
         const [streakData, nonResp, dot, report] = await Promise.all([
@@ -378,6 +397,7 @@ export default function DashboardPage() {
           participants: d.participantCount,
           trend: 0,
         })), []))
+        setLoadingEngagement(false) // Engagement section ready
         
         // User-specific metrics for aggregate path
         if (user?.id) {
@@ -411,6 +431,9 @@ export default function DashboardPage() {
             hoursSaved: w.totalHoursSaved,
             responses: w.responseCount,
           })))
+          setLoadingPersonal(false) // Personal section ready
+        } else {
+          setLoadingPersonal(false) // No user, mark as complete
         }
         
       } else {
@@ -443,12 +466,16 @@ export default function DashboardPage() {
           ])
 
         setAdminStats(stats)
+        setLoadingStats(false) // Stats ready
         setWeeklyTrend(trend)
         // Use department data from ALL responses for dropdown, but chart shows filtered data
         setDeptPerformance(responses.length > 0 ? dept : deptFromAll)
+        setLoadingTrends(false) // Trends ready
         setTopPerformers(performers)
         setMostImproved(improved)
+        setLoadingChampions(false) // Champions ready
         setQuestionResults(questions)
+        setLoadingQuestions(false) // Questions ready
         setRecentScorecards(recent)
 
         // New analytics - pass selectedOrg to computeNonResponders for proper org filtering
@@ -464,6 +491,7 @@ export default function DashboardPage() {
         setDeptOverTime(dot)
         setFieldReport(report)
         setAlerts(computeAlerts(responses, dept, []))
+        setLoadingEngagement(false) // Engagement ready
         
         // Compute real field average from all responses
         if (responses.length > 0) {
@@ -573,6 +601,9 @@ export default function DashboardPage() {
           const { computeUserQuestionResults } = await import("@/lib/dashboard-data")
           const userQResults = await computeUserQuestionResults(userResponses)
           setUserQuestionResults(userQResults)
+          setLoadingPersonal(false) // Personal ready
+        } else {
+          setLoadingPersonal(false) // No user, mark as complete
         }
       } // End of fallback path else block
         
@@ -592,8 +623,13 @@ export default function DashboardPage() {
       }
     } catch (err) {
       console.error("Failed to load dashboard data:", err)
-    } finally {
-      setLoading(false)
+      // On error, mark all sections as loaded to show empty state
+      setLoadingStats(false)
+      setLoadingTrends(false)
+      setLoadingEngagement(false)
+      setLoadingChampions(false)
+      setLoadingQuestions(false)
+      setLoadingPersonal(false)
     }
   }, [selectedOrg, selectedDept, user, timePeriod, filterByTimePeriod, isSuperAdmin, getDateRange])
 
@@ -698,14 +734,6 @@ export default function DashboardPage() {
     "ytd": "Year to Date",
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    )
-  }
-
   if (isAdmin) {
     // For company admins, use their locked organization name (try multiple sources)
     const companyAdminOrgName = isCompanyAdmin 
@@ -795,35 +823,43 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex flex-col gap-6">
-          {adminStats && <AdminStatCards data={adminStats} targets={targets} hoursMetrics={orgHoursMetrics} hourlyRate={activeOrg?.hourlyRate ?? 100} />}
+          <LoadingSection loading={loadingStats} minHeight="h-40">
+            {adminStats && <AdminStatCards data={adminStats} targets={targets} hoursMetrics={orgHoursMetrics} hourlyRate={activeOrg?.hourlyRate ?? 100} />}
+          </LoadingSection>
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <HoursTrendChart data={weeklyHoursTrend} />
-            <DepartmentPerformanceChart data={deptPerformance} fieldAverage={targets.fieldAverage} />
-          </div>
+          <LoadingSection loading={loadingTrends} minHeight="h-64">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <HoursTrendChart data={weeklyHoursTrend} />
+              <DepartmentPerformanceChart data={deptPerformance} fieldAverage={targets.fieldAverage} />
+            </div>
+          </LoadingSection>
 
           {/* ── Engagement Metrics ────────────────────── */}
           <div className="border-t border-border pt-4">
             <h2 className="text-lg font-semibold text-foreground">Engagement Metrics</h2>
             <p className="mb-4 text-sm text-muted-foreground">Participation streaks and non-responders</p>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <StreaksCard data={streaks} />
-              <NonRespondersCard data={nonResponders} />
-            </div>
+            <LoadingSection loading={loadingEngagement} minHeight="h-48">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <StreaksCard data={streaks} />
+                <NonRespondersCard data={nonResponders} />
+              </div>
+            </LoadingSection>
           </div>
 
           {/* ── Organizational Intelligence ────────────── */}
           <div className="border-t border-border pt-4">
             <h2 className="text-lg font-semibold text-foreground">Organizational Intelligence</h2>
             <p className="mb-4 text-sm text-muted-foreground">Cross-department comparisons over time</p>
-            <DeptOverTimeChart data={deptOverTime} />
-            <div className="mt-4">
-              <FieldReportCard data={fieldReport} />
-            </div>
+            <LoadingSection loading={loadingEngagement} minHeight="h-48">
+              <DeptOverTimeChart data={deptOverTime} />
+              <div className="mt-4">
+                <FieldReportCard data={fieldReport} />
+              </div>
+            </LoadingSection>
           </div>
 
           {/* ── Actionable Alerts ──────────────────────── */}
-          {alerts.length > 0 && (
+          {!loadingEngagement && alerts.length > 0 && (
             <div className="border-t border-border pt-4">
               <h2 className="text-lg font-semibold text-foreground">Actionable Alerts</h2>
               <p className="mb-4 text-sm text-muted-foreground">Scores or trends that need attention</p>
@@ -836,16 +872,20 @@ export default function DashboardPage() {
             <h2 className="text-lg font-semibold text-foreground">Champions</h2>
             <p className="mb-4 text-sm text-muted-foreground">Top performers, most improved, and peer recognition</p>
 
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <TopPerformers showCompany data={topPerformers} />
-              <div className="flex flex-col gap-6">
-                <MostImprovedCard showCompany data={mostImproved} />
-                <HighFiveSection performers={topPerformers} currentUserName={user?.firstName ? `${user.firstName} ${user.lastName ?? ""}`.trim() : "Admin"} currentUserId={user?.id} organizationId={selectedOrg !== "all" ? selectedOrg : undefined} />
+            <LoadingSection loading={loadingChampions} minHeight="h-64">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <TopPerformers showCompany data={topPerformers} />
+                <div className="flex flex-col gap-6">
+                  <MostImprovedCard showCompany data={mostImproved} />
+                  <HighFiveSection performers={topPerformers} currentUserName={user?.firstName ? `${user.firstName} ${user.lastName ?? ""}`.trim() : "Admin"} currentUserId={user?.id} organizationId={selectedOrg !== "all" ? selectedOrg : undefined} />
+                </div>
               </div>
-            </div>
+            </LoadingSection>
           </div>
 
-          <QuestionResults data={questionResults} />
+          <LoadingSection loading={loadingQuestions} minHeight="h-48">
+            <QuestionResults data={questionResults} />
+          </LoadingSection>
         </div>
       </div>
     )
@@ -936,10 +976,11 @@ export default function DashboardPage() {
 
       <div className="flex flex-col gap-6">
         {/* ── Productivity Hero (Time-Saved Metrics) ──────────────────────── */}
-        {totalResponses > 0 ? (
-          productivityHeroData ? (
-            <ProductivityHero data={productivityHeroData} />
-          ) : (
+        <LoadingSection loading={loadingPersonal} minHeight="h-48">
+          {totalResponses > 0 ? (
+            productivityHeroData ? (
+              <ProductivityHero data={productivityHeroData} />
+            ) : (
             <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-card/80 to-card/80 backdrop-blur-sm">
               <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
               <CardContent className="relative p-6 md:p-8 text-center">
@@ -969,6 +1010,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         )}
+        </LoadingSection>
 
         {/* ── Streak At Risk Warning (if applicable) ───── */}
         <StreakAtRiskCard
@@ -1000,19 +1042,21 @@ export default function DashboardPage() {
         */}
 
         {/* ── Stat Cards (contextual - hours-focused) ───────────────────── */}
-        <StatCards
-          avgScore={userHoursMetrics?.confidenceScore ?? 0}
-          fieldAverage={targets.fieldAverage}
-          lastMonthAvg={userHoursMetrics?.lastMonthConfidence ?? 0}
-          myGoal={8.0}
-          streak={personalStreak?.currentStreak ?? 0}
-          maxStreak={personalStreak?.maxStreak ?? 0}
-          completedSections={personalStreak?.totalResponses ?? 0}
-          totalSections={Math.max(personalStreak?.totalWeeks ?? 1, 1)}
-          percentile={personalBenchmark?.percentile ?? 0}
-          hoursMetrics={userHoursMetrics}
-          hourlyRate={effectiveHourlyRate}
-        />
+        <LoadingSection loading={loadingPersonal} minHeight="h-32">
+          <StatCards
+            avgScore={userHoursMetrics?.confidenceScore ?? 0}
+            fieldAverage={targets.fieldAverage}
+            lastMonthAvg={userHoursMetrics?.lastMonthConfidence ?? 0}
+            myGoal={8.0}
+            streak={personalStreak?.currentStreak ?? 0}
+            maxStreak={personalStreak?.maxStreak ?? 0}
+            completedSections={personalStreak?.totalResponses ?? 0}
+            totalSections={Math.max(personalStreak?.totalWeeks ?? 1, 1)}
+            percentile={personalBenchmark?.percentile ?? 0}
+            hoursMetrics={userHoursMetrics}
+            hourlyRate={effectiveHourlyRate}
+          />
+        </LoadingSection>
 
         {/* ── Personal Bests ─────── */}
         <div className="border-t border-border/50 pt-4">
@@ -1020,7 +1064,9 @@ export default function DashboardPage() {
           <p className="mb-4 text-sm text-muted-foreground">
             Track your progress and achievements
           </p>
-          <PersonalBestsCard bests={personalBests} />
+          <LoadingSection loading={loadingPersonal} minHeight="h-32">
+            <PersonalBestsCard bests={personalBests} />
+          </LoadingSection>
         </div>
 
         {/* ── Your Hours Trend ────────────────────────────────── */}
@@ -1029,15 +1075,17 @@ export default function DashboardPage() {
           <p className="mb-4 text-sm text-muted-foreground">
             Hours saved over time through AI adoption
           </p>
-          {personalTrend.length > 0 ? (
-            <PersonalTrendChart data={personalTrend} />
-          ) : (
-            <div className="rounded-lg border border-dashed border-border/50 bg-muted/30 px-6 py-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                Your trend chart will appear after you complete at least one scorecard.
-              </p>
-            </div>
-          )}
+          <LoadingSection loading={loadingPersonal} minHeight="h-48">
+            {personalTrend.length > 0 ? (
+              <PersonalTrendChart data={personalTrend} />
+            ) : (
+              <div className="rounded-lg border border-dashed border-border/50 bg-muted/30 px-6 py-8 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Your trend chart will appear after you complete at least one scorecard.
+                </p>
+              </div>
+            )}
+          </LoadingSection>
         </div>
 
         {/* ── Goals from Scorecards ─────────── */}
@@ -1054,21 +1102,27 @@ export default function DashboardPage() {
             Top performers and peer recognition (names shown by opt-in only)
           </p>
 
-          {/* Top 5 Performers with Wins + High Fives */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {topPerformers.length > 0 && <MVPSpotlight performer={topPerformers[0]} topPerformers={topPerformers} />}
-            <HighFiveSection performers={topPerformers} currentUserName={myName || "User"} currentUserId={user?.id} organizationId={user?.organizationId} />
-          </div>
+          <LoadingSection loading={loadingChampions} minHeight="h-48">
+            {/* Top 5 Performers with Wins + High Fives */}
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {topPerformers.length > 0 && <MVPSpotlight performer={topPerformers[0]} topPerformers={topPerformers} />}
+              <HighFiveSection performers={topPerformers} currentUserName={myName || "User"} currentUserId={user?.id} organizationId={user?.organizationId} />
+            </div>
+          </LoadingSection>
         </div>
 
-        <QuestionResults data={userQuestionResults} />
+        <LoadingSection loading={loadingQuestions} minHeight="h-48">
+          <QuestionResults data={userQuestionResults} />
+        </LoadingSection>
 
         {/* Show user's scorecards - filter to only this user's submissions */}
-        <RecentScorecardsCard data={recentScorecards.filter((sc) => {
-          // Try matching by user ID (Firestore doc ID) or by authId
-          const isMatch = sc.userId === user?.id || sc.userId === user?.authId
-          return isMatch
-        })} />
+        <LoadingSection loading={loadingPersonal} minHeight="h-32">
+          <RecentScorecardsCard data={recentScorecards.filter((sc) => {
+            // Try matching by user ID (Firestore doc ID) or by authId
+            const isMatch = sc.userId === user?.id || sc.userId === user?.authId
+            return isMatch
+          })} />
+        </LoadingSection>
       </div>
     </div>
   )
