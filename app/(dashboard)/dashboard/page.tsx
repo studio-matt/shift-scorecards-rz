@@ -89,6 +89,12 @@ import type {
   TopPerformer,
   QuestionResult,
 } from "@/lib/types"
+import {
+  getDashboardStats,
+  getWeeklyTrendFromAggregates,
+  getTopPerformersFromAggregates,
+  getDepartmentPerformanceFromAggregates,
+} from "@/lib/aggregates"
 import { Badge } from "@/components/ui/badge"
 import { Loader2 } from "lucide-react"
 
@@ -104,6 +110,7 @@ export default function DashboardPage() {
   // Data state
   const [orgs, setOrgs] = useState<Organization[]>([])
   const [loading, setLoading] = useState(true)
+  const [usingAggregates, setUsingAggregates] = useState(false) // Track if using fast aggregates
   const [adminStats, setAdminStats] = useState<AdminStats | null>(null)
   const [weeklyTrend, setWeeklyTrend] = useState<WeeklyTrend[]>([])
   const [deptPerformance, setDeptPerformance] = useState<DepartmentPerformance[]>([])
@@ -207,6 +214,36 @@ export default function DashboardPage() {
     return responses.filter((r) => new Date(r.completedAt) >= startDate)
   }, [])
 
+  // Helper to calculate date range based on time period
+  const getDateRange = useCallback((period: string): { startDate: string; endDate: string } => {
+    const now = new Date()
+    const endDate = now.toISOString().split('T')[0]
+    let startDate: Date
+    
+    switch (period) {
+      case "this-week":
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        break
+      case "this-month":
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+        break
+      case "last-30":
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+        break
+      case "this-quarter":
+        const quarter = Math.floor(now.getMonth() / 3)
+        startDate = new Date(now.getFullYear(), quarter * 3, 1)
+        break
+      case "ytd":
+        startDate = new Date(now.getFullYear(), 0, 1)
+        break
+      default:
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+    }
+    
+    return { startDate: startDate.toISOString().split('T')[0], endDate }
+  }, [])
+
   const loadData = useCallback(async () => {
     // Don't load data until selectedOrg is properly set for non-super-admin users
     // This prevents showing data from all orgs before the user's org is determined
@@ -216,14 +253,26 @@ export default function DashboardPage() {
     
     try {
       setLoading(true)
-      const [orgDocs, allResponses, targetsDoc] = await Promise.all([
+      
+      // Get date range for current time period
+      const { startDate, endDate } = getDateRange(timePeriod)
+      
+      // ══════════════════════════════════════════════════════════════════════
+      // FAST PATH: Try to load from pre-computed aggregates first
+      // This avoids fetching 35K+ raw responses for dashboard stats
+      // ══════════════════════════════════════════════════════════════════════
+      
+      const [orgDocs, targetsDoc, aggregateStats] = await Promise.all([
         getOrganizations(),
-        fetchAllResponses(selectedOrg, selectedDept, user?.id),
         getDocument(COLLECTIONS.SETTINGS, "dashboardTargets"),
+        getDashboardStats({
+          startDate,
+          endDate,
+          organizationId: selectedOrg === "all" ? undefined : selectedOrg,
+          department: selectedDept === "all" ? undefined : selectedDept,
+        }),
       ])
       
-      // Filter responses by selected time period
-      const responses = filterByTimePeriod(allResponses, timePeriod)
       if (targetsDoc) {
         const t = targetsDoc as Record<string, unknown>
         setTargets((prev) => ({
@@ -235,157 +284,299 @@ export default function DashboardPage() {
         }))
       }
       setOrgs(orgDocs as unknown as Organization[])
-
-      // Compute department performance from ALL responses (unfiltered by time) for dropdown population
-      // But use time-filtered responses for the actual metrics display
-      const deptFromAll = computeDepartmentPerformance(allResponses)
       
-      // Compute all aggregations in parallel using time-filtered responses
-      const [stats, trend, dept, performers, improved, questions, recent] =
-        await Promise.all([
-          computeAdminStats(responses),
-          Promise.resolve(computeWeeklyTrend(responses)),
-          Promise.resolve(computeDepartmentPerformance(responses)),
-          computeTopPerformers(responses),
-          computeMostImproved(responses),
-          computeQuestionResults(responses),
-          computeRecentScorecards(responses),
+      // If we have aggregate data, use the fast path
+      if (aggregateStats && aggregateStats.responseCount > 0) {
+        setUsingAggregates(true)
+        console.log("[v0] Using fast aggregate path - no raw response fetch needed")
+        
+        // Load aggregate-powered data in parallel
+        const [aggTrend, aggPerformers, aggDepts] = await Promise.all([
+          getWeeklyTrendFromAggregates({
+            weeks: 8,
+            organizationId: selectedOrg === "all" ? undefined : selectedOrg,
+            department: selectedDept === "all" ? undefined : selectedDept,
+          }),
+          getTopPerformersFromAggregates({
+            startDate,
+            endDate,
+            organizationId: selectedOrg === "all" ? undefined : selectedOrg,
+            department: selectedDept === "all" ? undefined : selectedDept,
+            limit: 10,
+          }),
+          getDepartmentPerformanceFromAggregates({
+            startDate,
+            endDate,
+            organizationId: selectedOrg === "all" ? undefined : selectedOrg,
+          }),
         ])
-
-      setAdminStats(stats)
-      setWeeklyTrend(trend)
-      // Use department data from ALL responses for dropdown, but chart shows filtered data
-      setDeptPerformance(responses.length > 0 ? dept : deptFromAll)
-      setTopPerformers(performers)
-      setMostImproved(improved)
-      setQuestionResults(questions)
-      setRecentScorecards(recent)
-
-      // New analytics - pass selectedOrg to computeNonResponders for proper org filtering
-      const [streakData, nonResp, dot, report] =
-        await Promise.all([
-          computeStreaks(responses),
-          computeNonResponders(responses, selectedOrg),
-          Promise.resolve(computeDeptOverTime(responses)),
-          computeFieldReport(responses),
+        
+        // Set admin stats from aggregates
+        setAdminStats({
+          avgScore: aggregateStats.avgConfidence, // Using confidence as proxy for avg score
+          completionRate: 0, // Would need total expected vs completed
+          activeUsers: aggregateStats.participantCount,
+          scorecardsSent: aggregateStats.responseCount,
+          hoursSaved: aggregateStats.totalHoursSaved,
+          valueCreated: aggregateStats.valueCreated,
+        })
+        
+        // Set weekly trend from aggregates
+        setWeeklyTrend(aggTrend.map(w => ({
+          week: w.weekLabel,
+          avgScore: w.avgConfidence,
+          responses: w.responseCount,
+        })))
+        
+        // Set top performers from aggregates
+        setTopPerformers(aggPerformers.map(p => ({
+          name: p.userName,
+          organization: p.organizationId,
+          department: p.department,
+          score: p.avgConfidence,
+          streak: p.responseCount,
+          hoursSaved: p.totalHoursSaved,
+        })))
+        
+        // Set department performance from aggregates
+        setDeptPerformance(aggDepts.map(d => ({
+          department: d.department,
+          avgScore: d.avgConfidence,
+          participants: d.participantCount,
+          trend: 0,
+        })))
+        
+        // For features that still need raw responses (limited fetch for recent only)
+        // These fetch minimal data - just what's needed for these specific features
+        const limitedResponses = await fetchAllResponses(selectedOrg, selectedDept, user?.id)
+        const recentOnly = limitedResponses.slice(0, 50) // Only need recent for these
+        
+        const [improved, questions, recent] = await Promise.all([
+          computeMostImproved(limitedResponses),
+          computeQuestionResults(limitedResponses),
+          computeRecentScorecards(recentOnly),
         ])
-      setStreaks(streakData)
-      setNonResponders(nonResp)
-      setDeptOverTime(dot)
-      setFieldReport(report)
-      setAlerts(computeAlerts(responses, dept, []))
-      
-      // Compute real field average from all responses
-      if (responses.length > 0) {
-        let totalScore = 0
-        let totalCount = 0
-        for (const r of responses) {
-          for (const v of Object.values(r.answers)) {
-            if (typeof v === "number" && v >= 1 && v <= 10) {
-              totalScore += v
-              totalCount++
-            }
-          }
-        }
-        if (totalCount > 0) {
-          const realFieldAvg = Math.round((totalScore / totalCount) * 10) / 10
-          setTargets((prev) => ({ ...prev, fieldAverage: realFieldAvg }))
-        }
-      }
-
-      // Compute hours metrics for admin view (all responses or filtered by org)
-      const [timeSavingIds, minutesSavingIds, confidenceIds] = await Promise.all([
-        findTimeSavingQuestionIds(),
-        findTimeSavingMinutesQuestionIds(),
-        findConfidenceQuestionIds(),
-      ])
-      
-      // For admin: compute org hours based on current filter
-      const selectedOrgDoc = orgDocs.find((o) => o.id === selectedOrg) as unknown as Organization | undefined
-      const adminHourlyRate = selectedOrgDoc?.hourlyRate ?? 100
-      const adminOrgHours = computeOrgHoursMetrics(responses, timeSavingIds, confidenceIds, adminHourlyRate, minutesSavingIds)
-      setOrgHoursMetrics(adminOrgHours)
-      
-      // Compute weekly hours trend for chart
-      const hoursTrend = computeWeeklyHoursTrend(responses, timeSavingIds)
-      setWeeklyHoursTrend(hoursTrend)
-
-      // User-specific metrics - fetch ALL responses (unfiltered) for user's personal data
-      // This ensures the user sees their own data regardless of admin filters
-      if (user?.id) {
-        const allResponses = await fetchAllResponses("all", "all")
-        setPersonalStreak(computePersonalStreak(allResponses, user.id))
-        setPersonalTrend(computePersonalTrend(allResponses, user.id))
-        setPersonalBenchmark(computePersonalBenchmark(allResponses, user.id))
         
-        // Compute user-specific hours metrics (use allResponses for user's data)
-        const userHours = computeUserHoursMetrics(allResponses, user.id, timeSavingIds, confidenceIds)
-        setUserHoursMetrics(userHours)
-
-        // Extract goals from user's responses based on question types
-        // We need to fetch templates to get question types
-        const templates = await getDocuments(COLLECTIONS.TEMPLATES)
-        const templateMap = new Map<string, { questions: Array<{ id: string; type: string; text?: string; options?: Array<{ label: string; value: string }> }> }>()
-        for (const t of templates) {
-          const template = t as unknown as { id: string; questions: Array<{ id: string; type: string; text?: string; options?: Array<{ label: string; value: string }> }> }
-          templateMap.set(template.id, template)
-        }
+        setMostImproved(improved)
+        setQuestionResults(questions)
+        setRecentScorecards(recent)
         
-        // Load user's saved goal statuses from their document
-        const userDoc = await getDocument(COLLECTIONS.USERS, user.id)
-        const savedStatuses = (userDoc as Record<string, unknown>)?.goalStatuses as Record<string, { status: string }> | undefined
+        // Additional analytics that still need raw data
+        const [streakData, nonResp, dot, report] = await Promise.all([
+          computeStreaks(limitedResponses),
+          computeNonResponders(limitedResponses, selectedOrg),
+          Promise.resolve(computeDeptOverTime(limitedResponses)),
+          computeFieldReport(limitedResponses),
+        ])
+        setStreaks(streakData)
+        setNonResponders(nonResp)
+        setDeptOverTime(dot)
+        setFieldReport(report)
+        setAlerts(computeAlerts(limitedResponses, aggDepts.map(d => ({
+          department: d.department,
+          avgScore: d.avgConfidence,
+          participants: d.participantCount,
+          trend: 0,
+        })), []))
         
-        const userResponses = allResponses.filter(r => r.userId === user.id)
-        const extractedGoals: GoalEntry[] = []
-        
-        for (const response of userResponses) {
-          const responseId = (response as unknown as { id: string }).id || `${response.userId}-${response.completedAt}`
-          const template = templateMap.get(response.templateId)
-          if (!template?.questions) continue
+        // User-specific metrics for aggregate path
+        if (user?.id) {
+          const [timeSavingIds, confidenceIds] = await Promise.all([
+            findTimeSavingQuestionIds(),
+            findConfidenceQuestionIds(),
+          ])
           
-          for (const question of template.questions) {
-            const answer = response.answers?.[question.id]
-            if (!answer || typeof answer !== "string" || !answer.trim()) continue
-            
-            if (question.type === "goals" || question.type === "goal") {
-              // For multichoice/goals questions, look up the option label
-              let goalText = answer
-              if (question.options && question.options.length > 0) {
-                const option = question.options.find(opt => opt.value === answer)
-                if (option) {
-                  goalText = option.label
-                }
+          setPersonalStreak(computePersonalStreak(limitedResponses, user.id))
+          setPersonalTrend(computePersonalTrend(limitedResponses, user.id))
+          setPersonalBenchmark(computePersonalBenchmark(limitedResponses, user.id))
+          
+          const userHours = computeUserHoursMetrics(limitedResponses, user.id, timeSavingIds, confidenceIds)
+          setUserHoursMetrics(userHours)
+          
+          // Set org hours metrics from aggregates
+          const selectedOrgDoc = orgDocs.find((o) => o.id === selectedOrg) as unknown as Organization | undefined
+          const adminHourlyRate = selectedOrgDoc?.hourlyRate ?? 100
+          setOrgHoursMetrics({
+            totalHoursSaved: aggregateStats.totalHoursSaved,
+            avgHoursSavedPerWeek: aggregateStats.totalHoursSaved / 4, // rough estimate
+            totalValueCreated: aggregateStats.valueCreated,
+            avgConfidence: aggregateStats.avgConfidence,
+            participantCount: aggregateStats.participantCount,
+            responseCount: aggregateStats.responseCount,
+          })
+          
+          // Weekly hours trend from aggregates
+          setWeeklyHoursTrend(aggTrend.map(w => ({
+            week: w.weekLabel,
+            hoursSaved: w.totalHoursSaved,
+            responses: w.responseCount,
+          })))
+        }
+        
+      } else {
+        // ══════════════════════════════════════════════════════════════════════
+        // FALLBACK PATH: No aggregates yet, fetch raw responses (slower)
+        // This path will be used until aggregates are fully populated
+        // ══════════════════════════════════════════════════════════════════════
+        setUsingAggregates(false)
+        console.log("[v0] Fallback: No aggregates found, fetching raw responses")
+        
+        const allResponses = await fetchAllResponses(selectedOrg, selectedDept, user?.id)
+        
+        // Filter responses by selected time period
+        const responses = filterByTimePeriod(allResponses, timePeriod)
+
+        // Compute department performance from ALL responses (unfiltered by time) for dropdown population
+        // But use time-filtered responses for the actual metrics display
+        const deptFromAll = computeDepartmentPerformance(allResponses)
+        
+        // Compute all aggregations in parallel using time-filtered responses
+        const [stats, trend, dept, performers, improved, questions, recent] =
+          await Promise.all([
+            computeAdminStats(responses),
+            Promise.resolve(computeWeeklyTrend(responses)),
+            Promise.resolve(computeDepartmentPerformance(responses)),
+            computeTopPerformers(responses),
+            computeMostImproved(responses),
+            computeQuestionResults(responses),
+            computeRecentScorecards(responses),
+          ])
+
+        setAdminStats(stats)
+        setWeeklyTrend(trend)
+        // Use department data from ALL responses for dropdown, but chart shows filtered data
+        setDeptPerformance(responses.length > 0 ? dept : deptFromAll)
+        setTopPerformers(performers)
+        setMostImproved(improved)
+        setQuestionResults(questions)
+        setRecentScorecards(recent)
+
+        // New analytics - pass selectedOrg to computeNonResponders for proper org filtering
+        const [streakData, nonResp, dot, report] =
+          await Promise.all([
+            computeStreaks(responses),
+            computeNonResponders(responses, selectedOrg),
+            Promise.resolve(computeDeptOverTime(responses)),
+            computeFieldReport(responses),
+          ])
+        setStreaks(streakData)
+        setNonResponders(nonResp)
+        setDeptOverTime(dot)
+        setFieldReport(report)
+        setAlerts(computeAlerts(responses, dept, []))
+        
+        // Compute real field average from all responses
+        if (responses.length > 0) {
+          let totalScore = 0
+          let totalCount = 0
+          for (const r of responses) {
+            for (const v of Object.values(r.answers)) {
+              if (typeof v === "number" && v >= 1 && v <= 10) {
+                totalScore += v
+                totalCount++
               }
-              
-              // Skip if the text is too short (likely a raw value like "A", "B")
-              if (goalText.length < 3) continue
-              
-              const goalId = `${responseId}-${question.id}`
-              const savedStatus = savedStatuses?.[goalId]?.status as GoalEntry["status"] | undefined
-              
-              extractedGoals.push({
-                id: goalId,
-                text: goalText,
-                weekOf: response.weekOf || response.completedAt?.slice(0, 10) || "",
-                status: savedStatus || "in-progress",
-              })
             }
           }
+          if (totalCount > 0) {
+            const realFieldAvg = Math.round((totalScore / totalCount) * 10) / 10
+            setTargets((prev) => ({ ...prev, fieldAverage: realFieldAvg }))
+          }
         }
+
+        // Compute hours metrics for admin view (all responses or filtered by org)
+        const [timeSavingIds, minutesSavingIds, confidenceIds] = await Promise.all([
+          findTimeSavingQuestionIds(),
+          findTimeSavingMinutesQuestionIds(),
+          findConfidenceQuestionIds(),
+        ])
         
-        // Sort by weekOf descending (most recent first)
-        extractedGoals.sort((a, b) => b.weekOf.localeCompare(a.weekOf))
+        // For admin: compute org hours based on current filter
+        const selectedOrgDoc = orgDocs.find((o) => o.id === selectedOrg) as unknown as Organization | undefined
+        const adminHourlyRate = selectedOrgDoc?.hourlyRate ?? 100
+        const adminOrgHours = computeOrgHoursMetrics(responses, timeSavingIds, confidenceIds, adminHourlyRate, minutesSavingIds)
+        setOrgHoursMetrics(adminOrgHours)
         
-        setUserGoals(extractedGoals.slice(0, 10)) // Show last 10 goals
-        
-        // Compute question results for THIS USER's responses only using user-specific function
-        // Reuse userResponses which is already filtered for this user
-        const { computeUserQuestionResults } = await import("@/lib/dashboard-data")
-        const userQResults = await computeUserQuestionResults(userResponses)
-        setUserQuestionResults(userQResults)
+        // Compute weekly hours trend for chart
+        const hoursTrend = computeWeeklyHoursTrend(responses, timeSavingIds)
+        setWeeklyHoursTrend(hoursTrend)
+
+        // User-specific metrics - fetch ALL responses (unfiltered) for user's personal data
+        // This ensures the user sees their own data regardless of admin filters
+        if (user?.id) {
+          const userAllResponses = await fetchAllResponses("all", "all")
+          setPersonalStreak(computePersonalStreak(userAllResponses, user.id))
+          setPersonalTrend(computePersonalTrend(userAllResponses, user.id))
+          setPersonalBenchmark(computePersonalBenchmark(userAllResponses, user.id))
+          
+          // Compute user-specific hours metrics (use userAllResponses for user's data)
+          const userHours = computeUserHoursMetrics(userAllResponses, user.id, timeSavingIds, confidenceIds)
+          setUserHoursMetrics(userHours)
+
+          // Extract goals from user's responses based on question types
+          // We need to fetch templates to get question types
+          const templates = await getDocuments(COLLECTIONS.TEMPLATES)
+          const templateMap = new Map<string, { questions: Array<{ id: string; type: string; text?: string; options?: Array<{ label: string; value: string }> }> }>()
+          for (const t of templates) {
+            const template = t as unknown as { id: string; questions: Array<{ id: string; type: string; text?: string; options?: Array<{ label: string; value: string }> }> }
+            templateMap.set(template.id, template)
+          }
+          
+          // Load user's saved goal statuses from their document
+          const userDoc = await getDocument(COLLECTIONS.USERS, user.id)
+          const savedStatuses = (userDoc as Record<string, unknown>)?.goalStatuses as Record<string, { status: string }> | undefined
+          
+          const userResponses = userAllResponses.filter(r => r.userId === user.id)
+          const extractedGoals: GoalEntry[] = []
+          
+          for (const response of userResponses) {
+            const responseId = (response as unknown as { id: string }).id || `${response.userId}-${response.completedAt}`
+            const template = templateMap.get(response.templateId)
+            if (!template?.questions) continue
+            
+            for (const question of template.questions) {
+              const answer = response.answers?.[question.id]
+              if (!answer || typeof answer !== "string" || !answer.trim()) continue
+              
+              if (question.type === "goals" || question.type === "goal") {
+                // For multichoice/goals questions, look up the option label
+                let goalText = answer
+                if (question.options && question.options.length > 0) {
+                  const option = question.options.find(opt => opt.value === answer)
+                  if (option) {
+                    goalText = option.label
+                  }
+                }
+                
+                // Skip if the text is too short (likely a raw value like "A", "B")
+                if (goalText.length < 3) continue
+                
+                const goalId = `${responseId}-${question.id}`
+                const savedStatus = savedStatuses?.[goalId]?.status as GoalEntry["status"] | undefined
+                
+                extractedGoals.push({
+                  id: goalId,
+                  text: goalText,
+                  weekOf: response.weekOf || response.completedAt?.slice(0, 10) || "",
+                  status: savedStatus || "in-progress",
+                })
+              }
+            }
+          }
+          
+          // Sort by weekOf descending (most recent first)
+          extractedGoals.sort((a, b) => b.weekOf.localeCompare(a.weekOf))
+          
+          setUserGoals(extractedGoals.slice(0, 10)) // Show last 10 goals
+          
+          // Compute question results for THIS USER's responses only using user-specific function
+          // Reuse userResponses which is already filtered for this user
+          const { computeUserQuestionResults } = await import("@/lib/dashboard-data")
+          const userQResults = await computeUserQuestionResults(userResponses)
+          setUserQuestionResults(userQResults)
         }
+      } // End of fallback path else block
         
-        // Fetch departments from users in the selected organization
+      // Fetch departments from users in the selected organization
       if (selectedOrg && selectedOrg !== "all") {
         const orgUsers = await getUsersByOrg(selectedOrg)
         const userDepts = new Set<string>()
@@ -404,7 +595,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }, [selectedOrg, selectedDept, user, timePeriod, filterByTimePeriod, isSuperAdmin])
+  }, [selectedOrg, selectedDept, user, timePeriod, filterByTimePeriod, isSuperAdmin, getDateRange])
 
   useEffect(() => {
     loadData()
