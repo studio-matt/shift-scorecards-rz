@@ -4,7 +4,7 @@
  * Last updated: 2026-04-28 to fix env var loading
  */
 
-import { initializeApp, cert, getApps, getApp, type App } from "firebase-admin/app"
+import { initializeApp, cert, applicationDefault, getApps, getApp, type App } from "firebase-admin/app"
 import { getAuth, type Auth } from "firebase-admin/auth"
 import { getFirestore, type Firestore } from "firebase-admin/firestore"
 
@@ -17,18 +17,24 @@ function initializeAdmin(): App {
     return getApp()
   }
 
+  // On Firebase App Hosting, use Application Default Credentials (ADC)
+  // This automatically authenticates using the service account assigned to the App Hosting backend
+  // No service account key file needed - Google Cloud handles it automatically
+  
   const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
   
-  // Debug: log first 50 chars to verify env var is set (not the full key for security)
-  console.log(`[Firebase Admin] FIREBASE_SERVICE_ACCOUNT_KEY exists: ${!!serviceAccountKey}`)
-  console.log(`[Firebase Admin] FIREBASE_SERVICE_ACCOUNT_KEY length: ${serviceAccountKey?.length || 0}`)
-  console.log(`[Firebase Admin] FIREBASE_SERVICE_ACCOUNT_KEY starts with: ${serviceAccountKey?.substring(0, 20) || 'N/A'}...`)
-  
-  if (!serviceAccountKey) {
-    // List all env vars that start with FIREBASE to help debug
-    const firebaseEnvVars = Object.keys(process.env).filter(k => k.includes('FIREBASE'))
-    console.log(`[Firebase Admin] Available FIREBASE env vars: ${firebaseEnvVars.join(', ') || 'none'}`)
-    throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set")
+  // If running on Firebase App Hosting (Google Cloud), try ADC first
+  if (!serviceAccountKey || serviceAccountKey === '') {
+    console.log(`[Firebase Admin] No service account key found, trying Application Default Credentials...`)
+    try {
+      return initializeApp({
+        credential: applicationDefault(),
+        projectId: 'shift-fe6e9',
+      })
+    } catch (adcError) {
+      console.log(`[Firebase Admin] ADC failed: ${adcError}`)
+      throw new Error("Failed to initialize Firebase Admin: No service account key and ADC failed")
+    }
   }
 
   try {
@@ -47,7 +53,16 @@ function initializeAdmin(): App {
       credential: cert(serviceAccount),
     })
   } catch (error) {
-    throw new Error(`Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY: ${error}`)
+    // If service account key fails, try ADC as fallback
+    console.log(`[Firebase Admin] Service account key failed, trying ADC fallback...`)
+    try {
+      return initializeApp({
+        credential: applicationDefault(),
+        projectId: 'shift-fe6e9',
+      })
+    } catch (adcError) {
+      throw new Error(`Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY and ADC failed: ${error}`)
+    }
   }
 }
 
