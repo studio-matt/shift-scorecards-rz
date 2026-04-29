@@ -502,13 +502,15 @@ export function TopPerformers({ showCompany = false, data }: TopPerformersProps)
                             tabIndex={0}
                             className="cursor-help text-sm font-bold underline-offset-4 decoration-dotted underline text-emerald-500 dark:text-emerald-400"
                           >
-                            {performer.percentVsField}% vs 160&nbsp;h month
+                            {performer.percentVsField}%
                           </p>
                         </TooltipTrigger>
-                        <TooltipContent side="left" className="max-w-[280px] text-xs">
-                          Estimated AI time reclaimed as a share of one full‑time work month (**160&nbsp;h**
-                          — four 40&nbsp;h weeks). Monthly equivalent assumes weekly questionnaire claims &
-                          multiples by&nbsp;four; not a cohort comparison vs peers.
+                        <TooltipContent side="left" className="max-w-[320px] text-xs leading-relaxed">
+                          Estimated time reclaimed by using AI as a share of one full‑time working month. This is
+                          designed on a 160 hours per month baseline. Monthly equivalent assumes weekly questionnaire
+                          claims &amp; multiples by four; not a cohort comparison vs peers. Scorecards are released on an
+                          admin-set cadence (often roughly monthly)—“weekly” here reflects how time‑saving questions are
+                          phrased (a typical week’s savings), not calendar physics.
                         </TooltipContent>
                       </Tooltip>
                       <p className="text-xs text-muted-foreground">{performer.avgScore} hrs saved (est.)</p>
