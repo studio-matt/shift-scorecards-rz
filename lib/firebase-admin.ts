@@ -4,7 +4,7 @@
  * Last updated: 2026-04-28 to fix env var loading
  */
 
-import { initializeApp, cert, applicationDefault, getApps, getApp, type App } from "firebase-admin/app"
+import { initializeApp, applicationDefault, getApps, getApp, type App } from "firebase-admin/app"
 import { getAuth, type Auth } from "firebase-admin/auth"
 import { getFirestore, type Firestore } from "firebase-admin/firestore"
 
@@ -17,52 +17,32 @@ function initializeAdmin(): App {
     return getApp()
   }
 
-  // On Firebase App Hosting, use Application Default Credentials (ADC)
-  // This automatically authenticates using the service account assigned to the App Hosting backend
-  // No service account key file needed - Google Cloud handles it automatically
+  // On Firebase App Hosting, just use initializeApp() with no arguments
+  // The Admin SDK automatically uses ADC when running in Google Cloud environment
+  console.log(`[Firebase Admin] Initializing with default credentials...`)
   
-  const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
-  
-  // If running on Firebase App Hosting (Google Cloud), try ADC first
-  if (!serviceAccountKey || serviceAccountKey === '') {
-    console.log(`[Firebase Admin] No service account key found, trying Application Default Credentials...`)
-    try {
-      return initializeApp({
-        credential: applicationDefault(),
-        projectId: 'shift-fe6e9',
-      })
-    } catch (adcError) {
-      console.log(`[Firebase Admin] ADC failed: ${adcError}`)
-      throw new Error("Failed to initialize Firebase Admin: No service account key and ADC failed")
-    }
-  }
-
   try {
-    // Try to parse as JSON first, then as base64-encoded JSON
-    let jsonString = serviceAccountKey
-    
-    // If it doesn't start with '{', assume it's base64 encoded
-    if (!serviceAccountKey.trim().startsWith('{')) {
-      console.log(`[Firebase Admin] Key appears to be base64 encoded, decoding...`)
-      jsonString = Buffer.from(serviceAccountKey, 'base64').toString('utf8')
-    }
-    
-    const serviceAccount = JSON.parse(jsonString)
-    console.log(`[Firebase Admin] Successfully parsed service account for project: ${serviceAccount.project_id}`)
+    // Try simplest initialization first - works on Firebase App Hosting
+    return initializeApp()
+  } catch (e) {
+    console.log(`[Firebase Admin] Default init failed, trying with projectId...`)
+  }
+  
+  try {
+    // Fallback: specify projectId explicitly
+    return initializeApp({ projectId: 'shift-fe6e9' })
+  } catch (e) {
+    console.log(`[Firebase Admin] ProjectId init failed, trying ADC...`)
+  }
+  
+  try {
+    // Fallback: explicit ADC
     return initializeApp({
-      credential: cert(serviceAccount),
+      credential: applicationDefault(),
+      projectId: 'shift-fe6e9',
     })
-  } catch (error) {
-    // If service account key fails, try ADC as fallback
-    console.log(`[Firebase Admin] Service account key failed, trying ADC fallback...`)
-    try {
-      return initializeApp({
-        credential: applicationDefault(),
-        projectId: 'shift-fe6e9',
-      })
-    } catch (adcError) {
-      throw new Error(`Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY and ADC failed: ${error}`)
-    }
+  } catch (adcError) {
+    throw new Error(`Failed to initialize Firebase Admin: ${adcError}`)
   }
 }
 
