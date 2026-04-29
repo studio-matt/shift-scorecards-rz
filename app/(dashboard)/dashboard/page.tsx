@@ -49,6 +49,7 @@ import {
   getDocuments,
   getUsersByOrg,
   getUserResponses,
+  getUserResponsesUnordered,
   getResponsesByOrg,
   COLLECTIONS,
 } from "@/lib/firestore"
@@ -433,25 +434,48 @@ export default function DashboardPage() {
             getDocuments(COLLECTIONS.TEMPLATES),
           ])
 
-          const toRaw = (
-            docs: Awaited<ReturnType<typeof getUserResponses>>,
-          ): RawResponse[] => docs.map((d) => ({ ...d } as unknown as RawResponse))
+          const toRaw = (docs: { id: string }[]): RawResponse[] =>
+            docs.map((d) => ({ ...d } as unknown as RawResponse))
 
-          let orgSliceRaw: RawResponse[] = toRaw(userResponseDocs)
+          // orderBy(completedAt) excludes docs without that field; fall back for legacy rows
+          let userDocs = userResponseDocs
+          if (userDocs.length === 0) {
+            userDocs = await getUserResponsesUnordered(user.id)
+          }
+
+          const userRaw = toRaw(userDocs)
+
+          const isCompleted = (r: RawResponse) =>
+            (r as unknown as { status?: string }).status === "completed" || Boolean(r.completedAt)
+
+          // Personal metrics must NEVER rely only on getResponsesByOrg(profile org): receipts use
+          // release.organizationId (e.g. client org) which can differ from the user's profile orgId.
+          const myCompleted = userRaw.filter(isCompleted)
+
+          const mergeByDocId = (a: RawResponse[], b: RawResponse[]): RawResponse[] => {
+            const byId = new Map<string, RawResponse>()
+            for (const r of a) {
+              const id = (r as unknown as { id?: string }).id
+              if (id) byId.set(id, r)
+            }
+            for (const r of b) {
+              const id = (r as unknown as { id?: string }).id
+              if (id) byId.set(id, r)
+            }
+            return Array.from(byId.values())
+          }
+
+          let orgSliceRaw: RawResponse[] = userRaw
           if (user.organizationId) {
             try {
-              orgSliceRaw = toRaw(await getResponsesByOrg(user.organizationId))
+              const orgRaw = toRaw(await getResponsesByOrg(user.organizationId))
+              orgSliceRaw = mergeByDocId(orgRaw, userRaw)
             } catch (e) {
               console.warn("[dashboard] getResponsesByOrg failed; using user responses only", e)
             }
           }
 
-          const orgCompleted = orgSliceRaw.filter(
-            (r) =>
-              (r as unknown as { status?: string }).status === "completed" || Boolean(r.completedAt),
-          )
-
-          const myCompleted = orgCompleted.filter((r) => r.userId === user.id)
+          const orgCompleted = orgSliceRaw.filter(isCompleted)
 
           const uhm = computeUserHoursMetrics(myCompleted, user.id, timeSavingIds, confidenceIds)
           setUserHoursMetrics(uhm)

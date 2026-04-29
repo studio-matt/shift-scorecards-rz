@@ -179,6 +179,15 @@ export async function getUserResponses(userId: string, maxDocs = 5000) {
   )
 }
 
+/**
+ * All response docs for a user (no completedAt ordering).
+ * Use when getUserResponses returns empty — e.g. legacy rows missing completedAt cannot satisfy orderBy.
+ */
+export async function getUserResponsesUnordered(userId: string, maxDocs = 5000) {
+  const cap = Math.min(Math.max(maxDocs, 1), 10000)
+  return getDocuments(COLLECTIONS.RESPONSES, where("userId", "==", userId), limit(cap))
+}
+
 export async function getResponsesByOrg(orgId: string) {
   return getDocuments(
     COLLECTIONS.RESPONSES,
