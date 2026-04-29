@@ -277,7 +277,7 @@ export default function DashboardPage() {
       // This avoids fetching 35K+ raw responses for dashboard stats
       // ══════════════════════════════════════════════════════════════════════
       
-      const [orgDocs, targetsDoc, aggregateStats] = await Promise.all([
+      const [orgDocs, targetsDoc, aggregateStats, platformUsers] = await Promise.all([
         getOrganizations(),
         getDocument(COLLECTIONS.SETTINGS, "dashboardTargets"),
         getDashboardStats({
@@ -286,6 +286,7 @@ export default function DashboardPage() {
           organizationId: selectedOrg === "all" ? undefined : selectedOrg,
           department: selectedDept === "all" ? undefined : selectedDept,
         }),
+        getDocuments(COLLECTIONS.USERS),
       ])
       
       if (targetsDoc) {
@@ -326,15 +327,63 @@ export default function DashboardPage() {
           }),
         ])
         
-        // Set admin stats from aggregates
+        // Full AdminStats shape — fallback cards use totalOrgs / totalUsers (.toString)
+        const hourlyForAgg =
+          (
+            orgDocs.find((o) => o.id === selectedOrg) as unknown as Organization | undefined
+          )?.hourlyRate ?? 100
+        const monthlyValueApprox =
+          aggregateStats.valueCreated || aggregateStats.totalHoursSaved * hourlyForAgg
+
         setAdminStats({
-          avgScore: aggregateStats.avgConfidence, // Using confidence as proxy for avg score
-          completionRate: 0, // Would need total expected vs completed
+          avgScore: aggregateStats.avgConfidence,
+          avgScoreChange: 0,
+          completionRate: 0,
+          completionRateChange: 0,
           activeUsers: aggregateStats.participantCount,
+          activeUsersChange: 0,
           scorecardsSent: aggregateStats.responseCount,
-          hoursSaved: aggregateStats.totalHoursSaved,
-          valueCreated: aggregateStats.valueCreated,
+          scorecardsSentChange: 0,
+          totalOrgs: orgDocs.length,
+          totalUsers: platformUsers.length,
         })
+
+        setOrgHoursMetrics({
+          totalHoursSaved: aggregateStats.totalHoursSaved,
+          monthlyHours: aggregateStats.totalHoursSaved,
+          lastMonthHours: 0,
+          monthOverMonthChange: 0,
+          monthOverMonthPercent: 0,
+          avgProductivityPercent:
+            aggregateStats.participantCount > 0
+              ? Math.min(
+                  100,
+                  (aggregateStats.totalHoursSaved / (aggregateStats.participantCount * 160)) * 100,
+                )
+              : 0,
+          avgConfidence: aggregateStats.avgConfidence,
+          lastMonthConfidence: 0,
+          confidenceChange: 0,
+          fteEquivalent: aggregateStats.totalHoursSaved / 160,
+          annualRunRate: aggregateStats.totalHoursSaved * 12,
+          monthlyValue: monthlyValueApprox,
+          annualValue: monthlyValueApprox * 12,
+          perPersonValue:
+            aggregateStats.participantCount > 0
+              ? monthlyValueApprox / aggregateStats.participantCount
+              : 0,
+          activeParticipants: aggregateStats.participantCount,
+          thisMonthResponses: aggregateStats.responseCount,
+          lastMonthResponses: 0,
+        })
+
+        setWeeklyHoursTrend(
+          aggTrend.map((w) => ({
+            week: w.weekLabel,
+            hours: w.totalHoursSaved,
+            responses: w.responseCount,
+          })),
+        )
         setLoadingStats(false) // Stats section ready
         
         // Set weekly trend from aggregates
@@ -412,27 +461,6 @@ export default function DashboardPage() {
           
           const userHours = computeUserHoursMetrics(limitedResponses, user.id, timeSavingIds, confidenceIds)
           setUserHoursMetrics(userHours)
-          
-          // Set org hours metrics from aggregates
-          const selectedOrgDoc = orgDocs.find((o) => o.id === selectedOrg) as unknown as Organization | undefined
-          const adminHourlyRate = selectedOrgDoc?.hourlyRate ?? 100
-          setOrgHoursMetrics({
-            totalHoursSaved: aggregateStats.totalHoursSaved,
-            avgHoursSavedPerWeek: aggregateStats.totalHoursSaved / 4, // rough estimate
-            totalValueCreated: aggregateStats.valueCreated,
-            avgConfidence: aggregateStats.avgConfidence,
-            participantCount: aggregateStats.participantCount,
-            responseCount: aggregateStats.responseCount,
-          })
-          
-          // Weekly hours trend from aggregates (WeeklyHoursTrend shape: week, hours, responses)
-          setWeeklyHoursTrend(
-            aggTrend.map((w) => ({
-              week: w.weekLabel,
-              hours: w.totalHoursSaved,
-              responses: w.responseCount,
-            })),
-          )
           setLoadingPersonal(false) // Personal section ready
         } else {
           setLoadingPersonal(false) // No user, mark as complete

@@ -412,7 +412,7 @@ export function AdminStatCards({ data: s, targets, hoursMetrics, hourlyRate = 75
     },
     {
       label: "Active Users",
-      value: s.activeUsers.toLocaleString(),
+      value: Number(s.activeUsers ?? 0).toLocaleString(),
       change: usersVs.text,
       icon: Users,
       positive: usersVs.positive,
@@ -420,7 +420,7 @@ export function AdminStatCards({ data: s, targets, hoursMetrics, hourlyRate = 75
     },
     {
       label: "Scorecards Sent",
-      value: s.scorecardsSent.toLocaleString(),
+      value: Number(s.scorecardsSent ?? 0).toLocaleString(),
       change: sentVs.text,
       icon: Send,
       positive: sentVs.positive,
@@ -428,8 +428,8 @@ export function AdminStatCards({ data: s, targets, hoursMetrics, hourlyRate = 75
     },
     {
       label: "Organizations",
-      value: s.totalOrgs.toString(),
-      change: `${s.totalUsers} total users`,
+      value: String(s.totalOrgs ?? 0),
+      change: `${s.totalUsers ?? 0} total users`,
       icon: Building2,
       positive: true,
       explanation: METRIC_EXPLANATIONS.organizations,
