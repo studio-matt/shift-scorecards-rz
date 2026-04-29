@@ -25,6 +25,12 @@ import {
   Check,
   Trash2,
 } from "lucide-react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import type { TopPerformer } from "@/lib/types"
 import { COLLECTIONS, setDocument, getDocuments } from "@/lib/firestore"
 import { Timestamp } from "firebase/firestore"
@@ -411,7 +417,8 @@ export function TopPerformers({ showCompany = false, data }: TopPerformersProps)
   const filteredData = data.filter((p) => isValidName(p.name))
   
   return (
-    <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
+    <TooltipProvider delayDuration={200}>
+      <Card className="relative overflow-hidden border-border/50 bg-card/80 backdrop-blur-sm">
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
       <CardHeader className="relative">
         <div className="flex items-start justify-between">
@@ -489,11 +496,22 @@ export function TopPerformers({ showCompany = false, data }: TopPerformersProps)
                     )}
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className={`text-sm font-bold ${performer.percentVsField >= 0 ? "text-emerald-500" : "text-orange-500"}`}>
-                      {performer.percentVsField >= 0 ? "+" : ""}{performer.percentVsField}%
-                    </p>
-                    <p className="text-xs text-muted-foreground">{performer.avgScore} hrs saved</p>
-                  </div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <p
+                            tabIndex={0}
+                            className={`cursor-help text-sm font-bold underline-offset-4 decoration-dotted underline ${performer.percentVsField >= 0 ? "text-emerald-500" : "text-orange-500"}`}
+                          >
+                            {performer.percentVsField >= 0 ? "+" : ""}{performer.percentVsField}% vs avg
+                          </p>
+                        </TooltipTrigger>
+                        <TooltipContent side="left" className="max-w-[260px] text-xs">
+                          Percent above or below the <strong className="font-semibold text-foreground">cohort average</strong> estimated monthly hours (weekly claims × 4).
+                          Not a share of full-time monthly capacity (160&nbsp;h).
+                        </TooltipContent>
+                      </Tooltip>
+                      <p className="text-xs text-muted-foreground">{performer.avgScore} hrs saved (est.)</p>
+                    </div>
                   <Badge variant="secondary" className="shrink-0 text-xs">
                     {performer.streak} wk streak
                   </Badge>
@@ -510,5 +528,6 @@ export function TopPerformers({ showCompany = false, data }: TopPerformersProps)
         </div>
       </CardContent>
     </Card>
+    </TooltipProvider>
   )
 }

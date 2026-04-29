@@ -7,6 +7,24 @@ import type {
   TopPerformer,
   QuestionResult,
 } from "./types"
+import {
+  leaderboardPercentVsField,
+  orgAvgProductivityPercent,
+  rollupMaxWeeklyHoursClaimPerUserWeek,
+} from "./dashboard-metrics-formulas"
+
+/**
+ * MATH AUDIT (dashboard KPIs)
+ *
+ * | Metric | Symbol / field | Formula (conceptual) | Notes |
+ * |--------|----------------|----------------------|-------|
+ * | Leaderboard delta | `TopPerformer.percentVsField` | `((monthlyHours_i - fieldAverageHours) / fieldAverageHours) * 100`, where `monthlyHours_i = (sum weekly time_saving / responseCount_i) * WEEKLY_TO_MONTHLY` | Cohort-relative vs **peer mean** monthly hours; **not** "% of 160h capacity". **Unbounded** when `fieldAverageHours` is tiny. |
+ * | Cohort mean | `fieldAverageHours` | Mean of each user’s `monthlyHours` across users in the leaderboard pool | Same `WEEKLY_TO_MONTHLY = 4` as elsewhere. |
+ * | Org productivity % | `OrgHoursMetrics.avgProductivityPercent` | `orgAvgProductivityPercent(monthlyHours, activeParticipants)` → `(monthlyHours / (activeParticipants * 160)) * 100`, with `monthlyHours = weeklyHoursSum * 4` | Denominator = **N × 160** (monthly capacity). Numerator rolls up **max** weekly hours claim per `(userId, weekOf)` then sums, then ×4. |
+ * | Weekly → monthly | — | `weeklyHoursSum * WEEKLY_TO_MONTHLY_MULTIPLIER` (`4`) | Scorecard time questions are **weekly** estimates. |
+ *
+ * `parseTimeValue` / `parseMinuteValue` map range strings (e.g. "2-4 hours") to midpoint-style hours; see implementations below.
+ */
 
 /**
  * Parse a time value that could be:
@@ -547,9 +565,7 @@ export async function computeTopPerformers(
       const avgScore = Math.round(monthlyHours * 10) / 10 // avgScore now represents monthly hours saved
       
       // Calculate % above/below field average hours
-      const percentVsField = fieldAverageHours > 0 
-        ? Math.round(((monthlyHours - fieldAverageHours) / fieldAverageHours) * 100) 
-        : 0
+      const percentVsField = leaderboardPercentVsField(monthlyHours, fieldAverageHours)
       return {
         id: userId,
         name,
@@ -1912,9 +1928,9 @@ export function computeUserHoursMetrics(
 }
 
 // ── Compute hours metrics for an organization ─────────────────────────
-// NOTE: This function now computes metrics from ALL passed-in responses
-// The responses should already be filtered by the desired time period (month, quarter, YTD, etc.)
-// by the caller. This function sums up hours from ALL responses passed to it.
+// Responses should already be filtered by the caller (month, quarter, YTD).
+// Weekly hours are aggregated as the max claim per user per calendar week (`weekOf`), then summed
+// and multiplied by WEEKLY_TO_MONTHLY_MULTIPLIER for monthly equivalents.
 export function computeOrgHoursMetrics(
   responses: RawResponse[],
   timeSavingIds: string[],
@@ -1922,46 +1938,26 @@ export function computeOrgHoursMetrics(
   hourlyRate: number = 100,
   minutesSavingIds: string[] = [], // NEW: IDs for time_saving_minutes questions
   ): OrgHoursMetrics {
-  // Sum hours from ALL passed-in responses (already filtered by caller's time period)
-  let periodHoursVal = 0
   const allUsers = new Set<string>()
   const allConfidenceScores: number[] = []
-  
+
   for (const r of responses) {
-  // Track ALL users who submitted scorecards in this period
-  allUsers.add(r.userId)
-  
-  // Sum all time-saving question answers (hours)
-  // Use parseTimeValue to handle both numeric values and text ranges like "2-4 hours"
-  for (const qId of timeSavingIds) {
-  const val = r.answers[qId]
-  if (val !== undefined && val !== null && val !== "") {
-  const hours = parseTimeValue(val)
-  if (hours > 0) {
-  periodHoursVal += hours
+    allUsers.add(r.userId)
+    for (const confId of confidenceIds) {
+      const conf = r.answers[confId]
+      if (typeof conf === "number" && conf >= 1 && conf <= 10) {
+        allConfidenceScores.push(conf)
+      }
+    }
   }
-  }
-  }
-  
-  // Sum all time-saving MINUTES question answers and convert to hours
-  for (const qId of minutesSavingIds) {
-  const val = r.answers[qId]
-  if (val !== undefined && val !== null && val !== "") {
-  const minutes = parseMinuteValue(val)
-  if (minutes > 0) {
-  periodHoursVal += minutes / 60 // Convert minutes to hours
-  }
-  }
-  }
-  
-  // Track confidence scores from ALL confidence-type questions
-  for (const confId of confidenceIds) {
-  const conf = r.answers[confId]
-  if (typeof conf === "number" && conf >= 1 && conf <= 10) {
-  allConfidenceScores.push(conf)
-  }
-  }
-  }
+
+  const periodHoursVal = rollupMaxWeeklyHoursClaimPerUserWeek(
+    responses,
+    timeSavingIds,
+    minutesSavingIds,
+    parseTimeValue,
+    parseMinuteValue,
+  )
   
   // Use total hours from the period (already filtered by caller)
   // IMPORTANT: Time-saving questions ask for WEEKLY hours saved, but downstream metrics
@@ -1976,8 +1972,7 @@ export function computeOrgHoursMetrics(
   // Calculate productivity as percentage of total work capacity saved
   // Total work capacity for all participants = activeParticipants * 160 hours/month
   // Productivity = monthly hours saved / total work capacity * 100
-  const totalWorkCapacity = activeParticipants > 0 ? activeParticipants * 160 : 160
-  const avgProductivityPercent = (monthlyHours / totalWorkCapacity) * 100
+  const avgProductivityPercent = orgAvgProductivityPercent(monthlyHours, activeParticipants)
   
   // FTE equivalent (160 hours = 1 FTE per month) - this is the company total, not per person
   const fteEquivalent = monthlyHours / 160

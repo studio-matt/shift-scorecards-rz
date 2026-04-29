@@ -188,11 +188,19 @@ service cloud.firestore {
     match /scorecards/{scorecardId} {
       // All authenticated users can read scorecards
       allow read: if isAuthenticated();
-      
+
       // Only super admins can write
       allow write: if isSuperAdmin();
     }
-    
+
+    // ─── Aggregates (dashboard pre-computed stats; cron writes via Admin SDK)
+    // Same spirit as TEMP rules: authenticated reads. Rows are rollup metrics; tighten
+    // with org-bound queries + per-resource rules once aggregate queries constrain by org.
+    match /aggregates/{aggregateId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
     // ─── Deny All Other Collections ───────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;

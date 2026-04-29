@@ -49,10 +49,12 @@ const METRIC_EXPLANATIONS = {
   productivityGain: (
     <div className="space-y-1">
       <p className="font-semibold">Productivity Gain %</p>
-      <p>Hours saved as a percentage of total work capacity.</p>
+      <p>Equivalent monthly hours saved (from weekly scorecard claims × 4) as a share of total monthly work capacity.</p>
       <ul className="list-disc pl-4 space-y-0.5">
-        <li>Formula: Hours Saved / (Participants x 160 hrs) x 100</li>
-        <li>160 hours = standard monthly work hours per person</li>
+        <li>Monthly hours = (rolled-up weekly hours) × 4</li>
+        <li>Capacity = active participants × 160 hours/month each</li>
+        <li>Formula: monthly hours ÷ (participants × 160) × 100</li>
+        <li>Multiple scorecards in the same week for one person count once (highest weekly total that week)</li>
       </ul>
     </div>
   ),

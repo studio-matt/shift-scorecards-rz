@@ -33,6 +33,12 @@ import { cn } from "@/lib/utils"
 import { getDocuments, getDocument, deleteDocument, COLLECTIONS } from "@/lib/firestore"
 import { useAuth } from "@/lib/auth-context"
 import { parseTimeValue } from "@/lib/dashboard-data"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface RawResponse {
   id: string
@@ -68,6 +74,26 @@ interface TemplateQuestion {
   min?: number
   max?: number
   order: number
+}
+
+/** Human-readable question type for CSV export (no Firestore IDs). */
+function questionTypeLabelForExport(type: string): string {
+  const labels: Record<string, string> = {
+    time_saving: "Weekly time saved (hours)",
+    time_saving_minutes: "Weekly time saved (minutes)",
+    scale: "Rating scale",
+    number: "Number",
+    confidence: "Confidence",
+    goals: "Goals",
+    goals_narrative: "Goals (narrative)",
+    win: "Win / highlight",
+    text: "Short text",
+    long_text: "Long text",
+    select: "Single choice",
+    multi_select: "Multiple choice",
+    boolean: "Yes / no",
+  }
+  return labels[type] ?? type.replace(/_/g, " ")
 }
 
 function formatDate(iso: string) {
@@ -131,6 +157,9 @@ export default function PreviousScorecardsPage() {
   const [importEndDate, setImportEndDate] = useState("")
   const [importing, setImporting] = useState(false)
   const [showLegend, setShowLegend] = useState(false)
+  const [respondentByUserId, setRespondentByUserId] = useState<
+    Record<string, { name: string; email: string }>
+  >({})
 
   const fetchScorecards = useCallback(async () => {
     if (!user) return
@@ -170,6 +199,7 @@ export default function PreviousScorecardsPage() {
       const userOrgMap = new Map<string, string>() // Maps userId -> their ACTUAL org ID from profile
       const deptSet = new Set<string>()
       const usersList: Array<{ id: string; name: string; orgId: string; department: string }> = []
+      const contactsById: Record<string, { name: string; email: string }> = {}
       
       for (const u of userDocs) {
         const data = u as Record<string, unknown>
@@ -179,6 +209,12 @@ export default function PreviousScorecardsPage() {
         const firstName = (data.firstName as string) || ""
         const lastName = (data.lastName as string) || ""
         const fullName = `${firstName} ${lastName}`.trim()
+        const email = typeof data.email === "string" ? data.email : ""
+
+        contactsById[u.id] = {
+          name: fullName || "Unknown",
+          email,
+        }
         
         // Determine user's org ID - prefer organizationId field, fallback to company name match
         const userResolvedOrgId = userOrgIdField || orgNameToIdMap.get(userCompany.toLowerCase()) || ""
@@ -212,6 +248,7 @@ export default function PreviousScorecardsPage() {
       }
       setDepartments(Array.from(deptSet).sort())
       setUsers(usersList.sort((a, b) => a.name.localeCompare(b.name)))
+      setRespondentByUserId(contactsById)
       
       // Build template question map for finding time_saving questions
       const templateQuestionMap = new Map<string, TemplateQuestion[]>()
@@ -657,61 +694,72 @@ export default function PreviousScorecardsPage() {
                 {selected.totalHours} hrs saved
               </Badge>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="ml-auto gap-2"
-              onClick={() => {
-                // Build CSV with raw data for audit trail
-                const csvRows: string[] = []
-                
-                // Header row
-                csvRows.push([
-                  "Response ID",
-                  "User ID",
-                  "Organization",
-                  "Week Of",
-                  "Completed At",
-                  "Question ID",
-                  "Question Text",
-                  "Question Type",
-                  "Raw Value"
-                ].map(h => `"${h}"`).join(","))
-                
-                // Data rows - one row per question per response
-                for (const response of selectedResponses) {
-                  for (const q of questions) {
-                    const rawValue = response.answers[q.id]
-                    csvRows.push([
-                      response.id,
-                      response.userId,
-                      selected.organizationName,
-                      selected.weekOf,
-                      response.completedAt,
-                      q.id,
-                      q.text,
-                      q.type,
-                      rawValue !== undefined && rawValue !== null ? String(rawValue) : ""
-                    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))
-                  }
-                }
-                
-                // Download CSV
-                const csvContent = csvRows.join("\n")
-                const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-                const url = URL.createObjectURL(blob)
-                const link = document.createElement("a")
-                link.href = url
-                link.download = `${selected.organizationName.replace(/[^a-zA-Z0-9]/g, "_")}_${selected.weekOf}_raw_data.csv`
-                document.body.appendChild(link)
-                link.click()
-                document.body.removeChild(link)
-                URL.revokeObjectURL(url)
-              }}
-            >
-              <FileDown className="h-4 w-4" />
-              Export Raw Data
-            </Button>
+            <div className="ml-auto shrink-0">
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => {
+                        const csvRows: string[] = []
+                        csvRows.push([
+                          "Respondent Name",
+                          "Respondent Email",
+                          "Organization",
+                          "Week Of",
+                          "Completed At",
+                          "Question",
+                          "Question Type",
+                          "Answer",
+                        ].map((h) => `"${h}"`).join(","))
+
+                        for (const response of selectedResponses) {
+                          const contact = respondentByUserId[response.userId]
+                          const respondentName = contact?.name ?? "Unknown"
+                          const respondentEmail = contact?.email ?? ""
+                          for (const q of questions) {
+                            const rawValue = response.answers[q.id]
+                            csvRows.push([
+                              respondentName,
+                              respondentEmail,
+                              selected.organizationName,
+                              selected.weekOf,
+                              response.completedAt,
+                              q.text,
+                              questionTypeLabelForExport(q.type),
+                              rawValue !== undefined && rawValue !== null ? String(rawValue) : "",
+                            ]
+                              .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+                              .join(","))
+                          }
+                        }
+
+                        const csvContent = csvRows.join("\n")
+                        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+                        const url = URL.createObjectURL(blob)
+                        const link = document.createElement("a")
+                        link.href = url
+                        link.download = `${selected.organizationName.replace(/[^a-zA-Z0-9]/g, "_")}_${selected.weekOf}_responses.csv`
+                        document.body.appendChild(link)
+                        link.click()
+                        document.body.removeChild(link)
+                        URL.revokeObjectURL(url)
+                      }}
+                    >
+                      <FileDown className="h-4 w-4" />
+                      Export Responses
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="end" className="max-w-[280px] text-xs">
+                  Downloads one row per answer. Includes names and emails only—no database or internal IDs.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            </div>
           </div>
         </div>
 
