@@ -183,19 +183,21 @@ export function HoursTrendChart({ data }: HoursTrendChartProps) {
     )
   }
 
-  // Compute totals
-  const totalHours = data.reduce((sum, d) => sum + d.hours, 0)
-  const totalResponses = data.reduce((sum, d) => sum + d.responses, 0)
+  // Compute totals (coerce in case API/aggregate mapping omits `hours`)
+  const totalHours = data.reduce((sum, d) => sum + (d.hours ?? 0), 0)
+  const totalResponses = data.reduce((sum, d) => sum + (d.responses ?? 0), 0)
   const latestHours = data[data.length - 1]?.hours ?? 0
   const earliestHours = data[0]?.hours ?? 0
   const delta = latestHours - earliestHours
   const deltaPercent = earliestHours > 0 ? ((delta / earliestHours) * 100) : 0
 
   // Format helpers
-  const formatHours = (hrs: number) => hrs >= 1000 ? `${(hrs / 1000).toFixed(1)}K` : Math.round(hrs).toString()
+  const formatHours = (hrs: number) =>
+    Number.isFinite(hrs) && hrs >= 1000 ? `${(hrs / 1000).toFixed(1)}K` : String(Math.round(Number.isFinite(hrs) ? hrs : 0))
   
   // Format labels as dates (e.g., "April 13, 2026") for clarity
   const formatWeekLabel = (week: string) => {
+    if (week == null || week === "") return ""
     // If it's a date string, format as readable date
     if (week.includes("-") || week.includes("/")) {
       const date = new Date(week)
@@ -214,7 +216,8 @@ export function HoursTrendChart({ data }: HoursTrendChartProps) {
   // Transform data to use formatted week labels
   const chartData = data.map(d => ({
     ...d,
-    weekLabel: formatWeekLabel(d.week),
+    hours: d.hours ?? 0,
+    weekLabel: formatWeekLabel(d.week ?? ""),
   }))
 
   return (

@@ -425,12 +425,14 @@ export default function DashboardPage() {
             responseCount: aggregateStats.responseCount,
           })
           
-          // Weekly hours trend from aggregates
-          setWeeklyHoursTrend(aggTrend.map(w => ({
-            week: w.weekLabel,
-            hoursSaved: w.totalHoursSaved,
-            responses: w.responseCount,
-          })))
+          // Weekly hours trend from aggregates (WeeklyHoursTrend shape: week, hours, responses)
+          setWeeklyHoursTrend(
+            aggTrend.map((w) => ({
+              week: w.weekLabel,
+              hours: w.totalHoursSaved,
+              responses: w.responseCount,
+            })),
+          )
           setLoadingPersonal(false) // Personal section ready
         } else {
           setLoadingPersonal(false) // No user, mark as complete
