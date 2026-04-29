@@ -1,5 +1,5 @@
 import React from "react"
-// Root layout
+// Root layout - Firebase App Hosting build fix 2026-04-29
 import type { Metadata, Viewport } from "next"
 import { Inter } from "next/font/google"
 import { Providers } from "@/components/providers"
