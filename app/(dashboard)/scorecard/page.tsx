@@ -82,6 +82,7 @@ export default function ScorecardPage() {
   
   // Draft auto-save state
   const [draftId, setDraftId] = useState<string | null>(null)
+  const draftIdRef = useRef<string | null>(null)
   const [autoSaving, setAutoSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
 
@@ -162,18 +163,30 @@ export default function ScorecardPage() {
             }
             
             // Check for existing draft
-            const existingDraft = allResponses.find((r) => {
-              const data = r as Record<string, unknown>
-              return (
-                data.userId === user.id &&
-                data.releaseId === rel.id &&
-                data.status === "draft"
-              )
-            })
+            const draftCandidates = allResponses
+              .filter((r) => {
+                const data = r as Record<string, unknown>
+                return (
+                  data.userId === user.id &&
+                  data.releaseId === rel.id &&
+                  data.status === "draft"
+                )
+              })
+              .sort((a, b) => {
+                const ad = a as unknown as Record<string, unknown>
+                const bd = b as unknown as Record<string, unknown>
+                const aT =
+                  String(ad.updatedAt ?? ad.createdAt ?? "")
+                const bT =
+                  String(bd.updatedAt ?? bd.createdAt ?? "")
+                return bT.localeCompare(aT)
+              })
+            const existingDraft = draftCandidates[0]
             
             if (existingDraft) {
               const draftData = existingDraft as Record<string, unknown>
               setDraftId(existingDraft.id)
+              draftIdRef.current = existingDraft.id
               setAnswers((draftData.answers as Record<string, string | number>) || {})
               // Find first unanswered question
               const templateData = tmpl as unknown as TemplateData
@@ -195,6 +208,10 @@ export default function ScorecardPage() {
     }
     load()
   }, [user?.id])
+
+  useEffect(() => {
+    draftIdRef.current = draftId
+  }, [draftId])
 
   // Countdown timer
   useEffect(() => {
@@ -250,9 +267,10 @@ export default function ScorecardPage() {
         updatedAt: new Date().toISOString(),
       }
       
-      if (draftId) {
+      const effectiveDraftId = draftIdRef.current
+      if (effectiveDraftId) {
         // Update existing draft
-        await updateDocument(COLLECTIONS.RESPONSES, draftId, draftData)
+        await updateDocument(COLLECTIONS.RESPONSES, effectiveDraftId, draftData)
       } else {
         // Create new draft
         const newDocId = await createDocument(COLLECTIONS.RESPONSES, {
@@ -260,6 +278,7 @@ export default function ScorecardPage() {
           createdAt: new Date().toISOString(),
         })
         if (newDocId) {
+          draftIdRef.current = newDocId
           setDraftId(newDocId)
         }
       }
@@ -271,7 +290,7 @@ export default function ScorecardPage() {
     } finally {
       setAutoSaving(false)
     }
-  }, [release, template, user, draftId, weekOfLabel])
+  }, [release, template, user, weekOfLabel])
 
   const handleAnswer = useCallback(
     (questionId: string, value: string | number) => {
