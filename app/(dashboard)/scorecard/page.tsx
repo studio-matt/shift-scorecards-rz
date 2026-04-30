@@ -85,6 +85,28 @@ export default function ScorecardPage() {
   const [autoSaving, setAutoSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
 
+  function parseDateLike(value: unknown): Date | null {
+    if (!value) return null
+    if (value instanceof Date) return isNaN(value.getTime()) ? null : value
+    if (typeof value === "string" || typeof value === "number") {
+      const d = new Date(value)
+      return isNaN(d.getTime()) ? null : d
+    }
+    if (typeof value === "object") {
+      const v = value as { toDate?: () => unknown; seconds?: unknown; nanoseconds?: unknown }
+      if (typeof v.toDate === "function") {
+        const d = v.toDate()
+        return d instanceof Date && !isNaN(d.getTime()) ? d : null
+      }
+      if (typeof v.seconds === "number") {
+        const nanos = typeof v.nanoseconds === "number" ? v.nanoseconds : 0
+        const d = new Date(v.seconds * 1000 + Math.floor(nanos / 1e6))
+        return isNaN(d.getTime()) ? null : d
+      }
+    }
+    return null
+  }
+
   // Remaining time countdown
   const [remainingMs, setRemainingMs] = useState(0)
 
@@ -160,7 +182,7 @@ export default function ScorecardPage() {
                 (q) => savedAnswers[q.id] === undefined
               ) ?? 0
               setCurrentQuestion(Math.max(0, firstUnanswered))
-              setLastSaved(draftData.updatedAt ? new Date(draftData.updatedAt as string) : null)
+              setLastSaved(parseDateLike(draftData.updatedAt))
             }
           }
         }
@@ -242,8 +264,10 @@ export default function ScorecardPage() {
         }
       }
       setLastSaved(new Date())
+      return true
     } catch (err) {
       console.error("Failed to auto-save draft:", err)
+      return false
     } finally {
       setAutoSaving(false)
     }
@@ -313,6 +337,16 @@ export default function ScorecardPage() {
       setSubmitting(false)
     }
   }, [release, template, user, answers, weekOfLabel, draftId])
+
+  const handleSaveAndExit = useCallback(async () => {
+    if (!release || !template || !user) return
+    const ok = await autoSaveDraft(answers)
+    if (ok) {
+      router.push("/dashboard")
+      return
+    }
+    alert("We couldn't save your scorecard just now. Please try again (or click Submit if you're finished).")
+  }, [release, template, user, autoSaveDraft, answers, router])
 
   // Clear all answers and delete draft from DB
   const handleClearScorecard = useCallback(async () => {
@@ -848,7 +882,12 @@ export default function ScorecardPage() {
                 </p>
               )}
               <div className="flex flex-col gap-2">
-                <Button variant="outline" className="w-full bg-transparent">
+                <Button
+                  variant="outline"
+                  className="w-full bg-transparent"
+                  onClick={handleSaveAndExit}
+                  disabled={autoSaving || submitting}
+                >
                   <Save className="mr-2 h-4 w-4" />
                   Save & Exit
                 </Button>
