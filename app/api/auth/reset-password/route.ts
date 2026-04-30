@@ -2,6 +2,13 @@ import { NextResponse } from "next/server"
 import { getAdminAuth } from "@/lib/firebase-admin"
 import { sendEmail } from "@/lib/email-service"
 
+function redactEmail(email: string): string {
+  const [local, domain] = email.split("@")
+  if (!domain) return "***"
+  const safeLocal = (local || "").slice(0, 1)
+  return `${safeLocal}***@${domain}`
+}
+
 export async function POST(request: Request) {
   try {
     const { email } = await request.json()
@@ -22,6 +29,7 @@ export async function POST(request: Request) {
       const continueUrl = `${origin}/`
       const adminAuth = getAdminAuth()
 
+      console.log("[reset-password] requested", { email: redactEmail(normalizedEmail) })
       const resetLink = await adminAuth.generatePasswordResetLink(normalizedEmail, {
         url: continueUrl,
       })
@@ -38,6 +46,8 @@ export async function POST(request: Request) {
 
       if (!sendResult.success) {
         console.error("[reset-password] Failed sending reset email:", sendResult.error)
+      } else {
+        console.log("[reset-password] send success", { email: redactEmail(normalizedEmail) })
       }
     } catch (err: unknown) {
       const e = err as { code?: string; message?: string }

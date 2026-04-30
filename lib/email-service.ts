@@ -255,26 +255,39 @@ export async function sendEmail({
   data: Record<string, string>
 }): Promise<{ success: boolean; error?: string }> {
   try {
+    const recipients = Array.isArray(to) ? to : [to]
     const settings = await getEmailSettings()
     const envResendApiKey = process.env.RESEND_API_KEY
     const envFromEmail = process.env.RESEND_FROM_EMAIL
     if (!settings?.enabled && !(envResendApiKey && envFromEmail)) {
+      console.error("[email] blocked: settings disabled/missing and env fallback not set", {
+        templateType,
+        hasSettings: !!settings,
+        settingsEnabled: settings?.enabled ?? null,
+        hasEnvApiKey: !!envResendApiKey,
+        hasEnvFromEmail: !!envFromEmail,
+        recipients: recipients.length,
+      })
       return { success: false, error: "Email is not configured or disabled" }
     }
     
     const template = await getEmailTemplate(templateType)
     if (!template.enabled) {
+      console.error("[email] blocked: template disabled", { templateType, recipients: recipients.length })
       return { success: false, error: `Template "${templateType}" is disabled` }
     }
     
     const subject = await replacePlaceholders(template.subject, data)
     const html = await replacePlaceholders(template.body, data)
     
-    const recipients = Array.isArray(to) ? to : [to]
-    
     // Resend only
     const resendApiKey = settings?.resendApiKey || envResendApiKey
     if (!resendApiKey) {
+      console.error("[email] blocked: missing Resend API key", {
+        templateType,
+        hasSettings: !!settings,
+        recipients: recipients.length,
+      })
       return { success: false, error: "Resend API key not configured" }
     }
 
@@ -283,9 +296,15 @@ export async function sendEmail({
       (settings?.fromEmail?.trim() && settings.fromEmail.includes("@") ? settings.fromEmail.trim() : "") ||
       (envFromEmail?.trim() && envFromEmail.includes("@") ? envFromEmail.trim() : "")
     if (!fromEmail) {
+      console.error("[email] blocked: missing fromEmail", {
+        templateType,
+        hasSettings: !!settings,
+        recipients: recipients.length,
+      })
       return { success: false, error: "From email not configured" }
     }
 
+    console.log("[email] sending via Resend", { templateType, recipients: recipients.length, fromEmail })
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -303,11 +322,18 @@ export async function sendEmail({
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({} as { message?: string }))
+      console.error("[email] Resend send failed", {
+        templateType,
+        recipients: recipients.length,
+        status: response.status,
+        message: errorData.message || null,
+      })
       return { success: false, error: errorData.message || "Failed to send via Resend" }
     }
 
     return { success: true }
   } catch (error) {
+    console.error("[email] unexpected error", { templateType, error })
     return { success: false, error: String(error) }
   }
 }
