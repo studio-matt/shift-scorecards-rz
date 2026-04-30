@@ -128,6 +128,8 @@ export async function POST(request: Request) {
     // 1) legacy invites collection (status == pending)
     // 2) pending users (users with no authId) for this org
     const emailSet = new Set<string>()
+    let inviteDocsConsidered = 0
+    let pendingUsersConsidered = 0
 
     // 1) Legacy invites
     try {
@@ -136,6 +138,7 @@ export async function POST(request: Request) {
       if (body.sinceIso) q = q.where("createdAt", ">=", body.sinceIso)
       q = q.limit(limit)
       const snap = await q.get()
+      inviteDocsConsidered = snap.size
       for (const d of snap.docs) {
         const e = String(d.data()?.email || "").trim().toLowerCase()
         if (e.includes("@")) emailSet.add(e)
@@ -151,6 +154,7 @@ export async function POST(request: Request) {
       for (const d of usersSnap.docs) {
         const data = d.data() as { authId?: string; email?: string; createdAt?: unknown }
         if (data.authId) continue // already accepted
+        pendingUsersConsidered++
         const e = String(data.email || "").trim().toLowerCase()
         if (!e.includes("@")) continue
 
@@ -181,6 +185,11 @@ export async function POST(request: Request) {
         message: organizationId
           ? "No pending invites/users found for this organization."
           : "No pending invites found (provide organizationId or an orgName that matches an organization).",
+        debug: {
+          organizationId: organizationId || null,
+          inviteDocsConsidered,
+          pendingUsersConsidered,
+        },
       })
     }
 
