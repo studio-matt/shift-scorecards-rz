@@ -5,16 +5,39 @@ import { sendEmail } from "@/lib/email-service"
 import type { EmailTemplateType } from "@/lib/types"
 
 async function verifyAnyAdmin(request: Request): Promise<{ authorized: boolean; reason?: string }> {
-  // Only allow authenticated admin/company_admin users via session cookie.
   try {
-    const cookieStore = await cookies()
-    const sessionCookie = cookieStore.get("firebase-session")?.value
-    if (!sessionCookie) return { authorized: false, reason: "No session cookie found" }
-
     const auth = getAdminAuth()
-    const decoded = await auth.verifySessionCookie(sessionCookie, true)
-    const uid = decoded.uid
-    if (!uid) return { authorized: false, reason: "Invalid session - no UID" }
+    let uid: string | null = null
+
+    // Option 1: Authorization: Bearer <ID_TOKEN> (preferred; matches authHeaders())
+    const header = request.headers.get("authorization") || ""
+    if (header.toLowerCase().startsWith("bearer ")) {
+      const token = header.slice("bearer ".length).trim()
+      if (token) {
+        try {
+          const decoded = await auth.verifyIdToken(token, true)
+          uid = decoded.uid || null
+        } catch (e) {
+          return { authorized: false, reason: `Invalid bearer token: ${String(e)}` }
+        }
+      }
+    }
+
+    // Option 2: firebase-session cookie (fallback)
+    if (!uid) {
+      const cookieStore = await cookies()
+      const sessionCookie = cookieStore.get("firebase-session")?.value
+      if (sessionCookie) {
+        try {
+          const decoded = await auth.verifySessionCookie(sessionCookie, true)
+          uid = decoded.uid || null
+        } catch (e) {
+          return { authorized: false, reason: `Invalid session cookie: ${String(e)}` }
+        }
+      }
+    }
+
+    if (!uid) return { authorized: false, reason: "No auth token provided" }
 
     const db = getAdminDb()
 
