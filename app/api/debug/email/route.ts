@@ -4,10 +4,22 @@ import type { EmailSettings, EmailTemplate, EmailTemplateType } from "@/lib/type
 import { sendEmail } from "@/lib/email-service"
 
 function isAuthorized(req: NextRequest): boolean {
-  const secret = process.env.DEBUG_SECRET
-  if (!secret) return false
   const auth = req.headers.get("authorization") || ""
-  return auth === `Bearer ${secret}`
+  if (!auth.startsWith("Bearer ")) return false
+  const token = auth.slice("Bearer ".length).trim()
+  if (!token) return false
+
+  // Accept any of these *if present in the runtime environment*.
+  // This helps when App Hosting env vars are present for some secrets but not others,
+  // or when users already have a known-working cron secret.
+  const candidates = [
+    process.env.DEBUG_SECRET,
+    process.env.CRON_SECRET,
+    process.env.BACKFILL_SECRET,
+  ].filter((v): v is string => typeof v === "string" && v.length > 0)
+
+  if (candidates.length === 0) return false
+  return candidates.includes(token)
 }
 
 function json(data: unknown, status = 200) {
@@ -15,7 +27,10 @@ function json(data: unknown, status = 200) {
 }
 
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) return json({ error: "Unauthorized" }, 401)
+  if (!isAuthorized(req)) {
+    // Do not leak which secrets are configured; keep a generic 401.
+    return json({ error: "Unauthorized" }, 401)
+  }
 
   try {
     const adminDb = getAdminDb()
