@@ -88,29 +88,79 @@ export async function POST(request: Request) {
     }
 
     const limit = Math.min(Math.max(Number(body.limit || 200), 1), 1000)
-    const organizationId = (body.organizationId || "").trim()
+    let organizationId = (body.organizationId || "").trim()
     const orgName = body.orgName || "Shift Scorecards"
 
     const db = getAdminDb()
 
-    // Query invites
-    let query: FirebaseFirestore.Query = db.collection("invites")
-    if (organizationId) query = query.where("organizationId", "==", organizationId)
-    query = query.where("status", "==", "pending")
-    if (body.sinceIso) query = query.where("createdAt", ">=", body.sinceIso)
-    query = query.limit(limit)
+    // If orgName provided but orgId not, attempt lookup by org name (case-insensitive exact match).
+    if (!organizationId && body.orgName) {
+      const orgsSnap = await db.collection("organizations").get()
+      const match = orgsSnap.docs.find((d) => {
+        const name = String(d.data()?.name || "").trim().toLowerCase()
+        return name.length > 0 && name === String(body.orgName).trim().toLowerCase()
+      })
+      if (match) organizationId = match.id
+    }
 
-    const snap = await query.get()
-    const emails = Array.from(
-      new Set(
-        snap.docs
-          .map((d) => String(d.data()?.email || "").trim().toLowerCase())
-          .filter((e) => e.includes("@")),
-      ),
-    )
+    // Collect recipients from BOTH:
+    // 1) legacy invites collection (status == pending)
+    // 2) pending users (users with no authId) for this org
+    const emailSet = new Set<string>()
 
+    // 1) Legacy invites
+    try {
+      let q: FirebaseFirestore.Query = db.collection("invites").where("status", "==", "pending")
+      if (organizationId) q = q.where("organizationId", "==", organizationId)
+      if (body.sinceIso) q = q.where("createdAt", ">=", body.sinceIso)
+      q = q.limit(limit)
+      const snap = await q.get()
+      for (const d of snap.docs) {
+        const e = String(d.data()?.email || "").trim().toLowerCase()
+        if (e.includes("@")) emailSet.add(e)
+      }
+    } catch (e) {
+      // ignore query errors; we still attempt users fallback below
+      console.warn("[resend-invites] invites query failed:", e)
+    }
+
+    // 2) Pending users (org-scoped only; avoid scanning whole users collection)
+    if (organizationId) {
+      const usersSnap = await db.collection("users").where("organizationId", "==", organizationId).get()
+      for (const d of usersSnap.docs) {
+        const data = d.data() as { authId?: string; email?: string; createdAt?: unknown }
+        if (data.authId) continue // already accepted
+        const e = String(data.email || "").trim().toLowerCase()
+        if (!e.includes("@")) continue
+
+        // Optional sinceIso filter (best-effort; supports ISO strings or Firestore Timestamp-like objects)
+        if (body.sinceIso) {
+          const since = Date.parse(body.sinceIso)
+          if (!Number.isNaN(since)) {
+            const created = data.createdAt as { toDate?: () => Date } | string | undefined
+            const createdMs =
+              typeof created === "string"
+                ? Date.parse(created)
+                : created && typeof created === "object" && typeof created.toDate === "function"
+                  ? created.toDate().getTime()
+                  : NaN
+            if (!Number.isNaN(createdMs) && createdMs < since) continue
+          }
+        }
+
+        emailSet.add(e)
+        if (emailSet.size >= limit) break
+      }
+    }
+
+    const emails = Array.from(emailSet)
     if (emails.length === 0) {
-      return NextResponse.json({ resent: 0, message: "No pending invites found." })
+      return NextResponse.json({
+        resent: 0,
+        message: organizationId
+          ? "No pending invites/users found for this organization."
+          : "No pending invites found (provide organizationId or orgName to search pending users).",
+      })
     }
 
     const settings = await getEmailSettings()
@@ -170,7 +220,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-      considered: snap.size,
+      organizationId: organizationId || null,
       uniqueEmails: emails.length,
       sent,
       failed,
