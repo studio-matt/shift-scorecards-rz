@@ -25,6 +25,7 @@ import {
   getUserResponses,
   getUserResponsesUnordered,
   updateDocument,
+  getUsersByEmailAll,
   COLLECTIONS,
 } from "@/lib/firestore"
 import { useAuth } from "@/lib/auth-context"
@@ -42,6 +43,17 @@ interface UserData {
   status: string
   createdAt: string
   authId?: string
+}
+
+interface IdentityCandidate {
+  id: string
+  authId?: string
+  organizationId?: string
+  department?: string
+  createdAt?: string
+  status?: string
+  completedCount: number
+  draftCount: number
 }
 
 interface ScorecardResponse {
@@ -103,6 +115,8 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
   const [scorecardCount, setScorecardsCount] = useState(0)
   const [streak, setStreak] = useState(0)
   const [completingId, setCompletingId] = useState<string | null>(null)
+  const [identityCandidates, setIdentityCandidates] = useState<IdentityCandidate[]>([])
+  const [reassigningFrom, setReassigningFrom] = useState<string | null>(null)
   
   const fetchData = useCallback(async () => {
     try {
@@ -139,6 +153,50 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
         createdAt: (uData.createdAt as string) || "",
         authId: (uData.authId as string) || undefined,
       })
+
+      // Identity diagnostics: find duplicate user docs by email and see which one holds responses.
+      const email = ((uData.email as string) || "").toLowerCase()
+      if (email) {
+        try {
+          const candidates = await getUsersByEmailAll(email, 25)
+          const rows: IdentityCandidate[] = []
+          for (const c of candidates) {
+            const cd = c as unknown as Record<string, unknown>
+            const respDocs = await getUserResponsesUnordered(c.id, 5000)
+            const completedCount = respDocs.filter((r) => {
+              const rd = r as unknown as Record<string, unknown>
+              const status = (rd.status as string) ?? ""
+              const completedAt = (rd.completedAt as string) ?? ""
+              return status === "completed" || (completedAt && completedAt.trim().length > 0)
+            }).length
+            const draftCount = respDocs.filter((r) => {
+              const rd = r as unknown as Record<string, unknown>
+              return (rd.status as string) === "draft"
+            }).length
+            rows.push({
+              id: c.id,
+              authId: (cd.authId as string) || undefined,
+              organizationId: (cd.organizationId as string) || undefined,
+              department: (cd.department as string) || undefined,
+              createdAt: (cd.createdAt as string) || undefined,
+              status: (cd.authId as string) ? "active" : "pending",
+              completedCount,
+              draftCount,
+            })
+          }
+          // Sort: most completed responses first, then drafts
+          rows.sort(
+            (a, b) =>
+              b.completedCount - a.completedCount ||
+              b.draftCount - a.draftCount ||
+              String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")),
+          )
+          setIdentityCandidates(rows)
+        } catch (e) {
+          console.warn("[admin user detail] identity diagnostics failed", e)
+          setIdentityCandidates([])
+        }
+      }
       
       // Fetch user's scorecard responses
       const authId = (uData.authId as string) || ""
@@ -279,6 +337,32 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
       }
     },
     [fetchData],
+  )
+
+  const handleReassignResponses = useCallback(
+    async (fromUserId: string) => {
+      if (!userData) return
+      if (fromUserId === userData.id) return
+      const ok = confirm(
+        `Reassign ALL responses from userId "${fromUserId}" to this user ("${userData.id}")?\n\nThis is useful if a user has duplicate accounts and their scorecards were saved on the other record.`,
+      )
+      if (!ok) return
+
+      try {
+        setReassigningFrom(fromUserId)
+        const docs = await getUserResponsesUnordered(fromUserId, 10000)
+        for (const d of docs) {
+          await updateDocument(COLLECTIONS.RESPONSES, d.id, { userId: userData.id })
+        }
+        await fetchData()
+      } catch (err) {
+        console.error("Failed to reassign responses:", err)
+        alert("Failed to reassign responses. Please try again.")
+      } finally {
+        setReassigningFrom(null)
+      }
+    },
+    [fetchData, userData],
   )
   
   // Load template questions when scorecard is selected
@@ -437,6 +521,68 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
           </CardContent>
         </Card>
       </div>
+
+      {/* Identity diagnostics */}
+      {identityCandidates.length > 1 && (
+        <Card className="mb-6 border-amber-500/30">
+          <CardHeader>
+            <CardTitle>Identity Diagnostics</CardTitle>
+            <CardDescription>
+              Multiple user records share this email. Scorecards may be attached to a different user ID.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-3">
+              {identityCandidates.map((c) => {
+                const isThis = c.id === userData.id
+                const hasAny = c.completedCount + c.draftCount > 0
+                return (
+                  <div
+                    key={c.id}
+                    className="flex flex-col gap-2 rounded-lg border border-border/60 bg-muted/20 p-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground">
+                          {isThis ? "This user record" : "Other user record"}
+                        </p>
+                        <p className="text-xs text-muted-foreground break-all">
+                          id: {c.id}{c.authId ? ` · authId: ${c.authId}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">
+                          {c.completedCount} completed · {c.draftCount} drafts
+                        </Badge>
+                        {isThis ? <Badge>Viewing</Badge> : null}
+                        {!isThis && hasAny && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={reassigningFrom === c.id}
+                            onClick={() => handleReassignResponses(c.id)}
+                          >
+                            {reassigningFrom === c.id ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : null}
+                            Move responses here
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {c.organizationId ? `org: ${c.organizationId}` : "org: -"}{" "}
+                      {c.department ? `· dept: ${c.department}` : ""}{" "}
+                      {c.createdAt ? `· created: ${new Date(c.createdAt).toLocaleDateString()}` : ""}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
       
       {/* Scorecards Section */}
       <Card>

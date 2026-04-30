@@ -158,6 +158,13 @@ export async function getUserByEmail(email: string) {
   return users[0] ?? null
 }
 
+/** All user docs matching an email (helps detect duplicates). */
+export async function getUsersByEmailAll(email: string, maxDocs = 25) {
+  const normalized = email.toLowerCase()
+  const cap = Math.min(Math.max(maxDocs, 1), 100)
+  return getDocuments(COLLECTIONS.USERS, where("email", "==", normalized), limit(cap))
+}
+
 // ─── Template Helpers ─────────────────────────────────────────────────
 
 export async function getTemplates(orgId?: string) {
