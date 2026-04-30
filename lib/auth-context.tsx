@@ -133,50 +133,28 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
     // Legacy invites stored separately in INVITES collection
     const matchingInvite = await getInviteByEmail(email)
     if (matchingInvite) {
-      const inviteData = matchingInvite as Record<string, unknown>
-      // Migrate invite to USERS collection
-      const newUserData = {
-        email,
-        firstName: (inviteData.firstName as string) ?? "",
-        lastName: (inviteData.lastName as string) ?? "",
-        department: (inviteData.department as string) ?? "",
-        organizationId: (inviteData.organizationId as string) ?? "",
-        role: (inviteData.role as string) ?? "user",
-        status: "active",
-        authId: fbUser.uid,
-        createdAt: (inviteData.createdAt as string) ?? new Date().toISOString(),
-        lastLogin: new Date().toISOString(),
-        ...(fbUser.photoURL ? { avatar: fbUser.photoURL } : {}),
-        ...(fbUser.displayName ? { 
-          firstName: fbUser.displayName.split(" ")[0] ?? "",
-          lastName: fbUser.displayName.split(" ").slice(1).join(" ") ?? "",
-        } : {}),
+      // Claim the invite server-side (Admin SDK) to avoid client create rules on /users.
+      const idToken = await fbUser.getIdToken()
+      const res = await fetch("/api/auth/claim-invite", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+      })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(body.error || "Failed to claim invite")
       }
-      const docId = await createDocument(COLLECTIONS.USERS, newUserData)
-      // Delete the old invite
-      await deleteDocument(COLLECTIONS.INVITES, matchingInvite.id)
-      
-      // Upsert the userProfiles mirror for security rules (best-effort; fallback to Admin SDK endpoint)
-      try {
-        await upsertUserProfile(fbUser.uid, docId, {
-          role: newUserData.role,
-          organizationId: newUserData.organizationId,
-          department: newUserData.department,
-          email: newUserData.email,
-          firstName: newUserData.firstName,
-          lastName: newUserData.lastName,
-          status: newUserData.status,
-        })
-      } catch (e) {
-        const err = e as { code?: string; message?: string }
-        if (/permission|insufficient|PERMISSION_DENIED/i.test(String(err.code || err.message || ""))) {
-          await syncUserProfileMirrorAfterUserDocUpdate(docId)
-        } else {
-          throw e
-        }
-      }
-      
-      return { id: docId, ...newUserData } as unknown as User
+
+      const claimed = (await res.json().catch(() => ({}))) as { userDocId?: string }
+      const userDocId = claimed.userDocId
+      if (!userDocId) throw new Error("Invite claim succeeded but userDocId missing")
+
+      const createdUser = await getUserByEmail(email)
+      if (!createdUser) throw new Error("Invite claimed but user record not found")
+
+      return { ...createdUser, authId: fbUser.uid } as unknown as User
     }
   }
 
