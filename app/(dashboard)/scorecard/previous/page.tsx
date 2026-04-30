@@ -325,7 +325,8 @@ export default function PreviousScorecardsPage() {
         )
       } else {
         // Regular users see ONLY their own responses, grouped by week
-        responses = completedOnly.filter((r) => r.userId === user?.id)
+        const myIds = new Set([user?.id, user?.authId].filter(Boolean) as string[])
+        responses = completedOnly.filter((r) => myIds.has(r.userId))
       }
       
       // Group responses by weekOf:
@@ -441,7 +442,8 @@ export default function PreviousScorecardsPage() {
       
       // For non-admin users, only show their own responses
       if (!isAdmin && user?.id) {
-        filtered = filtered.filter((r) => r.userId === user.id)
+        const myIds = new Set([user.id, user.authId].filter(Boolean) as string[])
+        filtered = filtered.filter((r) => myIds.has(r.userId))
       }
       
       setSelectedResponses(filtered)

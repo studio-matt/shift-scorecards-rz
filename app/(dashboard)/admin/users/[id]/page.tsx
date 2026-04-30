@@ -41,6 +41,7 @@ interface UserData {
   organizationName: string
   status: string
   createdAt: string
+  authId?: string
 }
 
 interface ScorecardResponse {
@@ -136,14 +137,24 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
         organizationName: orgName,
         status: uData.authId ? "active" : "pending",
         createdAt: (uData.createdAt as string) || "",
+        authId: (uData.authId as string) || undefined,
       })
       
       // Fetch user's scorecard responses
-      const [responseDocs, templateDocs] = await Promise.all([
+      const authId = (uData.authId as string) || ""
+      const [byUserId, byAuthId, templateDocs] = await Promise.all([
         // Use unordered so drafts (no completedAt) still appear
         getUserResponsesUnordered(userId),
+        authId && authId !== userId ? getUserResponsesUnordered(authId) : Promise.resolve([]),
         getDocuments(COLLECTIONS.TEMPLATES),
       ])
+      const responseDocs = (() => {
+        const byId = new Map<string, { id: string } & Record<string, unknown>>()
+        for (const r of [...byUserId, ...byAuthId]) {
+          byId.set(r.id, r as unknown as { id: string } & Record<string, unknown>)
+        }
+        return Array.from(byId.values())
+      })()
       
       // Build template question map
       const templateQuestionMap = new Map<string, TemplateQuestion[]>()

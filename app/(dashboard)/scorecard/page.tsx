@@ -149,7 +149,20 @@ export default function ScorecardPage() {
           
           // Check for existing response (draft or completed) for this user + release
           if (user?.id) {
-            const allResponses = await getUserResponsesUnordered(user.id, 2000)
+            const [byUserId, byAuthId] = await Promise.all([
+              getUserResponsesUnordered(user.id, 2000),
+              user.authId && user.authId !== user.id
+                ? getUserResponsesUnordered(user.authId, 2000)
+                : Promise.resolve([]),
+            ])
+            const allResponses = (() => {
+              const byId = new Map<string, unknown>()
+              for (const r of [...byUserId, ...byAuthId]) {
+                const id = (r as unknown as { id?: string }).id
+                if (id) byId.set(id, r)
+              }
+              return Array.from(byId.values()) as typeof byUserId
+            })()
             
             // First check if user already COMPLETED this release
             const existingCompleted = allResponses.find((r) => {

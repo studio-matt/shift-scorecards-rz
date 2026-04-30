@@ -427,8 +427,9 @@ export default function DashboardPage() {
 
           // Personal metrics must come from raw responses: org aggregates update on a cron delay,
           // so "caught up" on the scorecard page could still show 0/1 here otherwise.
-          const [userResponseDocs, timeSavingIds, confidenceIds, templateDocs] = await Promise.all([
+          const [userResponseDocs, authResponseDocs, timeSavingIds, confidenceIds, templateDocs] = await Promise.all([
             getUserResponses(user.id),
+            user.authId && user.authId !== user.id ? getUserResponses(user.authId) : Promise.resolve([]),
             findTimeSavingQuestionIds(),
             findConfidenceQuestionIds(),
             getDocuments(COLLECTIONS.TEMPLATES),
@@ -442,8 +443,22 @@ export default function DashboardPage() {
           if (userDocs.length === 0) {
             userDocs = await getUserResponsesUnordered(user.id)
           }
+          let authDocs = authResponseDocs
+          if (user.authId && user.authId !== user.id && authDocs.length === 0) {
+            authDocs = await getUserResponsesUnordered(user.authId)
+          }
 
-          const userRaw = toRaw(userDocs)
+          // Merge any legacy rows stored under authId into the user's stream
+          const mergedUserDocs = (() => {
+            const byId = new Map<string, unknown>()
+            for (const d of [...userDocs, ...authDocs]) {
+              const id = (d as unknown as { id?: string }).id
+              if (id) byId.set(id, d)
+            }
+            return Array.from(byId.values()) as typeof userDocs
+          })()
+
+          const userRaw = toRaw(mergedUserDocs)
 
           const isCompleted = (r: RawResponse) =>
             (r as unknown as { status?: string }).status === "completed" || Boolean(r.completedAt)
