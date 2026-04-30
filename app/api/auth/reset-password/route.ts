@@ -29,7 +29,7 @@ export async function POST(request: Request) {
       // users hit our custom domain. Firebase Auth requires the continue URL domain to
       // be authorized, so use the canonical app URL instead of request.url.
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://scorecard.envoydesign.com"
-      const continueUrl = `${appUrl.replace(/\\/$/, "")}/`
+      const continueUrl = `${appUrl.replace(/\/$/, "")}/`
       const adminAuth = getAdminAuth()
 
       console.log("[reset-password] requested", { email: redactEmail(normalizedEmail) })
