@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin"
-import { sendEmail } from "@/lib/email-service"
+import { getEmailSettings, getEmailTemplate, replacePlaceholders } from "@/lib/email-service"
 import type { EmailTemplateType } from "@/lib/types"
+import { Resend } from "resend"
 
 async function verifyAnyAdmin(request: Request): Promise<{ authorized: boolean; reason?: string }> {
   try {
@@ -95,11 +96,36 @@ export async function POST(request: Request) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://scorecard.envoydesign.com"
     const orgName = body.orgName || "Shift Scorecards"
 
+    const settings = await getEmailSettings()
+    if (!settings?.enabled) {
+      return NextResponse.json({ error: "Email is not configured or disabled" }, { status: 400 })
+    }
+
+    const apiKey = settings.resendApiKey || process.env.RESEND_API_KEY
+    if (!apiKey) {
+      return NextResponse.json({ error: "Resend API key not configured" }, { status: 500 })
+    }
+
+    const fromEmail = settings.fromEmail && settings.fromEmail.includes("@") ? settings.fromEmail : ""
+    const fromName = settings.fromName || "Shift Scorecards"
+    if (!fromEmail) {
+      return NextResponse.json({ error: "From email not configured" }, { status: 500 })
+    }
+
+    const template = await getEmailTemplate(TEMPLATE)
+    if (!template.enabled) {
+      return NextResponse.json({ error: `Template "${TEMPLATE}" is disabled` }, { status: 400 })
+    }
+
+    const resend = new Resend(apiKey)
+
     let recorded = 0
     let sent = 0
     let failed = 0
     const errors: string[] = []
 
+    // Record all invites first, and build recipient list for batching.
+    const recipients: string[] = []
     for (const inv of invites) {
       const email = String(inv.email || "").trim().toLowerCase()
       if (!email || !email.includes("@")) continue
@@ -117,27 +143,48 @@ export async function POST(request: Request) {
           createdAt: new Date().toISOString(),
         })
         recorded++
+        recipients.push(email)
       } catch (e) {
         failed++
         errors.push(`${email}: failed to record invite (${String(e)})`)
-        continue
       }
+    }
 
-      // Send via Resend using the canonical template store
-      const emailResult = await sendEmail({
-        to: email,
-        templateType: TEMPLATE,
-        data: {
-          "{{organizationName}}": orgName,
-          "{{inviteLink}}": appUrl,
-          "{{firstName}}": inv.firstName?.trim() || "there",
-        },
+    if (recipients.length > 0) {
+      const subject = await replacePlaceholders(template.subject, {
+        "{{organizationName}}": orgName,
       })
-      if (emailResult.success) {
-        sent++
-      } else {
-        failed++
-        errors.push(`${email}: ${emailResult.error || "send failed"}`)
+      const html = await replacePlaceholders(template.body, {
+        "{{organizationName}}": orgName,
+        "{{inviteLink}}": appUrl,
+      })
+
+      // Batch send to avoid Resend rate limits (100 per batch).
+      const BATCH_SIZE = 100
+      for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
+        const batch = recipients.slice(i, i + BATCH_SIZE).map((to) => ({
+          from: `${fromName} <${fromEmail}>`,
+          to,
+          subject,
+          html,
+          reply_to: settings.replyToEmail || fromEmail,
+        }))
+        const result = await resend.batch.send(batch)
+        if (result.error) {
+          failed += batch.length
+          errors.push(String(result.error?.message || result.error))
+        } else if (result.data?.data) {
+          sent += result.data.data.length
+          // If Resend returns fewer results than requested, count remainder as failed.
+          const missing = batch.length - result.data.data.length
+          if (missing > 0) {
+            failed += missing
+            errors.push(`Resend batch accepted fewer emails than requested (${result.data.data.length}/${batch.length}).`)
+          }
+        } else {
+          failed += batch.length
+          errors.push("Resend batch returned no data.")
+        }
       }
     }
 
