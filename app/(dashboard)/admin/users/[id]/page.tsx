@@ -47,6 +47,8 @@ interface ScorecardResponse {
   templateName: string
   weekOf: string
   completedAt: string
+  updatedAt?: string
+  createdAt?: string
   status: string
   answers: Record<string, string | number>
   totalHours: number
@@ -68,6 +70,7 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
   const [selectedScorecard, setSelectedScorecard] = useState<ScorecardResponse | null>(null)
   const [templateQuestions, setTemplateQuestions] = useState<TemplateQuestion[]>([])
   const [timePeriod, setTimePeriod] = useState("all")
+  const [showDrafts, setShowDrafts] = useState(true)
   
   // Stats
   const [totalHours, setTotalHours] = useState(0)
@@ -124,11 +127,11 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
         templateQuestionMap.set(tmpl.id, qs)
       }
       
-      // Filter for this user's completed scorecards
-      const userResponses = responseDocs
+      // Include BOTH completed + drafts (drafts are the autosaves / Save & Exit path)
+      const allUserResponses = responseDocs
         .filter((r) => {
           const data = r as Record<string, unknown>
-          return data.userId === userId && data.status !== "draft"
+          return data.userId === userId
         })
         .map((r) => {
           const data = r as Record<string, unknown>
@@ -163,24 +166,31 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
             templateName: (data.templateName as string) || "Unknown Template",
             weekOf: (data.weekOf as string) || "",
             completedAt: (data.completedAt as string) || "",
+            updatedAt: (data.updatedAt as string) || "",
+            createdAt: (data.createdAt as string) || "",
             status: (data.status as string) || "completed",
             answers,
             totalHours: Math.round(hours * 10) / 10,
           }
         })
-        .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
+        .sort((a, b) => {
+          const aDate = a.completedAt || a.updatedAt || a.createdAt || ""
+          const bDate = b.completedAt || b.updatedAt || b.createdAt || ""
+          return bDate.localeCompare(aDate)
+        })
       
-      setScorecards(userResponses)
+      setScorecards(allUserResponses)
       
       // Calculate stats
-      const total = userResponses.reduce((sum, r) => sum + r.totalHours, 0)
+      const completedOnly = allUserResponses.filter((r) => r.status !== "draft")
+      const total = completedOnly.reduce((sum, r) => sum + r.totalHours, 0)
       setTotalHours(Math.round(total * 10) / 10)
-      setScorecardsCount(userResponses.length)
-      setAvgHoursPerWeek(userResponses.length > 0 ? Math.round((total / userResponses.length) * 10) / 10 : 0)
+      setScorecardsCount(completedOnly.length)
+      setAvgHoursPerWeek(completedOnly.length > 0 ? Math.round((total / completedOnly.length) * 10) / 10 : 0)
       
       // Calculate streak (consecutive weeks)
       let currentStreak = 0
-      const sortedByDate = [...userResponses].sort(
+      const sortedByDate = [...completedOnly].sort(
         (a, b) => new Date(b.weekOf).getTime() - new Date(a.weekOf).getTime()
       )
       if (sortedByDate.length > 0) {
@@ -231,8 +241,10 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
   
   // Filter scorecards by time period
   const filteredScorecards = scorecards.filter((sc) => {
+    if (!showDrafts && sc.status === "draft") return false
     if (timePeriod === "all") return true
-    const completedDate = new Date(sc.completedAt)
+    const dateStr = sc.completedAt || sc.updatedAt || sc.createdAt || ""
+    const completedDate = new Date(dateStr)
     const now = new Date()
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
@@ -370,19 +382,29 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>Scorecard History</CardTitle>
-              <CardDescription>View all scorecards submitted by this user</CardDescription>
+              <CardDescription>View completed scorecards and saved drafts for this user</CardDescription>
             </div>
-            <Select value={timePeriod} onValueChange={setTimePeriod}>
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Time</SelectItem>
-                <SelectItem value="last-30">Last 30 Days</SelectItem>
-                <SelectItem value="last-90">Last 90 Days</SelectItem>
-                <SelectItem value="ytd">Year to Date</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant={showDrafts ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setShowDrafts((v) => !v)}
+              >
+                {showDrafts ? "Showing drafts" : "Hiding drafts"}
+              </Button>
+              <Select value={timePeriod} onValueChange={setTimePeriod}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="last-30">Last 30 Days</SelectItem>
+                  <SelectItem value="last-90">Last 90 Days</SelectItem>
+                  <SelectItem value="ytd">Year to Date</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -391,7 +413,7 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
               <CalendarDays className="mb-4 h-10 w-10 text-muted-foreground" />
               <p className="text-lg font-medium text-foreground">No scorecards found</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                This user has not submitted any scorecards yet.
+                This user has no completed scorecards{showDrafts ? " or saved drafts" : ""} yet.
               </p>
             </div>
           ) : (
@@ -410,12 +432,15 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
                     <div>
                       <p className="font-medium text-foreground">{sc.weekOf}</p>
                       <p className="text-xs text-muted-foreground">
-                        Completed {new Date(sc.completedAt).toLocaleDateString()}
+                        {sc.status === "draft"
+                          ? `Last saved ${new Date(sc.updatedAt || sc.createdAt || sc.completedAt).toLocaleString()}`
+                          : `Completed ${new Date(sc.completedAt).toLocaleDateString()}`}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <Badge variant="secondary">{sc.templateName}</Badge>
+                    {sc.status === "draft" && <Badge variant="outline">Draft</Badge>}
                     <div className="text-right">
                       <p className="text-lg font-bold text-primary">{sc.totalHours} hrs</p>
                     </div>
