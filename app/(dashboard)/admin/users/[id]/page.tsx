@@ -24,6 +24,7 @@ import {
   getDocuments,
   getUserResponses,
   getUserResponsesUnordered,
+  updateDocument,
   COLLECTIONS,
 } from "@/lib/firestore"
 import { useAuth } from "@/lib/auth-context"
@@ -78,6 +79,7 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
   const [avgHoursPerWeek, setAvgHoursPerWeek] = useState(0)
   const [scorecardCount, setScorecardsCount] = useState(0)
   const [streak, setStreak] = useState(0)
+  const [completingId, setCompletingId] = useState<string | null>(null)
   
   const fetchData = useCallback(async () => {
     try {
@@ -220,6 +222,31 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  const handleMarkDraftCompleted = useCallback(
+    async (response: ScorecardResponse) => {
+      if (response.status !== "draft") return
+      const ok = confirm(
+        "Mark this draft as completed?\n\nThis will set status to completed and set completedAt to now.",
+      )
+      if (!ok) return
+
+      try {
+        setCompletingId(response.id)
+        await updateDocument(COLLECTIONS.RESPONSES, response.id, {
+          status: "completed",
+          completedAt: new Date().toISOString(),
+        })
+        await fetchData()
+      } catch (err) {
+        console.error("Failed to mark draft completed:", err)
+        alert("Failed to mark draft completed. Please try again.")
+      } finally {
+        setCompletingId(null)
+      }
+    },
+    [fetchData],
+  )
   
   // Load template questions when scorecard is selected
   useEffect(() => {
@@ -443,6 +470,24 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
                   <div className="flex items-center gap-3">
                     <Badge variant="secondary">{sc.templateName}</Badge>
                     {sc.status === "draft" && <Badge variant="outline">Draft</Badge>}
+                    {sc.status === "draft" && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={completingId === sc.id}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleMarkDraftCompleted(sc)
+                        }}
+                      >
+                        {completingId === sc.id ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : null}
+                        Mark completed
+                      </Button>
+                    )}
                     <div className="text-right">
                       <p className="text-lg font-bold text-primary">{sc.totalHours} hrs</p>
                     </div>
