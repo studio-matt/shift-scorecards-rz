@@ -14,6 +14,17 @@ async function verifyAnyAdmin(request: Request): Promise<{ authorized: boolean; 
     if (header.toLowerCase().startsWith("bearer ")) {
       const token = header.slice("bearer ".length).trim()
       if (token) {
+        // Allow server secrets (DEBUG_SECRET / CRON_SECRET / BACKFILL_SECRET) for recovery operations.
+        // This avoids needing a browser ID token when doing emergency resends.
+        const serverSecrets = [
+          process.env.DEBUG_SECRET,
+          process.env.CRON_SECRET,
+          process.env.BACKFILL_SECRET,
+        ].filter((v): v is string => typeof v === "string" && v.length > 0)
+        if (serverSecrets.includes(token)) {
+          return { authorized: true }
+        }
+
         const decoded = await auth.verifyIdToken(token, true)
         uid = decoded.uid || null
       }
