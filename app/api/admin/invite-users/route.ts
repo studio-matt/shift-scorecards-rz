@@ -138,9 +138,10 @@ export async function POST(request: Request) {
         continue
       }
 
-      // Ensure a /users row exists so Manage Users shows them as pending immediately.
+      // Ensure /users row(s) exist so Manage Users shows them as pending immediately.
+      // Apply to every user doc with this email so duplicates cannot keep a stale "unassigned" row.
       try {
-        const existing = await db.collection("users").where("email", "==", email).limit(1).get()
+        const existing = await db.collection("users").where("email", "==", email).get()
         const now = new Date().toISOString()
         const base = {
           email,
@@ -154,10 +155,36 @@ export async function POST(request: Request) {
         }
         if (existing.empty) {
           await db.collection("users").add({ ...base, createdAt: now })
+          usersUpserted++
         } else {
-          await existing.docs[0].ref.set(base, { merge: true })
+          for (const doc of existing.docs) {
+            const prior = doc.data() as Record<string, unknown>
+            const createdAt =
+              typeof prior.createdAt === "string" && prior.createdAt
+                ? prior.createdAt
+                : now
+            const hasAuth = Boolean(prior.authId)
+            if (hasAuth) {
+              const prevStatus = typeof prior.status === "string" ? prior.status : ""
+              await doc.ref.set(
+                {
+                  email: base.email,
+                  firstName: base.firstName,
+                  lastName: base.lastName,
+                  department: base.department,
+                  organizationId: base.organizationId,
+                  role: base.role,
+                  updatedAt: now,
+                  ...(prevStatus === "staging" ? { status: "active" } : {}),
+                },
+                { merge: true },
+              )
+            } else {
+              await doc.ref.set({ ...base, createdAt }, { merge: true })
+            }
+            usersUpserted++
+          }
         }
-        usersUpserted++
 
         // Also record an invite row for legacy flows (optional but useful for audits).
         await db.collection("invites").add({

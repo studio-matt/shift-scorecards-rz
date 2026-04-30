@@ -29,6 +29,16 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Plus, Mail, CheckCircle2, Clock, Search, Upload, FileDown, Loader2, EyeOff, Users, ShieldAlert, Pencil, Trash2 } from "lucide-react"
@@ -71,7 +81,7 @@ interface InvitedUser {
 }
 
 export default function ManageUsersPage() {
-  const { user: authUser, isCompanyAdmin, isSuperAdmin, isActuallySuperAdmin } = useAuth()
+  const { user: authUser, isCompanyAdmin, isActuallySuperAdmin } = useAuth()
   
   // ── Single invite fields ──
   const [inviteEmail, setInviteEmail] = useState("")
@@ -93,6 +103,8 @@ export default function ManageUsersPage() {
   const [stagingEdits, setStagingEdits] = useState<
     Record<string, { orgId: string; department: string; role: string }>
   >({})
+  const [deleteTarget, setDeleteTarget] = useState<InvitedUser | null>(null)
+  const [deleteWorking, setDeleteWorking] = useState(false)
 
   const fetchData = useCallback(async () => {
     try {
@@ -219,6 +231,37 @@ export default function ManageUsersPage() {
     } catch (e) {
       console.error(e)
       toast.error("Could not assign user. Check permissions and try again.")
+    }
+  }
+
+  async function handleConfirmDeleteUnassignedUser() {
+    if (!deleteTarget) return
+    setDeleteWorking(true)
+    try {
+      const res = await fetch("/api/admin/delete-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(await authHeaders()),
+        },
+        body: JSON.stringify({
+          userId: deleteTarget.id,
+          email: deleteTarget.email,
+          authId: deleteTarget.authId,
+        }),
+      })
+      const body = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) {
+        throw new Error(body.error || `Delete failed (${res.status})`)
+      }
+      toast.success("User removed from the system")
+      setDeleteTarget(null)
+      await fetchData()
+    } catch (e) {
+      console.error(e)
+      toast.error(e instanceof Error ? e.message : "Delete failed")
+    } finally {
+      setDeleteWorking(false)
     }
   }
 
@@ -640,6 +683,45 @@ export default function ManageUsersPage() {
           </CardContent>
         </Card>
       )}
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteWorking) setDeleteTarget(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete user</AlertDialogTitle>
+            <AlertDialogDescription>
+              Permanently remove{" "}
+              <span className="font-medium text-foreground">{deleteTarget?.email}</span> from Firebase Auth (if
+              present), the Firestore user record, the security-rules profile mirror, and any scorecard responses
+              tied to that user record. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteWorking}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteWorking}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault()
+                void handleConfirmDeleteUnassignedUser()
+              }}
+            >
+              {deleteWorking ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete user"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Stats (clickable) */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

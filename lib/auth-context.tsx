@@ -96,18 +96,37 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
   // Check if a user record exists with this email (pre-created by admin invite)
   const email = fbUser.email?.toLowerCase() ?? ""
   if (email) {
-    const existingByEmail = await getUserByEmail(email)
+    const existingByEmail = await getUserByEmail(email, { preferredAuthId: fbUser.uid })
     if (existingByEmail) {
-      // Link the Firebase Auth UID to this existing user record
-      await updateDocument(COLLECTIONS.USERS, existingByEmail.id, {
+      const prior = existingByEmail as Record<string, unknown>
+      const invite = await getInviteByEmail(email)
+      const inv = invite as Record<string, unknown> | null
+      const patch: Record<string, unknown> = {
         authId: fbUser.uid,
         lastLogin: new Date().toISOString(),
-        // Update avatar if they signed in with OAuth and we have one
         ...(fbUser.photoURL ? { avatar: fbUser.photoURL } : {}),
-      })
-      
+      }
+      if (inv) {
+        if (!String(prior.organizationId ?? "").trim() && String(inv.organizationId ?? "").trim()) {
+          patch.organizationId = inv.organizationId
+        }
+        if (!String(prior.department ?? "").trim() && String(inv.department ?? "").trim()) {
+          patch.department = inv.department
+        }
+        if (!String(prior.role ?? "").trim() && String(inv.role ?? "").trim()) {
+          patch.role = inv.role
+        }
+        if (!String(prior.firstName ?? "").trim() && String(inv.firstName ?? "").trim()) {
+          patch.firstName = inv.firstName
+        }
+        if (!String(prior.lastName ?? "").trim() && String(inv.lastName ?? "").trim()) {
+          patch.lastName = inv.lastName
+        }
+      }
+      await updateDocument(COLLECTIONS.USERS, existingByEmail.id, patch)
+
       // Upsert the userProfiles mirror for security rules (best-effort; fallback to Admin SDK endpoint)
-      const userData = existingByEmail as Record<string, unknown>
+      const userData = { ...prior, ...patch } as Record<string, unknown>
       try {
         await upsertUserProfile(fbUser.uid, existingByEmail.id, {
           role: userData.role as string,
@@ -151,7 +170,7 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
       const userDocId = claimed.userDocId
       if (!userDocId) throw new Error("Invite claim succeeded but userDocId missing")
 
-      const createdUser = await getUserByEmail(email)
+      const createdUser = await getUserByEmail(email, { preferredAuthId: fbUser.uid })
       if (!createdUser) throw new Error("Invite claimed but user record not found")
 
       return { ...createdUser, authId: fbUser.uid } as unknown as User
@@ -186,7 +205,7 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
     )
   }
 
-  const createdUser = await getUserByEmail(email)
+  const createdUser = await getUserByEmail(email, { preferredAuthId: fbUser.uid })
   if (!createdUser) {
     await signOut(auth)
     throw new Error(

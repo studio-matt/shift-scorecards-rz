@@ -149,13 +149,46 @@ export async function getUserByAuthId(authId: string) {
   return users[0] ?? null
 }
 
-export async function getUserByEmail(email: string) {
-  const users = await getDocuments(
-    COLLECTIONS.USERS,
-    where("email", "==", email.toLowerCase()),
-    limit(1),
-  )
-  return users[0] ?? null
+/**
+ * Resolve a single user row for an email when duplicates may exist (e.g. staging + invited).
+ * Prefer the row already linked to this Firebase Auth UID, then rows with organizationId,
+ * then the most recently updated.
+ */
+export async function getUserByEmail(
+  email: string,
+  opts?: { preferredAuthId?: string },
+): Promise<(DocumentData & { id: string }) | null> {
+  const normalized = email.toLowerCase()
+  const docs = await getUsersByEmailAll(normalized, 25)
+  if (docs.length === 0) return null
+  if (docs.length === 1) return docs[0]
+
+  const preferredAuthId = opts?.preferredAuthId
+  if (preferredAuthId) {
+    const byAuth = docs.find((d) => (d as Record<string, unknown>).authId === preferredAuthId)
+    if (byAuth) return byAuth
+  }
+
+  const ts = (d: Record<string, unknown>) =>
+    String((d.updatedAt as string) || (d.createdAt as string) || "")
+
+  const sorted = [...docs].sort((a, b) => {
+    const ar = a as Record<string, unknown>
+    const br = b as Record<string, unknown>
+    const aOrg = String(ar.organizationId ?? "").trim()
+    const bOrg = String(br.organizationId ?? "").trim()
+    const aHasOrg = aOrg ? 1 : 0
+    const bHasOrg = bOrg ? 1 : 0
+    if (bHasOrg !== aHasOrg) return bHasOrg - aHasOrg
+
+    const aAuth = Boolean(ar.authId)
+    const bAuth = Boolean(br.authId)
+    if (aAuth !== bAuth) return (aAuth ? 1 : 0) - (bAuth ? 1 : 0)
+
+    return ts(br).localeCompare(ts(a))
+  })
+
+  return sorted[0] ?? null
 }
 
 /** All user docs matching an email (helps detect duplicates). */
