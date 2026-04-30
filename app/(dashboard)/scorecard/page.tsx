@@ -76,15 +76,21 @@ export default function ScorecardPage() {
 
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string | number>>({})
+  const answersRef = useRef<Record<string, string | number>>({})
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   
   // Draft auto-save state
   const [draftId, setDraftId] = useState<string | null>(null)
   const draftIdRef = useRef<string | null>(null)
   const [autoSaving, setAutoSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
+  const saveRetryRef = useRef<{ timer: ReturnType<typeof setTimeout> | null; attempt: number }>({
+    timer: null,
+    attempt: 0,
+  })
 
   function parseDateLike(value: unknown): Date | null {
     if (!value) return null
@@ -188,6 +194,7 @@ export default function ScorecardPage() {
               setDraftId(existingDraft.id)
               draftIdRef.current = existingDraft.id
               setAnswers((draftData.answers as Record<string, string | number>) || {})
+              setSaveError(null)
               // Find first unanswered question
               const templateData = tmpl as unknown as TemplateData
               const savedAnswers = (draftData.answers as Record<string, string | number>) || {}
@@ -196,6 +203,23 @@ export default function ScorecardPage() {
               ) ?? 0
               setCurrentQuestion(Math.max(0, firstUnanswered))
               setLastSaved(parseDateLike(draftData.updatedAt))
+            } else {
+              // If we didn't find a draft in Firestore, fall back to local backup.
+              // This protects users from transient network/auth issues during autosave.
+              try {
+                const key = user?.id && rel?.id ? `scorecardDraft:${user.id}:${rel.id}` : null
+                if (key) {
+                  const raw = localStorage.getItem(key)
+                  if (raw) {
+                    const parsed = JSON.parse(raw) as { answers?: Record<string, string | number> }
+                    if (parsed?.answers && Object.keys(parsed.answers).length > 0) {
+                      setAnswers(parsed.answers)
+                    }
+                  }
+                }
+              } catch {
+                // ignore
+              }
             }
           }
         }
@@ -212,6 +236,18 @@ export default function ScorecardPage() {
   useEffect(() => {
     draftIdRef.current = draftId
   }, [draftId])
+
+  useEffect(() => {
+    answersRef.current = answers
+  }, [answers])
+
+  useEffect(() => {
+    return () => {
+      if (saveRetryRef.current.timer) {
+        clearTimeout(saveRetryRef.current.timer)
+      }
+    }
+  }, [])
 
   // Countdown timer
   useEffect(() => {
@@ -283,9 +319,22 @@ export default function ScorecardPage() {
         }
       }
       setLastSaved(new Date())
+      setSaveError(null)
+      saveRetryRef.current.attempt = 0
       return true
     } catch (err) {
       console.error("Failed to auto-save draft:", err)
+      setSaveError("We’re having trouble saving right now. Your answers are kept locally and we’ll keep retrying.")
+      // Best-effort retry with backoff (don’t spam writes).
+      if (!saveRetryRef.current.timer) {
+        const attempt = Math.min(saveRetryRef.current.attempt + 1, 6)
+        saveRetryRef.current.attempt = attempt
+        const delayMs = Math.min(30000, 1000 * Math.pow(2, attempt)) // 2s,4s,...,30s cap
+        saveRetryRef.current.timer = setTimeout(() => {
+          saveRetryRef.current.timer = null
+          autoSaveDraft(answersRef.current)
+        }, delayMs)
+      }
       return false
     } finally {
       setAutoSaving(false)
@@ -297,11 +346,21 @@ export default function ScorecardPage() {
       const newAnswers = { ...answers, [questionId]: value }
       setAnswers(newAnswers)
       setValidationError(null)
+
+      // Local backup (resilient to network/auth failures).
+      try {
+        if (user?.id && release?.id) {
+          const key = `scorecardDraft:${user.id}:${release.id}`
+          localStorage.setItem(key, JSON.stringify({ answers: newAnswers, updatedAt: Date.now() }))
+        }
+      } catch {
+        // ignore
+      }
       
       // Auto-save after each answer
       autoSaveDraft(newAnswers)
     },
-    [answers, autoSaveDraft],
+    [answers, autoSaveDraft, user?.id, release?.id],
   )
 
   const handleNext = useCallback(() => {
@@ -349,9 +408,17 @@ export default function ScorecardPage() {
           createdAt: new Date().toISOString(),
         })
       }
+      // Clear local backup on successful completion
+      try {
+        const key = `scorecardDraft:${user.id}:${release.id}`
+        localStorage.removeItem(key)
+      } catch {
+        // ignore
+      }
       setSubmitted(true)
     } catch (err) {
       console.error("Failed to submit scorecard:", err)
+      alert("We couldn’t submit your scorecard. Please check your connection and try again.")
     } finally {
       setSubmitting(false)
     }
@@ -530,6 +597,18 @@ export default function ScorecardPage() {
           {formatRemaining(remainingMs)}
         </Badge>
       </div>
+
+      {saveError && (
+        <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+            <div className="flex-1">
+              <p className="font-medium text-amber-100">Saving issue</p>
+              <p className="text-amber-200/90">{saveError}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mb-8 flex items-start justify-between">
         <div>

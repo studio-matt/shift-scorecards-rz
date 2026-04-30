@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app"
 import { getAuth } from "firebase/auth"
-import { getFirestore } from "firebase/firestore"
+import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore"
 import { getStorage } from "firebase/storage"
 import { getPerformance, type FirebasePerformance } from "firebase/performance"
 
@@ -20,6 +20,19 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp()
 export const auth = getAuth(app)
 export const db = getFirestore(app)
 export const storage = getStorage(app)
+
+// Enable Firestore offline persistence (best-effort).
+// This reduces fragility from transient network/proxy issues by caching writes locally
+// and replaying when connectivity is restored.
+if (typeof window !== "undefined") {
+  try {
+    enableIndexedDbPersistence(db).catch(() => {
+      // Best-effort only: can fail due to multi-tab, private mode, or unsupported browser.
+    })
+  } catch {
+    // Ignore
+  }
+}
 
 // Initialize Performance Monitoring (client-side only)
 // "Failed to fetch" console errors are from ad blockers - users without ad blockers will send data
