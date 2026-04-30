@@ -43,6 +43,7 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import type { Organization } from "@/lib/types"
 import { authHeaders, syncUserProfileMirrorAfterUserDocUpdate } from "@/lib/api-client"
+import { UsersDirectory } from "@/app/(dashboard)/admin/users/_components/users-directory"
 
 /** Proper-case a name: "kristen abbott" → "Kristen Abbott" */
 function properCase(name: string): string {
@@ -84,12 +85,9 @@ export default function ManageUsersPage() {
 
   // ── Shared ──
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState("")
   const [orgs, setOrgs] = useState<Organization[]>([])
   const [users, setUsers] = useState<InvitedUser[]>([])
   const [loading, setLoading] = useState(true)
-  const [deleteTarget, setDeleteTarget] = useState<InvitedUser | null>(null)
-  const [deleteSubmitting, setDeleteSubmitting] = useState(false)
   /** Draft org / dept / role for staging assignment rows */
   const [stagingEdits, setStagingEdits] = useState<
     Record<string, { orgId: string; department: string; role: string }>
@@ -190,80 +188,8 @@ export default function ManageUsersPage() {
     reader.readAsText(file)
   }
 
-  async function handleRoleChange(userId: string, newRole: string) {
-    try {
-      // When promoting to admin, auto-exclude from reporting if they have no org
-      const user = users.find((u) => u.id === userId)
-      const autoExclude = newRole === "admin" && !user?.orgId
-      const updates: Record<string, unknown> = { role: newRole }
-      if (autoExclude) updates.excludeFromReporting = true
-      await updateDocument(COLLECTIONS.USERS, userId, updates)
-      
-      // Mirror write must use Admin API — clients cannot write another user's userProfiles doc
-      if (user?.authId) {
-        await syncUserProfileMirrorAfterUserDocUpdate(userId)
-      }
-      
-      setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, role: newRole, excludeFromReporting: autoExclude ? true : u.excludeFromReporting } : u)),
-      )
-    } catch (err) {
-      console.error("Failed to update role:", err)
-      toast.error("Could not update role. Check your permissions or try again.")
-    }
-  }
-
-  async function handleExcludeToggle(userId: string, exclude: boolean) {
-    try {
-      await updateDocument(COLLECTIONS.USERS, userId, { excludeFromReporting: exclude })
-      setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, excludeFromReporting: exclude } : u)),
-      )
-    } catch (err) {
-      console.error("Failed to update exclude flag:", err)
-      toast.error("Could not update reporting preference. Check your permissions or try again.")
-    }
-  }
-
   const stagingQueue = isSuperAdmin ? users.filter((u) => u.fsStatus === "staging") : []
   const teamMembers = users.filter((u) => u.fsStatus !== "staging")
-
-  const filteredUsers = teamMembers.filter(
-    (u) =>
-      u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
-
-  async function handleDeleteUserConfirmed() {
-    if (!deleteTarget) return
-    setDeleteSubmitting(true)
-    try {
-      const res = await fetch("/api/admin/delete-user", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(await authHeaders()),
-        },
-        body: JSON.stringify({
-          userId: deleteTarget.id,
-          email: deleteTarget.email,
-          authId: deleteTarget.authId,
-        }),
-      })
-      const body = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        throw new Error((body as { error?: string }).error || "Delete failed")
-      }
-      toast.success("User removed")
-      setDeleteTarget(null)
-      await fetchData()
-    } catch (e) {
-      console.error(e)
-      toast.error(e instanceof Error ? e.message : "Could not delete user")
-    } finally {
-      setDeleteSubmitting(false)
-    }
-  }
 
   async function handleAssignStaging(userId: string) {
     const draft = stagingEdits[userId]
@@ -420,8 +346,8 @@ export default function ManageUsersPage() {
   const participantCount = teamMembers.length - excludedCount
 
   return (
-    <div>
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">
             {isCompanyAdmin ? "CEO View: Manage Users" : "Manage Users"}
@@ -711,260 +637,71 @@ export default function ManageUsersPage() {
         </Card>
       )}
 
-      {/* Stats */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardContent className="flex items-center gap-4 p-5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <Users className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Participants</p>
-              <p className="text-2xl font-bold text-foreground">{participantCount}</p>
-              <p className="text-[11px] text-muted-foreground">Counted in reports</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 p-5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <CheckCircle2 className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Active Members</p>
-              <p className="text-2xl font-bold text-foreground">{activeCount}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 p-5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-warning/10">
-              <Clock className="h-5 w-5 text-warning" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Pending Invites</p>
-              <p className="text-2xl font-bold text-foreground">{pendingCount}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 p-5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-              <EyeOff className="h-5 w-5 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Excluded from Reports</p>
-              <p className="text-2xl font-bold text-foreground">{excludedCount}</p>
-              <p className="text-[11px] text-muted-foreground">Admins / non-participants</p>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Stats (clickable) */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Link href="/admin/users/participants" className="block">
+          <Card className="transition-colors hover:bg-muted/20">
+            <CardContent className="flex items-center gap-4 p-5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                <Users className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Participants</p>
+                <p className="text-2xl font-bold text-foreground">{participantCount}</p>
+                <p className="text-[11px] text-muted-foreground">Counted in reports</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/admin/users/active" className="block">
+          <Card className="transition-colors hover:bg-muted/20">
+            <CardContent className="flex items-center gap-4 p-5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                <CheckCircle2 className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Active Members</p>
+                <p className="text-2xl font-bold text-foreground">{activeCount}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/admin/users/pending" className="block">
+          <Card className="transition-colors hover:bg-muted/20">
+            <CardContent className="flex items-center gap-4 p-5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-warning/10">
+                <Clock className="h-5 w-5 text-warning" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Pending Invites</p>
+                <p className="text-2xl font-bold text-foreground">{pendingCount}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/admin/users/excluded" className="block">
+          <Card className="transition-colors hover:bg-muted/20">
+            <CardContent className="flex items-center gap-4 p-5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+                <EyeOff className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Excluded from Reports</p>
+                <p className="text-2xl font-bold text-foreground">{excludedCount}</p>
+                <p className="text-[11px] text-muted-foreground">Admins / non-participants</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
-      {/* Users List */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base font-semibold">
-            Team Members
-          </CardTitle>
-          <CardDescription>
-            View and manage all invited users. Uncheck the checkbox to exclude a user from completion metrics and reports (e.g. admin-only accounts).
-          </CardDescription>
-          <div className="relative mt-2">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search by name or email..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col gap-2">
-            <TooltipProvider delayDuration={300}>
-            {filteredUsers.map((user) => (
-              <div
-                key={user.id}
-                className={`flex items-center justify-between rounded-lg border p-4 transition-colors ${
-                  user.excludeFromReporting
-                    ? "border-border bg-muted/30 opacity-75"
-                    : "border-border"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-medium ${
-                    user.excludeFromReporting ? "bg-muted text-muted-foreground" : "bg-muted text-foreground"
-                  }`}>
-                    {user.name
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")
-                      .slice(0, 2)
-                      .toUpperCase()}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Link
-                        href={`/admin/users/${user.id}`}
-                        className="text-sm font-medium text-foreground hover:text-primary hover:underline"
-                      >
-                        {user.name}
-                      </Link>
-                      {user.excludeFromReporting && (
-                        <Badge variant="outline" className="gap-1 border-amber-200 bg-amber-50 text-amber-700 text-[10px] dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
-                          <EyeOff className="h-2.5 w-2.5" />
-                          Excluded
-                        </Badge>
-                      )}
-                      {user.role === "admin" && !user.orgId && !user.department && (
-                        <Tooltip>
-                          <TooltipTrigger>
-                            <ShieldAlert className="h-3.5 w-3.5 text-amber-500" />
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="text-xs">
-                            Admin with no org/department assigned
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {user.email}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {user.orgName && (
-                    <Badge variant="outline" className="text-xs">
-                      {user.orgName}
-                    </Badge>
-                  )}
-                  {user.department && (
-                    <Badge variant="secondary" className="text-xs">
-                      {user.department}
-                    </Badge>
-                  )}
-                  {/* Role dropdown - super admin only */}
-                  {isSuperAdmin ? (
-                    <Select
-                      value={user.role}
-                      onValueChange={(val) => handleRoleChange(user.id, val)}
-                    >
-                      <SelectTrigger className="h-7 w-32 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="user">User</SelectItem>
-                        <SelectItem value="company_admin">Company Admin</SelectItem>
-                        <SelectItem value="admin">Super Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Badge variant="outline" className="text-xs capitalize">
-                      {user.role === "company_admin" ? "Company Admin" : user.role === "admin" ? "Super Admin" : "User"}
-                    </Badge>
-                  )}
-                  {/* Exclude from reporting toggle - super admin only */}
-                  {isSuperAdmin && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center">
-                          <Checkbox
-                            checked={!user.excludeFromReporting}
-                            onCheckedChange={(checked) => handleExcludeToggle(user.id, !checked)}
-                            aria-label={`Include ${user.name} in reports`}
-                          />
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="text-xs">
-                        {user.excludeFromReporting ? "Excluded from reports. Check to include." : "Included in reports. Uncheck to exclude."}
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                  <span
-                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${
-                      user.status === "accepted"
-                        ? "bg-primary/10 text-primary"
-                        : user.status === "staging"
-                          ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
-                          : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {user.status}
-                  </span>
-                  {/* Edit button - super admin only can edit */}
-                  {isSuperAdmin && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Link href={`/profile/${user.id}`}>
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                        </Link>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="text-xs">
-                        Edit user profile
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                  {(isSuperAdmin ||
-                    (isCompanyAdmin && user.orgId && user.orgId === authUser?.organizationId)) && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                          onClick={() => setDeleteTarget(user)}
-                          aria-label={`Delete ${user.name}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="text-xs">
-                        Remove user
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                </div>
-              </div>
-            ))}
-            </TooltipProvider>
-            {filteredUsers.length === 0 && (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                {searchQuery
-                  ? "No users match your search"
-                  : "No users yet. Invite your first team member."}
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      <UsersDirectory
+        mode="all"
+        title="Team Members"
+        description="View and manage all users. Use the filtered pages for quick lists of Pending/Active/Participants/Excluded."
+      />
 
-      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Remove user</DialogTitle>
-            <DialogDescription>
-              This permanently removes {deleteTarget?.name ?? "this user"} from the organization,
-              deletes their login, scorecard responses for this account, and profile data. This
-              cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => void handleDeleteUserConfirmed()}
-              disabled={deleteSubmitting}
-            >
-              {deleteSubmitting ? "Removing…" : "Remove user"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* legacy delete dialog removed (handled via row actions in directory) */}
     </div>
   )
 }
