@@ -223,10 +223,11 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
       }
       
       // Include BOTH completed + drafts (drafts are the autosaves / Save & Exit path)
+      const allowedUserIds = new Set([userId, authId].filter(Boolean))
       const allUserResponses = responseDocs
         .filter((r) => {
           const data = r as Record<string, unknown>
-          return data.userId === userId
+          return allowedUserIds.has((data.userId as string) || "")
         })
         .map((r) => {
           const data = r as Record<string, unknown>
