@@ -82,8 +82,7 @@ export default function ManageUsersPage() {
   // ── CSV bulk fields ──
   const [csvFile, setCsvFile] = useState<File | null>(null)
   const [csvPreviewCount, setCsvPreviewCount] = useState(0)
-  const [csvCompany, setCsvCompany] = useState("")
-  const [csvDepartment, setCsvDepartment] = useState("")
+  // Company/Department selection is shared with single invite (inviteOrgId/inviteDepartment)
 
   // ── Shared ──
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -160,10 +159,6 @@ export default function ManageUsersPage() {
     fetchData()
   }, [fetchData])
 
-  // Departments for the selected CSV company
-  const selectedOrg = orgs.find((o) => o.id === csvCompany)
-  const orgDepartments = selectedOrg?.departments ?? []
-
   const selectedInviteOrg = orgs.find((o) => o.id === inviteOrgId)
   const inviteDepartments = selectedInviteOrg?.departments ?? []
 
@@ -228,7 +223,7 @@ export default function ManageUsersPage() {
   }
 
   async function handleInvite() {
-    const orgName = orgs.find((o) => o.id === csvCompany)?.name ?? ""
+    const orgName = orgs.find((o) => o.id === inviteOrgId)?.name ?? ""
 
     try {
       if (csvFile) {
@@ -260,14 +255,14 @@ export default function ManageUsersPage() {
           const firstName = colIdx.firstName >= 0 ? properCase(parts[colIdx.firstName] ?? "") : ""
           const lastName = colIdx.lastName >= 0 ? properCase(parts[colIdx.lastName] ?? "") : ""
           // If a department was selected in the dropdown, override the CSV column
-          const dept = csvDepartment || (colIdx.department >= 0 ? parts[colIdx.department] : "") || ""
+          const dept = inviteDepartment || (colIdx.department >= 0 ? parts[colIdx.department] : "") || ""
           if (email && email.includes("@")) {
             invites.push({
               email,
               firstName,
               lastName,
               department: dept,
-              organizationId: csvCompany,
+              organizationId: inviteOrgId,
               role: "user",
             })
           }
@@ -341,8 +336,6 @@ export default function ManageUsersPage() {
     setInviteDepartment("")
     setCsvFile(null)
     setCsvPreviewCount(0)
-    setCsvCompany("")
-    setCsvDepartment("")
     await fetchData()
   }
 
@@ -519,61 +512,6 @@ export default function ManageUsersPage() {
                   <FileDown className="h-3.5 w-3.5" />
                   Download CSV template
                 </button>
-
-                {/* Company dropdown (for CSV) */}
-                <div className="flex flex-col gap-2">
-                  <Label>Company</Label>
-                  <Select
-                    value={csvCompany}
-                    onValueChange={(val) => {
-                      setCsvCompany(val)
-                      setCsvDepartment("") // Reset department when company changes
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select company" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {orgs.map((org) => (
-                        <SelectItem key={org.id} value={org.id}>
-                          {org.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Department dropdown (populated from selected company) */}
-                <div className="flex flex-col gap-1.5">
-                  <Label>Department</Label>
-                  <Select
-                    value={csvDepartment}
-                    onValueChange={setCsvDepartment}
-                    disabled={!csvCompany || orgDepartments.length === 0}
-                  >
-                    <SelectTrigger>
-                      <SelectValue
-                        placeholder={
-                          !csvCompany
-                            ? "Select a company first"
-                            : orgDepartments.length === 0
-                              ? "No departments configured"
-                              : "Select department (optional)"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {orgDepartments.map((dept) => (
-                        <SelectItem key={dept} value={dept}>
-                          {dept}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    If a department is selected, all users in the CSV will get the same department assigned.
-                  </p>
-                </div>
               </div>
             </div>
             <DialogFooter>
