@@ -23,6 +23,7 @@ import {
   getDocument,
   getDocuments,
   getUserResponses,
+  getUserResponsesUnordered,
   COLLECTIONS,
 } from "@/lib/firestore"
 import { useAuth } from "@/lib/auth-context"
@@ -115,7 +116,8 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
       
       // Fetch user's scorecard responses
       const [responseDocs, templateDocs] = await Promise.all([
-        getUserResponses(userId),
+        // Use unordered so drafts (no completedAt) still appear
+        getUserResponsesUnordered(userId),
         getDocuments(COLLECTIONS.TEMPLATES),
       ])
       
