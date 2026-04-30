@@ -295,7 +295,6 @@ export default function ManageUsersPage() {
   }
 
   async function handleInvite() {
-    const emailsToSend: string[] = []
     const orgName = orgs.find((o) => o.id === csvCompany)?.name ?? ""
 
     try {
@@ -313,6 +312,15 @@ export default function ManageUsersPage() {
         }
         if (colIdx.email === -1) colIdx.email = 0 // Fallback: first column
 
+        const invites: Array<{
+          email: string
+          firstName?: string
+          lastName?: string
+          department?: string
+          organizationId?: string
+          role?: string
+        }> = []
+
         for (let i = 1; i < lines.length; i++) {
           const parts = lines[i].split(",").map((s) => s.trim())
           const email = (parts[colIdx.email] ?? "").toLowerCase()
@@ -321,59 +329,72 @@ export default function ManageUsersPage() {
           // If a department was selected in the dropdown, override the CSV column
           const dept = csvDepartment || (colIdx.department >= 0 ? parts[colIdx.department] : "") || ""
           if (email && email.includes("@")) {
-            await createDocument(COLLECTIONS.INVITES, {
+            invites.push({
               email,
               firstName,
               lastName,
               department: dept,
               organizationId: csvCompany,
               role: "user",
-              status: "pending",
-              createdAt: new Date().toISOString(),
             })
-            emailsToSend.push(email)
+          }
+        }
+
+        if (invites.length === 0) {
+          toast.error("No valid emails found in CSV")
+          return
+        }
+
+        const res = await fetch("/api/admin/invite-users", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(await authHeaders()),
+          },
+          body: JSON.stringify({ invites, orgName }),
+        })
+        const payload = (await res.json().catch(() => null)) as
+          | { recorded?: number; sent?: number; failed?: number; total?: number; error?: string; reason?: string; errors?: string[] }
+          | null
+        if (!res.ok) {
+          toast.error(payload?.error || `Invite failed (${res.status})`)
+        } else {
+          toast.success(`Invites processed (sent ${payload?.sent ?? 0}/${payload?.total ?? invites.length})`)
+          if (payload?.failed) {
+            console.warn("Invite errors:", payload.errors)
           }
         }
       } else if (inviteEmail) {
-        await createDocument(COLLECTIONS.INVITES, {
-          email: inviteEmail.toLowerCase(),
-          department: "",
-          role: inviteRole,
-          status: "pending",
-          createdAt: new Date().toISOString(),
+        const invites = [
+          {
+            email: inviteEmail.toLowerCase(),
+            department: "",
+            role: inviteRole,
+          },
+        ]
+        const res = await fetch("/api/admin/invite-users", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(await authHeaders()),
+          },
+          body: JSON.stringify({ invites, orgName }),
         })
-        emailsToSend.push(inviteEmail)
-      }
-
-      // Send invite emails via API
-      if (emailsToSend.length > 0) {
-        try {
-          const res = await fetch("/api/invite", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ emails: emailsToSend, orgName }),
-          })
-          const payload = (await res.json().catch(() => null)) as
-            | { sent?: number; failed?: number; total?: number; error?: string; errors?: string[] }
-            | null
-
-          if (!res.ok) {
-            const msg =
-              payload?.error ||
-              `Invite email failed (${res.status}). Please check email settings and try again.`
-            toast.error(msg)
-          } else {
-            const sent = payload?.sent ?? 0
-            const total = payload?.total ?? emailsToSend.length
-            toast.success(`Invitation email sent (${sent}/${total})`)
+        const payload = (await res.json().catch(() => null)) as
+          | { recorded?: number; sent?: number; failed?: number; total?: number; error?: string; reason?: string; errors?: string[] }
+          | null
+        if (!res.ok) {
+          toast.error(payload?.error || payload?.reason || `Invite failed (${res.status})`)
+        } else {
+          toast.success(`Invitation processed (sent ${payload?.sent ?? 0}/${payload?.total ?? invites.length})`)
+          if (payload?.failed) {
+            console.warn("Invite errors:", payload.errors)
           }
-        } catch (emailErr) {
-          console.warn("Email delivery failed, but invites were recorded:", emailErr)
-          toast.error("Invite email request failed. Please check your connection and try again.")
         }
       }
     } catch (err) {
       console.error("Failed to send invite:", err)
+      toast.error("Failed to send invite. Check your permissions and try again.")
     }
     setDialogOpen(false)
     setInviteEmail("")
