@@ -9,3 +9,19 @@ export async function authHeaders(extra?: HeadersInit): Promise<HeadersInit> {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   }
 }
+
+/** Sync another user's `userProfiles` mirror via Admin SDK (after updating `users/{userDocId}`). */
+export async function syncUserProfileMirrorAfterUserDocUpdate(userDocId: string): Promise<void> {
+  const res = await fetch("/api/admin/sync-user-profile-mirror", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(await authHeaders()),
+    },
+    body: JSON.stringify({ userDocId }),
+  })
+  const body = (await res.json().catch(() => ({}))) as { error?: string }
+  if (!res.ok) {
+    throw new Error(body.error || "Failed to sync profile mirror")
+  }
+}

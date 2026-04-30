@@ -4,7 +4,8 @@ import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
-import { getDocument, updateDocument, syncUserProfileMirror, getOrganizations, getDocuments, getUserResponses, COLLECTIONS } from "@/lib/firestore"
+import { getDocument, updateDocument, getOrganizations, getDocuments, getUserResponses, COLLECTIONS } from "@/lib/firestore"
+import { syncUserProfileMirrorAfterUserDocUpdate } from "@/lib/api-client"
 import type { RawResponse } from "@/lib/dashboard-data"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -162,15 +163,9 @@ export default function EditUserProfilePage({ params }: { params: Promise<{ id: 
         organizationId,
       })
       
-      // Sync the userProfiles mirror for security rules
+      // Mirror for another user must go through Admin API (client cannot write their userProfiles doc)
       if (userData?.authId) {
-        await syncUserProfileMirror(userData.authId, userId, {
-          firstName,
-          lastName,
-          department,
-          role,
-          organizationId,
-        })
+        await syncUserProfileMirrorAfterUserDocUpdate(userId)
       }
       
       router.push("/admin/users")

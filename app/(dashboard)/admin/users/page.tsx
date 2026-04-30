@@ -38,12 +38,11 @@ import {
   getOrganizations,
   createDocument,
   updateDocument,
-  syncUserProfileMirror,
   COLLECTIONS,
 } from "@/lib/firestore"
 import { useAuth } from "@/lib/auth-context"
 import type { Organization } from "@/lib/types"
-import { authHeaders } from "@/lib/api-client"
+import { authHeaders, syncUserProfileMirrorAfterUserDocUpdate } from "@/lib/api-client"
 
 /** Proper-case a name: "kristen abbott" → "Kristen Abbott" */
 function properCase(name: string): string {
@@ -200,9 +199,9 @@ export default function ManageUsersPage() {
       if (autoExclude) updates.excludeFromReporting = true
       await updateDocument(COLLECTIONS.USERS, userId, updates)
       
-      // Sync the userProfiles mirror for security rules (role is security-critical)
+      // Mirror write must use Admin API — clients cannot write another user's userProfiles doc
       if (user?.authId) {
-        await syncUserProfileMirror(user.authId, userId, { role: newRole })
+        await syncUserProfileMirrorAfterUserDocUpdate(userId)
       }
       
       setUsers((prev) =>
@@ -281,14 +280,7 @@ export default function ManageUsersPage() {
         role: draft.role,
         status: "active",
       })
-      if (u.authId) {
-        await syncUserProfileMirror(u.authId, userId, {
-          organizationId: draft.orgId,
-          department: draft.department,
-          role: draft.role,
-          status: "active",
-        })
-      }
+      await syncUserProfileMirrorAfterUserDocUpdate(userId)
       toast.success("User assigned to organization")
       setStagingEdits((prev) => {
         const next = { ...prev }

@@ -1,37 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { Firestore } from "firebase-admin/firestore"
-import { getAdminAuth, getAdminDb, deleteUserFromAuth, deleteUserFromAuthByUid } from "@/lib/firebase-admin"
+import { getAdminDb, deleteUserFromAuth, deleteUserFromAuthByUid } from "@/lib/firebase-admin"
+import { verifyCallerIsAdmin } from "@/lib/verify-admin-request"
 
 const USERS = "users"
 const USER_PROFILES = "userProfiles"
 const RESPONSES = "responses"
-
-async function verifyCallerIsAdmin(request: NextRequest): Promise<
-  | { ok: true; uid: string; role: string; organizationId: string }
-  | { ok: false; status: number; error: string }
-> {
-  const authHeader = request.headers.get("authorization")
-  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null
-  if (!token) {
-    return { ok: false, status: 401, error: "Missing authorization" }
-  }
-  try {
-    const decoded = await getAdminAuth().verifyIdToken(token)
-    const prof = await getAdminDb().collection(USER_PROFILES).doc(decoded.uid).get()
-    const data = prof.data()
-    if (!data) {
-      return { ok: false, status: 403, error: "No profile for caller" }
-    }
-    const role = (data.role as string) || "user"
-    const organizationId = (data.organizationId as string) || ""
-    if (role !== "admin" && role !== "company_admin") {
-      return { ok: false, status: 403, error: "Forbidden" }
-    }
-    return { ok: true, uid: decoded.uid, role, organizationId }
-  } catch {
-    return { ok: false, status: 401, error: "Invalid token" }
-  }
-}
 
 function callerCanDeleteTarget(
   caller: { role: string; organizationId: string },
