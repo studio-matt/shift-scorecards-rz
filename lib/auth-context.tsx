@@ -21,6 +21,7 @@ import {
 } from "firebase/auth"
 import { auth } from "./firebase"
 import { getUserByAuthId, getUserByEmail, createDocument, updateDocument, deleteDocument, getInviteByEmail, upsertUserProfile, COLLECTIONS } from "./firestore"
+import { syncUserProfileMirrorAfterUserDocUpdate } from "./api-client"
 import type { User, UserRole } from "./types"
 
 // Temp store for signup extras that get applied after profile creation
@@ -68,17 +69,26 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
       lastLogin: new Date().toISOString(),
     })
     
-    // Upsert the userProfiles mirror for security rules
+    // Upsert the userProfiles mirror for security rules (best-effort; fallback to Admin SDK endpoint)
     const userData = existingByAuthId as Record<string, unknown>
-    await upsertUserProfile(fbUser.uid, existingByAuthId.id, {
-      role: userData.role as string,
-      organizationId: userData.organizationId as string,
-      department: userData.department as string,
-      email: userData.email as string,
-      firstName: userData.firstName as string,
-      lastName: userData.lastName as string,
-      status: userData.status as string,
-    })
+    try {
+      await upsertUserProfile(fbUser.uid, existingByAuthId.id, {
+        role: userData.role as string,
+        organizationId: userData.organizationId as string,
+        department: userData.department as string,
+        email: userData.email as string,
+        firstName: userData.firstName as string,
+        lastName: userData.lastName as string,
+        status: userData.status as string,
+      })
+    } catch (e) {
+      const err = e as { code?: string; message?: string }
+      if (/permission|insufficient|PERMISSION_DENIED/i.test(String(err.code || err.message || ""))) {
+        await syncUserProfileMirrorAfterUserDocUpdate(existingByAuthId.id)
+      } else {
+        throw e
+      }
+    }
     
     return existingByAuthId as unknown as User
   }
@@ -96,17 +106,26 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
         ...(fbUser.photoURL ? { avatar: fbUser.photoURL } : {}),
       })
       
-      // Upsert the userProfiles mirror for security rules
+      // Upsert the userProfiles mirror for security rules (best-effort; fallback to Admin SDK endpoint)
       const userData = existingByEmail as Record<string, unknown>
-      await upsertUserProfile(fbUser.uid, existingByEmail.id, {
-        role: userData.role as string,
-        organizationId: userData.organizationId as string,
-        department: userData.department as string,
-        email: userData.email as string,
-        firstName: userData.firstName as string,
-        lastName: userData.lastName as string,
-        status: userData.status as string,
-      })
+      try {
+        await upsertUserProfile(fbUser.uid, existingByEmail.id, {
+          role: userData.role as string,
+          organizationId: userData.organizationId as string,
+          department: userData.department as string,
+          email: userData.email as string,
+          firstName: userData.firstName as string,
+          lastName: userData.lastName as string,
+          status: userData.status as string,
+        })
+      } catch (e) {
+        const err = e as { code?: string; message?: string }
+        if (/permission|insufficient|PERMISSION_DENIED/i.test(String(err.code || err.message || ""))) {
+          await syncUserProfileMirrorAfterUserDocUpdate(existingByEmail.id)
+        } else {
+          throw e
+        }
+      }
       
       return { ...existingByEmail, authId: fbUser.uid } as unknown as User
     }
@@ -137,16 +156,25 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
       // Delete the old invite
       await deleteDocument(COLLECTIONS.INVITES, matchingInvite.id)
       
-      // Upsert the userProfiles mirror for security rules
-      await upsertUserProfile(fbUser.uid, docId, {
-        role: newUserData.role,
-        organizationId: newUserData.organizationId,
-        department: newUserData.department,
-        email: newUserData.email,
-        firstName: newUserData.firstName,
-        lastName: newUserData.lastName,
-        status: newUserData.status,
-      })
+      // Upsert the userProfiles mirror for security rules (best-effort; fallback to Admin SDK endpoint)
+      try {
+        await upsertUserProfile(fbUser.uid, docId, {
+          role: newUserData.role,
+          organizationId: newUserData.organizationId,
+          department: newUserData.department,
+          email: newUserData.email,
+          firstName: newUserData.firstName,
+          lastName: newUserData.lastName,
+          status: newUserData.status,
+        })
+      } catch (e) {
+        const err = e as { code?: string; message?: string }
+        if (/permission|insufficient|PERMISSION_DENIED/i.test(String(err.code || err.message || ""))) {
+          await syncUserProfileMirrorAfterUserDocUpdate(docId)
+        } else {
+          throw e
+        }
+      }
       
       return { id: docId, ...newUserData } as unknown as User
     }
@@ -189,15 +217,24 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
   }
 
   const createdData = createdUser as Record<string, unknown>
-  await upsertUserProfile(fbUser.uid, createdUser.id, {
-    role: createdData.role as string,
-    organizationId: createdData.organizationId as string,
-    department: createdData.department as string,
-    email: createdData.email as string,
-    firstName: createdData.firstName as string,
-    lastName: createdData.lastName as string,
-    status: createdData.status as string,
-  })
+  try {
+    await upsertUserProfile(fbUser.uid, createdUser.id, {
+      role: createdData.role as string,
+      organizationId: createdData.organizationId as string,
+      department: createdData.department as string,
+      email: createdData.email as string,
+      firstName: createdData.firstName as string,
+      lastName: createdData.lastName as string,
+      status: createdData.status as string,
+    })
+  } catch (e) {
+    const err = e as { code?: string; message?: string }
+    if (/permission|insufficient|PERMISSION_DENIED/i.test(String(err.code || err.message || ""))) {
+      await syncUserProfileMirrorAfterUserDocUpdate(createdUser.id)
+    } else {
+      throw e
+    }
+  }
 
   return createdUser as unknown as User
 }
