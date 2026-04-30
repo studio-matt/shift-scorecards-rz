@@ -233,12 +233,12 @@ export default function ScorecardPage() {
         await updateDocument(COLLECTIONS.RESPONSES, draftId, draftData)
       } else {
         // Create new draft
-        const newDoc = await createDocument(COLLECTIONS.RESPONSES, {
+        const newDocId = await createDocument(COLLECTIONS.RESPONSES, {
           ...draftData,
           createdAt: new Date().toISOString(),
         })
-        if (newDoc?.id) {
-          setDraftId(newDoc.id)
+        if (newDocId) {
+          setDraftId(newDocId)
         }
       }
       setLastSaved(new Date())

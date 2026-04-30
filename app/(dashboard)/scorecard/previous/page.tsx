@@ -291,20 +291,25 @@ export default function PreviousScorecardsPage() {
       }
       setTemplates(templatesList)
       
-      // Parse responses
-      const allResponses: RawResponse[] = responseDocs.map((d) => {
-        const data = d as Record<string, unknown>
-        return {
+      // Only include completed submissions (exclude drafts / partial auto-saves).
+      // Some legacy rows may not have `status` — treat non-empty `completedAt` as completed.
+      const completedOnly: RawResponse[] = responseDocs
+        .map((d) => ({ id: d.id, ...(d as unknown as Record<string, unknown>) }))
+        .filter((d) => {
+          const status = (d.status as string) ?? ""
+          const completedAt = (d.completedAt as string) ?? ""
+          return status === "completed" || (completedAt && completedAt.trim().length > 0)
+        })
+        .map((d) => ({
           id: d.id,
-          templateId: (data.templateId as string) ?? "",
-          templateName: (data.templateName as string) ?? "",
-          completedAt: (data.completedAt as string) ?? "",
-          weekOf: (data.weekOf as string) ?? "",
-          organizationId: (data.organizationId as string) ?? "",
-          userId: (data.userId as string) ?? "",
-          answers: (data.answers as Record<string, number | string>) ?? {},
-        }
-      })
+          templateId: (d.templateId as string) ?? "",
+          templateName: (d.templateName as string) ?? "",
+          completedAt: (d.completedAt as string) ?? "",
+          weekOf: (d.weekOf as string) ?? "",
+          organizationId: (d.organizationId as string) ?? "",
+          userId: (d.userId as string) ?? "",
+          answers: (d.answers as Record<string, number | string>) ?? {},
+        }))
       
       // Filter responses based on user role:
       // - Super admins see all responses (aggregated by org)
@@ -312,15 +317,15 @@ export default function PreviousScorecardsPage() {
       // - Regular users see ONLY their own responses (grouped by week)
       let responses: RawResponse[]
       if (isSuperAdmin) {
-        responses = allResponses
+        responses = completedOnly
       } else if (isAdmin) {
         // Admins see their org's responses (aggregated view)
-        responses = allResponses.filter(
+        responses = completedOnly.filter(
           (r) => r.organizationId === userOrgResolved || r.userId === user?.id,
         )
       } else {
         // Regular users see ONLY their own responses, grouped by week
-        responses = allResponses.filter((r) => r.userId === user?.id)
+        responses = completedOnly.filter((r) => r.userId === user?.id)
       }
       
       // Group responses by weekOf:
