@@ -93,14 +93,35 @@ export async function POST(request: Request) {
 
     const db = getAdminDb()
 
-    // If orgName provided but orgId not, attempt lookup by org name (case-insensitive exact match).
+    // If orgName provided but orgId not, attempt lookup by org name.
+    // First try exact match, then contains match; if ambiguous, return candidates.
     if (!organizationId && body.orgName) {
       const orgsSnap = await db.collection("organizations").get()
-      const match = orgsSnap.docs.find((d) => {
+      const needle = String(body.orgName).trim().toLowerCase()
+      const exact = orgsSnap.docs.find((d) => {
         const name = String(d.data()?.name || "").trim().toLowerCase()
-        return name.length > 0 && name === String(body.orgName).trim().toLowerCase()
+        return name.length > 0 && name === needle
       })
-      if (match) organizationId = match.id
+      if (exact) {
+        organizationId = exact.id
+      } else if (needle.length > 0) {
+        const contains = orgsSnap.docs
+          .map((d) => ({ id: d.id, name: String(d.data()?.name || "").trim() }))
+          .filter((o) => o.name.toLowerCase().includes(needle))
+          .slice(0, 20)
+
+        if (contains.length === 1) {
+          organizationId = contains[0].id
+        } else if (contains.length > 1) {
+          return NextResponse.json(
+            {
+              error: "Ambiguous orgName. Provide organizationId.",
+              candidates: contains,
+            },
+            { status: 409 },
+          )
+        }
+      }
     }
 
     // Collect recipients from BOTH:
@@ -159,7 +180,7 @@ export async function POST(request: Request) {
         resent: 0,
         message: organizationId
           ? "No pending invites/users found for this organization."
-          : "No pending invites found (provide organizationId or orgName to search pending users).",
+          : "No pending invites found (provide organizationId or an orgName that matches an organization).",
       })
     }
 
