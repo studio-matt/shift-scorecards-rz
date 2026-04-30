@@ -25,6 +25,11 @@ service cloud.firestore {
     function isCompanyAdmin() {
       return isAuthenticated() && getUserProfile().role == "company_admin";
     }
+    function myUserDocId() {
+      return isAuthenticated() && getUserProfile().userDocId is string
+        ? getUserProfile().userDocId
+        : "";
+    }
     function userDocEmailMatchesToken() {
       return isAuthenticated()
         && request.auth.token.email is string
@@ -70,7 +75,11 @@ service cloud.firestore {
     match /responses/{responseId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
-      allow update: if request.auth != null && resource.data.userId == request.auth.uid;
+      // Allow updates when response.userId matches either auth UID (legacy) or the mirrored userDocId (current app)
+      allow update: if request.auth != null && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.userId == myUserDocId()
+      );
       allow delete: if false;
     }
     
