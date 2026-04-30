@@ -288,6 +288,17 @@ export async function getPendingInvites(orgId: string) {
   )
 }
 
+/** Single invite by email (avoids scanning entire invites collection). */
+export async function getInviteByEmail(email: string) {
+  const normalized = email.toLowerCase()
+  const invites = await getDocuments(
+    COLLECTIONS.INVITES,
+    where("email", "==", normalized),
+    limit(1),
+  )
+  return invites[0] ?? null
+}
+
 // ─── UserProfile Mirror Helpers ───────────────────────────────────────
 // These maintain the /userProfiles/{authUid} mirror collection for security rules
 

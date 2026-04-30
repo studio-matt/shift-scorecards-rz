@@ -31,7 +31,8 @@ import {
 } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Plus, Mail, CheckCircle2, Clock, Search, Upload, FileDown, Loader2, EyeOff, Users, ShieldAlert, Pencil } from "lucide-react"
+import { Plus, Mail, CheckCircle2, Clock, Search, Upload, FileDown, Loader2, EyeOff, Users, ShieldAlert, Pencil, Trash2 } from "lucide-react"
+import { toast } from "sonner"
 import {
   getDocuments,
   getOrganizations,
@@ -42,6 +43,7 @@ import {
 } from "@/lib/firestore"
 import { useAuth } from "@/lib/auth-context"
 import type { Organization } from "@/lib/types"
+import { authHeaders } from "@/lib/api-client"
 
 /** Proper-case a name: "kristen abbott" → "Kristen Abbott" */
 function properCase(name: string): string {
@@ -61,7 +63,11 @@ interface InvitedUser {
   orgName: string
   orgId: string
   excludeFromReporting: boolean
-  status: "accepted" | "pending"
+  /** UI badge */
+  status: "accepted" | "pending" | "staging"
+  /** Raw Firestore `status` field */
+  fsStatus: string
+  authId?: string
 }
 
 export default function ManageUsersPage() {
@@ -83,6 +89,12 @@ export default function ManageUsersPage() {
   const [orgs, setOrgs] = useState<Organization[]>([])
   const [users, setUsers] = useState<InvitedUser[]>([])
   const [loading, setLoading] = useState(true)
+  const [deleteTarget, setDeleteTarget] = useState<InvitedUser | null>(null)
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false)
+  /** Draft org / dept / role for staging assignment rows */
+  const [stagingEdits, setStagingEdits] = useState<
+    Record<string, { orgId: string; department: string; role: string }>
+  >({})
 
   const fetchData = useCallback(async () => {
     try {
@@ -112,6 +124,12 @@ export default function ManageUsersPage() {
         const lastName = (data.lastName as string) ?? ""
         const orgId = (data.organizationId as string) ?? ""
         const rawName = `${firstName} ${lastName}`.trim()
+        const fsStatus = typeof data.status === "string" ? data.status : ""
+        const hasAuth = Boolean(data.authId)
+        let rowStatus: InvitedUser["status"]
+        if (fsStatus === "staging") rowStatus = "staging"
+        else if (hasAuth) rowStatus = "accepted"
+        else rowStatus = "pending"
         return {
           id: d.id,
           name: rawName ? properCase(rawName) : ((data.email as string) ?? "Unknown"),
@@ -121,7 +139,9 @@ export default function ManageUsersPage() {
           orgName: orgMap.get(orgId) ?? "",
           orgId,
           excludeFromReporting: (data.excludeFromReporting as boolean) ?? false,
-          status: data.authId ? ("accepted" as const) : ("pending" as const),
+          status: rowStatus,
+          fsStatus,
+          authId: (data.authId as string) ?? undefined,
         }
       })
       
@@ -190,6 +210,7 @@ export default function ManageUsersPage() {
       )
     } catch (err) {
       console.error("Failed to update role:", err)
+      toast.error("Could not update role. Check your permissions or try again.")
     }
   }
 
@@ -201,14 +222,85 @@ export default function ManageUsersPage() {
       )
     } catch (err) {
       console.error("Failed to update exclude flag:", err)
+      toast.error("Could not update reporting preference. Check your permissions or try again.")
     }
   }
 
-  const filteredUsers = users.filter(
+  const stagingQueue = isSuperAdmin ? users.filter((u) => u.fsStatus === "staging") : []
+  const teamMembers = users.filter((u) => u.fsStatus !== "staging")
+
+  const filteredUsers = teamMembers.filter(
     (u) =>
       u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.email.toLowerCase().includes(searchQuery.toLowerCase()),
   )
+
+  async function handleDeleteUserConfirmed() {
+    if (!deleteTarget) return
+    setDeleteSubmitting(true)
+    try {
+      const res = await fetch("/api/admin/delete-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(await authHeaders()),
+        },
+        body: JSON.stringify({
+          userId: deleteTarget.id,
+          email: deleteTarget.email,
+          authId: deleteTarget.authId,
+        }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error((body as { error?: string }).error || "Delete failed")
+      }
+      toast.success("User removed")
+      setDeleteTarget(null)
+      await fetchData()
+    } catch (e) {
+      console.error(e)
+      toast.error(e instanceof Error ? e.message : "Could not delete user")
+    } finally {
+      setDeleteSubmitting(false)
+    }
+  }
+
+  async function handleAssignStaging(userId: string) {
+    const draft = stagingEdits[userId]
+    if (!draft?.orgId) {
+      toast.error("Select a company first")
+      return
+    }
+    const u = users.find((x) => x.id === userId)
+    if (!u) return
+    try {
+      await updateDocument(COLLECTIONS.USERS, userId, {
+        organizationId: draft.orgId,
+        department: draft.department,
+        role: draft.role,
+        status: "active",
+      })
+      if (u.authId) {
+        await syncUserProfileMirror(u.authId, userId, {
+          organizationId: draft.orgId,
+          department: draft.department,
+          role: draft.role,
+          status: "active",
+        })
+      }
+      toast.success("User assigned to organization")
+      setStagingEdits((prev) => {
+        const next = { ...prev }
+        delete next[userId]
+        return next
+      })
+      await fetchData()
+    } catch (e) {
+      console.error(e)
+      toast.error("Could not assign user. Check permissions and try again.")
+    }
+  }
 
   async function handleInvite() {
     const emailsToSend: string[] = []
@@ -231,7 +323,7 @@ export default function ManageUsersPage() {
 
         for (let i = 1; i < lines.length; i++) {
           const parts = lines[i].split(",").map((s) => s.trim())
-          const email = parts[colIdx.email] ?? ""
+          const email = (parts[colIdx.email] ?? "").toLowerCase()
           const firstName = colIdx.firstName >= 0 ? properCase(parts[colIdx.firstName] ?? "") : ""
           const lastName = colIdx.lastName >= 0 ? properCase(parts[colIdx.lastName] ?? "") : ""
           // If a department was selected in the dropdown, override the CSV column
@@ -252,7 +344,7 @@ export default function ManageUsersPage() {
         }
       } else if (inviteEmail) {
         await createDocument(COLLECTIONS.INVITES, {
-          email: inviteEmail,
+          email: inviteEmail.toLowerCase(),
           department: "",
           role: inviteRole,
           status: "pending",
@@ -294,10 +386,10 @@ export default function ManageUsersPage() {
     )
   }
 
-  const activeCount = users.filter((u) => u.status === "accepted").length
-  const pendingCount = users.filter((u) => u.status === "pending").length
-  const excludedCount = users.filter((u) => u.excludeFromReporting).length
-  const participantCount = users.length - excludedCount
+  const activeCount = teamMembers.filter((u) => u.status === "accepted").length
+  const pendingCount = teamMembers.filter((u) => u.status === "pending").length
+  const excludedCount = teamMembers.filter((u) => u.excludeFromReporting).length
+  const participantCount = teamMembers.length - excludedCount
 
   return (
     <div>
@@ -480,6 +572,117 @@ export default function ManageUsersPage() {
         )}
       </div>
 
+      {/* Staging: self-signup users waiting for org assignment (super admin only) */}
+      {isSuperAdmin && stagingQueue.length > 0 && (
+        <Card className="mb-6 border-amber-500/30">
+          <CardHeader>
+            <CardTitle className="text-base font-semibold">Staging customers</CardTitle>
+            <CardDescription>
+              Assign a company, department, and role. This removes them from staging and grants app access.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {stagingQueue.map((su) => {
+              const draft =
+                stagingEdits[su.id] ?? {
+                  orgId: "",
+                  department: "",
+                  role: su.role || "user",
+                }
+              const orgForRow = orgs.find((o) => o.id === draft.orgId)
+              const depts = orgForRow?.departments ?? []
+              return (
+                <div
+                  key={su.id}
+                  className="flex flex-col gap-3 rounded-lg border border-border p-4 md:flex-row md:flex-wrap md:items-end"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground">{su.name}</p>
+                    <p className="text-xs text-muted-foreground">{su.email}</p>
+                  </div>
+                  <Select
+                    value={draft.orgId}
+                    onValueChange={(orgId) =>
+                      setStagingEdits((prev) => ({
+                        ...prev,
+                        [su.id]: { ...draft, orgId, department: "" },
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-9 w-full md:w-[200px]">
+                      <SelectValue placeholder="Company" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {orgs.map((o) => (
+                        <SelectItem key={o.id} value={o.id}>
+                          {o.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={draft.department}
+                    onValueChange={(department) =>
+                      setStagingEdits((prev) => ({
+                        ...prev,
+                        [su.id]: { ...draft, department },
+                      }))
+                    }
+                    disabled={!draft.orgId || depts.length === 0}
+                  >
+                    <SelectTrigger className="h-9 w-full md:w-[180px]">
+                      <SelectValue placeholder="Department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {depts.map((d) => (
+                        <SelectItem key={d} value={d}>
+                          {d}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={draft.role}
+                    onValueChange={(role) =>
+                      setStagingEdits((prev) => ({
+                        ...prev,
+                        [su.id]: { ...draft, role },
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-9 w-full md:w-[160px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="user">User</SelectItem>
+                      <SelectItem value="company_admin">Company Admin</SelectItem>
+                      <SelectItem value="admin">Super Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => void handleAssignStaging(su.id)}
+                      disabled={!draft.orgId}
+                    >
+                      Save assignment
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive"
+                      onClick={() => setDeleteTarget(su)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Stats */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -654,7 +857,9 @@ export default function ManageUsersPage() {
                     className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${
                       user.status === "accepted"
                         ? "bg-primary/10 text-primary"
-                        : "bg-muted text-muted-foreground"
+                        : user.status === "staging"
+                          ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                          : "bg-muted text-muted-foreground"
                     }`}
                   >
                     {user.status}
@@ -674,6 +879,25 @@ export default function ManageUsersPage() {
                       </TooltipContent>
                     </Tooltip>
                   )}
+                  {(isSuperAdmin ||
+                    (isCompanyAdmin && user.orgId && user.orgId === authUser?.organizationId)) && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                          onClick={() => setDeleteTarget(user)}
+                          aria-label={`Delete ${user.name}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        Remove user
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                 </div>
               </div>
             ))}
@@ -688,6 +912,31 @@ export default function ManageUsersPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove user</DialogTitle>
+            <DialogDescription>
+              This permanently removes {deleteTarget?.name ?? "this user"} from the organization,
+              deletes their login, scorecard responses for this account, and profile data. This
+              cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleDeleteUserConfirmed()}
+              disabled={deleteSubmitting}
+            >
+              {deleteSubmitting ? "Removing…" : "Remove user"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

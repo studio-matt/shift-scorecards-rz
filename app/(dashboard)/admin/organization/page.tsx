@@ -82,6 +82,7 @@ import {
   setDocument,
   COLLECTIONS,
 } from "@/lib/firestore"
+import { authHeaders } from "@/lib/api-client"
 
 /** Proper-case a name: "kristen abbott" → "Kristen Abbott" */
 function properCase(name: string): string {
@@ -1090,10 +1091,14 @@ function OrgDetailView({
         // For actual users, delete from both Firestore AND Firebase Auth via API
         const response = await fetch("/api/admin/delete-user", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(await authHeaders()),
+          },
           body: JSON.stringify({
             userId: memberId,
             email: member?.email,
+            authId: member?.authId,
           }),
         })
         
@@ -1131,10 +1136,14 @@ function OrgDetailView({
           // For actual users, delete from both via API
           const response = await fetch("/api/admin/delete-user", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              ...(await authHeaders()),
+            },
             body: JSON.stringify({
               userId: id,
               email: member?.email,
+              authId: member?.authId,
             }),
           })
           

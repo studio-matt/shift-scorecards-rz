@@ -39,7 +39,7 @@ export default function LoginForm() {
   const [resetEmail, setResetEmail] = useState("")
   const [resetLoading, setResetLoading] = useState(false)
   const [resetMessage, setResetMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
-  const { login, signup, loginWithProvider, isAuthenticated, ready, authError, clearAuthError } = useAuth()
+  const { login, signup, loginWithProvider, isAuthenticated, ready, authError, clearAuthError, user } = useAuth()
   const router = useRouter()
 
   // Show auth error from context (e.g., uninvited user trying to sign in)
@@ -52,10 +52,16 @@ export default function LoginForm() {
   }, [authError, clearAuthError])
 
   useEffect(() => {
-    if (ready && isAuthenticated) {
-      router.push("/dashboard")
+    if (!ready || !isAuthenticated || !user) return
+    const isElevated = user.role === "admin" || user.role === "company_admin"
+    const needsStaging =
+      user.status === "staging" || (!user.organizationId?.length && !isElevated)
+    if (needsStaging) {
+      router.push("/staging")
+      return
     }
-  }, [ready, isAuthenticated, router])
+    router.push("/dashboard")
+  }, [ready, isAuthenticated, user, router])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -94,6 +100,7 @@ export default function LoginForm() {
       } else {
         setError(msg)
       }
+    } finally {
       setLoading(false)
     }
   }

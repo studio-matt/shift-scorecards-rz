@@ -77,6 +77,8 @@ export interface User {
   timezone?: string
   createdAt: string
   lastLogin: string
+  /** e.g. pending, active, staging — extends authId-based accepted/pending UI logic */
+  status?: string
 }
 
 export interface Organization {

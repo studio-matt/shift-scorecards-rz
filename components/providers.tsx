@@ -3,6 +3,7 @@
 import { useState, useEffect, type ReactNode } from "react"
 import { AuthProvider } from "@/lib/auth-context"
 import { ThemeProvider } from "@/lib/theme-context"
+import { Toaster } from "sonner"
 
 export function Providers({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false)
@@ -23,7 +24,10 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <ThemeProvider>
-      <AuthProvider>{children}</AuthProvider>
+      <AuthProvider>
+        {children}
+        <Toaster richColors closeButton position="top-center" theme="dark" />
+      </AuthProvider>
     </ThemeProvider>
   )
 }

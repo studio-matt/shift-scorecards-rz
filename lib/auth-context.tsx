@@ -20,7 +20,7 @@ import {
   type User as FirebaseUser,
 } from "firebase/auth"
 import { auth } from "./firebase"
-import { getUserByAuthId, getUserByEmail, createDocument, updateDocument, deleteDocument, getDocuments, upsertUserProfile, COLLECTIONS } from "./firestore"
+import { getUserByAuthId, getUserByEmail, createDocument, updateDocument, deleteDocument, getInviteByEmail, upsertUserProfile, COLLECTIONS } from "./firestore"
 import type { User, UserRole } from "./types"
 
 // Temp store for signup extras that get applied after profile creation
@@ -111,12 +111,8 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
       return { ...existingByEmail, authId: fbUser.uid } as unknown as User
     }
     
-    // Also check INVITES collection (legacy invites stored separately)
-    const invites = await getDocuments(COLLECTIONS.INVITES)
-    const matchingInvite = invites.find((inv) => {
-      const data = inv as Record<string, unknown>
-      return (data.email as string)?.toLowerCase() === email
-    })
+    // Legacy invites stored separately in INVITES collection
+    const matchingInvite = await getInviteByEmail(email)
     if (matchingInvite) {
       const inviteData = matchingInvite as Record<string, unknown>
       // Migrate invite to USERS collection
@@ -156,10 +152,54 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
     }
   }
 
-  // SECURITY: No pre-existing record found - user was not invited
-  // Sign them out and throw an error with the email they tried to use
-  await signOut(auth)
-  throw new Error(`ACCESS_DENIED: The email "${email}" is not registered in this system. You must use the same email address that your invitation was sent to. If you believe this is an error, please contact your organization administrator.`)
+  // No invite on file: create staging account (server) so user can be assigned to an org by an admin
+  const idToken = await fbUser.getIdToken()
+  const nameParts = (fbUser.displayName || "").trim().split(/\s+/)
+  const firstName = nameParts[0] || "User"
+  const lastName = nameParts.slice(1).join(" ")
+  const res = await fetch("/api/auth/create-staging-profile", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({
+      firstName,
+      lastName,
+      department: pendingSignupExtras?.department ?? "",
+    }),
+  })
+  pendingSignupExtras = null
+
+  if (!res.ok) {
+    const errBody = (await res.json().catch(() => ({}))) as { error?: string }
+    await signOut(auth)
+    throw new Error(
+      errBody.error ||
+        `ACCESS_DENIED: The email "${email}" is not registered in this system. You must use the same email address that your invitation was sent to. If you believe this is an error, please contact your organization administrator.`,
+    )
+  }
+
+  const createdUser = await getUserByEmail(email)
+  if (!createdUser) {
+    await signOut(auth)
+    throw new Error(
+      `ACCESS_DENIED: Your account could not be loaded. Please contact your organization administrator.`,
+    )
+  }
+
+  const createdData = createdUser as Record<string, unknown>
+  await upsertUserProfile(fbUser.uid, createdUser.id, {
+    role: createdData.role as string,
+    organizationId: createdData.organizationId as string,
+    department: createdData.department as string,
+    email: createdData.email as string,
+    firstName: createdData.firstName as string,
+    lastName: createdData.lastName as string,
+    status: createdData.status as string,
+  })
+
+  return createdUser as unknown as User
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -196,12 +236,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         } catch (err) {
           console.error("Failed to resolve user profile:", err)
-          // Check if this is an access denied error
-          if (err instanceof Error && err.message.includes("ACCESS_DENIED")) {
-            // Extract the message after "ACCESS_DENIED: "
-            const message = err.message.replace("ACCESS_DENIED: ", "")
-            if (mounted) setAuthError(message)
+          try {
+            await signOut(auth)
+          } catch {
+            /* ignore */
           }
+          let message =
+            "Could not complete sign-in. Please try again or contact your organization administrator."
+          if (err instanceof Error) {
+            const raw = err.message
+            if (raw.includes("ACCESS_DENIED")) {
+              message = raw
+                .replace(/^ACCESS_DENIED:\s*/i, "")
+                .replace(/^ACCESS_DENIED\s*/i, "")
+                .trim()
+            } else if (/permission|insufficient|PERMISSION_DENIED/i.test(raw)) {
+              message =
+                "Account setup failed due to a permissions error. Please contact your organization administrator."
+            } else if (raw.length > 0 && raw.length < 400) {
+              message = raw
+            }
+          }
+          if (mounted) setAuthError(message)
           if (mounted) {
             setUser(null)
             setFirebaseUser(null)

@@ -41,7 +41,7 @@ function LoginForm() {
   const [resetEmail, setResetEmail] = useState("")
   const [resetLoading, setResetLoading] = useState(false)
   const [resetMessage, setResetMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
-  const { login, signup, loginWithProvider, isAuthenticated, ready } = useAuth()
+  const { login, signup, loginWithProvider, isAuthenticated, ready, authError, clearAuthError, user } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
@@ -49,10 +49,24 @@ function LoginForm() {
   }, [])
 
   useEffect(() => {
-    if (ready && isAuthenticated) {
-      router.push("/dashboard")
+    if (authError) {
+      setError(authError)
+      clearAuthError()
+      setLoading(false)
     }
-  }, [ready, isAuthenticated, router])
+  }, [authError, clearAuthError])
+
+  useEffect(() => {
+    if (!ready || !isAuthenticated || !user) return
+    const isElevated = user.role === "admin" || user.role === "company_admin"
+    const needsStaging =
+      user.status === "staging" || (!user.organizationId?.length && !isElevated)
+    if (needsStaging) {
+      router.push("/staging")
+      return
+    }
+    router.push("/dashboard")
+  }, [ready, isAuthenticated, user, router])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -91,6 +105,7 @@ function LoginForm() {
       } else {
         setError(msg)
       }
+    } finally {
       setLoading(false)
     }
   }

@@ -54,6 +54,21 @@ service cloud.firestore {
       return isSuperAdmin() || belongsToOrg(orgId);
     }
     
+    // Pending invite / first login: user doc email matches signed-in Auth email (case-insensitive)
+    function userDocEmailMatchesToken() {
+      return isAuthenticated()
+        && request.auth.token.email is string
+        && resource.data.email is string
+        && resource.data.email.lower() == request.auth.token.email.lower();
+    }
+    
+    function inviteDocEmailMatchesToken() {
+      return isAuthenticated()
+        && request.auth.token.email is string
+        && resource.data.email is string
+        && resource.data.email.lower() == request.auth.token.email.lower();
+    }
+    
     // ─── userProfiles Collection ──────────────────────────────────────────
     // Mirror collection keyed by authUid - used for security rules lookups
     // Only the user themselves can read their profile (via auth.uid == docId)
@@ -73,16 +88,20 @@ service cloud.firestore {
       // Admins can read all users
       // Company admins can read users in their org
       allow read: if isAuthenticated() && (
+        userDocEmailMatchesToken() ||
         resource.data.authId == request.auth.uid ||
         isSuperAdmin() ||
         (isCompanyAdmin() && resource.data.organizationId == getUserProfile().organizationId)
       );
       
       // Users can update their own profile (limited fields)
-      // Admins can update any user
+      // Email match: pending row claiming authId on first login
+      // Admins can update users in scope
       allow update: if isAuthenticated() && (
+        userDocEmailMatchesToken() ||
         (resource.data.authId == request.auth.uid) ||
-        isSuperAdmin()
+        isSuperAdmin() ||
+        (isCompanyAdmin() && resource.data.organizationId == getUserProfile().organizationId)
       );
       
       // Only super admins can create/delete users
@@ -152,8 +171,9 @@ service cloud.firestore {
     
     // ─── Invites Collection ───────────────────────────────────────────────
     match /invites/{inviteId} {
-      // Admins can read invites for their org, super admins can read all
+      // Legacy invite row: signer can read their own invite by email (first login / migration)
       allow read: if isAuthenticated() && (
+        inviteDocEmailMatchesToken() ||
         isSuperAdmin() ||
         (isCompanyAdmin() && resource.data.organizationId == getUserProfile().organizationId)
       );
@@ -161,8 +181,9 @@ service cloud.firestore {
       // Any admin can create invites
       allow create: if isAnyAdmin();
       
-      // Any admin can update/delete invites in their org
+      // Claiming invite on first login: user can delete their own invite row after migration
       allow update, delete: if isAuthenticated() && (
+        inviteDocEmailMatchesToken() ||
         isSuperAdmin() ||
         (isCompanyAdmin() && resource.data.organizationId == getUserProfile().organizationId)
       );

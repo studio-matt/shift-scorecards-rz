@@ -1,39 +1,103 @@
 import { NextRequest, NextResponse } from "next/server"
-import { deleteUserFromAuth, deleteUserFromAuthByUid } from "@/lib/firebase-admin"
-import { deleteDocument, getDocument, COLLECTIONS } from "@/lib/firestore"
+import type { Firestore } from "firebase-admin/firestore"
+import { getAdminAuth, getAdminDb, deleteUserFromAuth, deleteUserFromAuthByUid } from "@/lib/firebase-admin"
+
+const USERS = "users"
+const USER_PROFILES = "userProfiles"
+const RESPONSES = "responses"
+
+async function verifyCallerIsAdmin(request: NextRequest): Promise<
+  | { ok: true; uid: string; role: string; organizationId: string }
+  | { ok: false; status: number; error: string }
+> {
+  const authHeader = request.headers.get("authorization")
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null
+  if (!token) {
+    return { ok: false, status: 401, error: "Missing authorization" }
+  }
+  try {
+    const decoded = await getAdminAuth().verifyIdToken(token)
+    const prof = await getAdminDb().collection(USER_PROFILES).doc(decoded.uid).get()
+    const data = prof.data()
+    if (!data) {
+      return { ok: false, status: 403, error: "No profile for caller" }
+    }
+    const role = (data.role as string) || "user"
+    const organizationId = (data.organizationId as string) || ""
+    if (role !== "admin" && role !== "company_admin") {
+      return { ok: false, status: 403, error: "Forbidden" }
+    }
+    return { ok: true, uid: decoded.uid, role, organizationId }
+  } catch {
+    return { ok: false, status: 401, error: "Invalid token" }
+  }
+}
+
+function callerCanDeleteTarget(
+  caller: { role: string; organizationId: string },
+  targetOrgId: string,
+): boolean {
+  if (caller.role === "admin") return true
+  if (caller.role === "company_admin") {
+    return Boolean(caller.organizationId && caller.organizationId === targetOrgId)
+  }
+  return false
+}
+
+async function deleteResponsesForUserDocId(db: Firestore, userDocId: string) {
+  const snap = await db.collection(RESPONSES).where("userId", "==", userDocId).get()
+  if (snap.empty) return 0
+  let deleted = 0
+  const docs = snap.docs
+  for (let i = 0; i < docs.length; i += 500) {
+    const batch = db.batch()
+    const chunk = docs.slice(i, i + 500)
+    for (const d of chunk) {
+      batch.delete(d.ref)
+    }
+    await batch.commit()
+    deleted += chunk.length
+  }
+  return deleted
+}
 
 export async function POST(request: NextRequest) {
   try {
+    const authz = await verifyCallerIsAdmin(request)
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status })
+    }
+
     const body = await request.json()
-    const { userId, email, authId } = body
+    const { userId, email, authId } = body as {
+      userId?: string
+      email?: string
+      authId?: string
+    }
 
     if (!userId) {
-      return NextResponse.json(
-        { error: "userId is required" },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "userId is required" }, { status: 400 })
     }
 
-    // First, try to get the user document to find their email/authId if not provided
-    let userEmail = email
-    let userAuthId = authId
-    
-    if (!userEmail && !userAuthId) {
-      try {
-        const userDoc = await getDocument(COLLECTIONS.USERS, userId)
-        if (userDoc) {
-          const userData = userDoc as Record<string, unknown>
-          userEmail = userData.email as string
-          userAuthId = userData.authId as string
-        }
-      } catch (e) {
-        console.error("Could not fetch user document:", e)
-      }
+    const db = getAdminDb()
+    const userRef = db.collection(USERS).doc(userId)
+    const userSnap = await userRef.get()
+    if (!userSnap.exists) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    // Delete from Firebase Auth (try by authId first, then by email)
-    let authDeleteResult = { success: true }
-    
+    const userData = userSnap.data() as Record<string, unknown>
+    const targetOrgId = (userData.organizationId as string) || ""
+    if (!callerCanDeleteTarget({ role: authz.role, organizationId: authz.organizationId }, targetOrgId)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
+    let userEmail = email || (userData.email as string)
+    let userAuthId = authId || (userData.authId as string)
+
+    const responsesDeleted = await deleteResponsesForUserDocId(db, userId)
+
+    let authDeleteResult: { success: boolean; error?: string } = { success: true }
     if (userAuthId) {
       authDeleteResult = await deleteUserFromAuthByUid(userAuthId)
     } else if (userEmail) {
@@ -42,20 +106,26 @@ export async function POST(request: NextRequest) {
 
     if (!authDeleteResult.success) {
       console.error("Failed to delete from Firebase Auth:", authDeleteResult.error)
-      // Continue to delete from Firestore anyway
     }
 
-    // Delete from Firestore
+    if (userAuthId) {
+      try {
+        await db.collection(USER_PROFILES).doc(userAuthId).delete()
+      } catch (e) {
+        console.error("Failed to delete userProfiles mirror:", e)
+      }
+    }
+
     try {
-      await deleteDocument(COLLECTIONS.USERS, userId)
+      await userRef.delete()
     } catch (e) {
-      console.error("Failed to delete from Firestore:", e)
+      console.error("Failed to delete user from Firestore:", e)
       return NextResponse.json(
-        { 
+        {
           error: "Failed to delete user from database",
-          authDeleted: authDeleteResult.success
+          authDeleted: authDeleteResult.success,
         },
-        { status: 500 }
+        { status: 500 },
       )
     }
 
@@ -63,18 +133,14 @@ export async function POST(request: NextRequest) {
       success: true,
       authDeleted: authDeleteResult.success,
       firestoreDeleted: true,
+      responsesDeleted,
     })
-
   } catch (error) {
     console.error("Error in delete-user API:", error)
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
 
-// Also support DELETE method
 export async function DELETE(request: NextRequest) {
   return POST(request)
 }

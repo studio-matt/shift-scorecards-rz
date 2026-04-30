@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { BackgroundProvider, useBackground } from "@/lib/background-context"
 import { AppSidebar } from "@/components/app-sidebar"
@@ -9,15 +9,26 @@ import { AppFooter } from "@/components/app-footer"
 import { Loader2 } from "lucide-react"
 
 function DashboardShell({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, ready } = useAuth()
+  const { isAuthenticated, ready, user } = useAuth()
   const { backgroundColor } = useBackground()
   const router = useRouter()
+  const pathname = usePathname()
 
   useEffect(() => {
     if (ready && !isAuthenticated) {
       router.push("/")
     }
   }, [ready, isAuthenticated, router])
+
+  useEffect(() => {
+    if (!ready || !isAuthenticated || !user) return
+    const isElevated = user.role === "admin" || user.role === "company_admin"
+    const needsStaging =
+      user.status === "staging" || (!user.organizationId?.length && !isElevated)
+    if (!needsStaging) return
+    if (pathname.startsWith("/staging")) return
+    router.replace("/staging")
+  }, [ready, isAuthenticated, user, pathname, router])
 
   if (!ready) {
     return (

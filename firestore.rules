@@ -12,6 +12,32 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // ─── Helpers (align with production for admin-on-behalf updates) ─────
+    function getUserProfile() {
+      return get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data;
+    }
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isSuperAdmin() {
+      return isAuthenticated() && getUserProfile().role == "admin";
+    }
+    function isCompanyAdmin() {
+      return isAuthenticated() && getUserProfile().role == "company_admin";
+    }
+    function userDocEmailMatchesToken() {
+      return isAuthenticated()
+        && request.auth.token.email is string
+        && resource.data.email is string
+        && resource.data.email.lower() == request.auth.token.email.lower();
+    }
+    function inviteDocEmailMatchesToken() {
+      return isAuthenticated()
+        && request.auth.token.email is string
+        && resource.data.email is string
+        && resource.data.email.lower() == request.auth.token.email.lower();
+    }
+    
     // ─── userProfiles Collection (Mirror) ─────────────────────────────────
     // Keyed by authUid - used for security rules lookups
     // Read: user can read their own profile
@@ -25,9 +51,19 @@ service cloud.firestore {
     // Users can read any user doc (needed for login flow to find profile by authId)
     // Users can only update their own profile (where authId matches)
     match /users/{userId} {
-      allow read: if request.auth != null;
-      allow update: if request.auth != null && resource.data.authId == request.auth.uid;
-      allow create, delete: if false; // Admin SDK only
+      allow read: if request.auth != null && (
+        userDocEmailMatchesToken() ||
+        resource.data.authId == request.auth.uid ||
+        isSuperAdmin() ||
+        (isCompanyAdmin() && resource.data.organizationId == getUserProfile().organizationId)
+      );
+      allow update: if request.auth != null && (
+        userDocEmailMatchesToken() ||
+        resource.data.authId == request.auth.uid ||
+        isSuperAdmin() ||
+        (isCompanyAdmin() && resource.data.organizationId == getUserProfile().organizationId)
+      );
+      allow create, delete: if isSuperAdmin();
     }
     
     // ─── Responses Collection ─────────────────────────────────────────────
@@ -64,8 +100,13 @@ service cloud.firestore {
     
     // ─── Invites ──────────────────────────────────────────────────────────
     match /invites/{inviteId} {
-      allow read: if request.auth != null;
-      allow write: if false; // Admin SDK only
+      allow read: if request.auth != null && (
+        inviteDocEmailMatchesToken() ||
+        isSuperAdmin() ||
+        (isCompanyAdmin() && resource.data.organizationId == getUserProfile().organizationId)
+      );
+      allow delete: if request.auth != null && inviteDocEmailMatchesToken();
+      allow create, update: if false; // Admin SDK only
     }
     
     // ─── Report History ───────────────────────────────────────────────────
