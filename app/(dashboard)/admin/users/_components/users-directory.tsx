@@ -100,7 +100,16 @@ export function UsersDirectory({
 
   // Selection + bulk action
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [bulkAction, setBulkAction] = useState<"invite_again" | "cancel_invite" | "delete_user" | "none">("none")
+  const [bulkAction, setBulkAction] = useState<
+    | "invite_again"
+    | "cancel_invite"
+    | "delete_user"
+    | "set_role"
+    | "set_excluded"
+    | "set_included"
+    | "none"
+  >("none")
+  const [bulkRole, setBulkRole] = useState<"user" | "company_admin" | "admin">("user")
   const [bulkWorking, setBulkWorking] = useState(false)
 
   const load = useCallback(async () => {
@@ -308,10 +317,30 @@ export function UsersDirectory({
           else failed++
         }
         toast.success(`Deleted ${ok} user(s)${failed ? ` (${failed} failed)` : ""}`)
+      } else if (bulkAction === "set_role") {
+        const res = await fetch("/api/admin/set-user-role", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+          body: JSON.stringify({ userIds: ids, role: bulkRole }),
+        })
+        const body = (await res.json().catch(() => ({}))) as { error?: string; updated?: number }
+        if (!res.ok) throw new Error(body.error || "Role update failed")
+        toast.success(`Updated role for ${body.updated ?? 0} user(s)`)
+      } else if (bulkAction === "set_excluded" || bulkAction === "set_included") {
+        const exclude = bulkAction === "set_excluded"
+        const res = await fetch("/api/admin/set-exclude-reporting", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+          body: JSON.stringify({ userIds: ids, exclude }),
+        })
+        const body = (await res.json().catch(() => ({}))) as { error?: string; updated?: number }
+        if (!res.ok) throw new Error(body.error || "Exclude update failed")
+        toast.success(`${exclude ? "Excluded" : "Included"} ${body.updated ?? 0} user(s)`)
       }
 
       setSelectedIds(new Set())
       setBulkAction("none")
+      setBulkRole("user")
       await load()
     } catch (e) {
       console.error(e)
@@ -336,6 +365,19 @@ export function UsersDirectory({
   async function rowDelete(userId: string) {
     setSelectedIds(new Set([userId]))
     setBulkAction("delete_user")
+    await applyBulk()
+  }
+
+  async function rowSetRole(userId: string, role: "user" | "company_admin" | "admin") {
+    setSelectedIds(new Set([userId]))
+    setBulkRole(role)
+    setBulkAction("set_role")
+    await applyBulk()
+  }
+
+  async function rowSetExcluded(userId: string, exclude: boolean) {
+    setSelectedIds(new Set([userId]))
+    setBulkAction(exclude ? "set_excluded" : "set_included")
     await applyBulk()
   }
 
@@ -453,10 +495,28 @@ export function UsersDirectory({
                     <SelectItem value="none">None</SelectItem>
                     <SelectItem value="invite_again">Invite again</SelectItem>
                     <SelectItem value="cancel_invite">Cancel invite</SelectItem>
+                    <SelectItem value="set_role">Set role…</SelectItem>
+                    <SelectItem value="set_included">Include in reports</SelectItem>
+                    <SelectItem value="set_excluded">Exclude from reports</SelectItem>
                     <SelectItem value="delete_user">Delete user</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              {bulkAction === "set_role" ? (
+                <div className="space-y-2">
+                  <Label>Role</Label>
+                  <Select value={bulkRole} onValueChange={(v) => setBulkRole(v as typeof bulkRole)}>
+                    <SelectTrigger className="w-full md:w-48">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="user">User</SelectItem>
+                      <SelectItem value="company_admin">Company Admin</SelectItem>
+                      <SelectItem value="admin">Super Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
               <Button onClick={applyBulk} disabled={bulkWorking || bulkAction === "none" || selectedIds.size === 0}>
                 {bulkWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Apply
@@ -525,6 +585,28 @@ export function UsersDirectory({
                         <DropdownMenuItem onSelect={() => void rowCancelInvite(r.id)}>
                           <Ban className="h-4 w-4" />
                           Cancel invite
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => void rowSetExcluded(r.id, !r.excludeFromReporting)}>
+                          {r.excludeFromReporting ? (
+                            <>
+                              <Ban className="h-4 w-4" />
+                              Include in reports
+                            </>
+                          ) : (
+                            <>
+                              <Ban className="h-4 w-4" />
+                              Exclude from reports
+                            </>
+                          )}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => void rowSetRole(r.id, "user")}>
+                          Set role: User
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => void rowSetRole(r.id, "company_admin")}>
+                          Set role: Company Admin
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => void rowSetRole(r.id, "admin")}>
+                          Set role: Super Admin
                         </DropdownMenuItem>
                         <DropdownMenuItem onSelect={() => void rowDelete(r.id)} className="text-destructive">
                           <Trash2 className="h-4 w-4" />
