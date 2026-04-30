@@ -2,6 +2,13 @@ import { Resend } from "resend"
 import { NextResponse } from "next/server"
 import { getEmailSettings, getEmailTemplate, replacePlaceholders } from "@/lib/email-service"
 
+function redactEmail(email: string): string {
+  const [local, domain] = email.split("@")
+  if (!domain) return "***"
+  const safeLocal = (local || "").slice(0, 1)
+  return `${safeLocal}***@${domain}`
+}
+
 export async function POST(req: Request) {
   try {
     const { emails, orgName } = await req.json()
@@ -15,12 +22,13 @@ export async function POST(req: Request) {
     const apiKey = emailSettings?.resendApiKey || process.env.RESEND_API_KEY
     
     if (!apiKey) {
-      console.warn("[invite] No Resend API key found in settings or environment")
-      return NextResponse.json({
-        sent: 0,
-        skipped: emails.length,
-        message: "Emails skipped -- Resend API key not configured",
+      console.error("[invite] blocked: missing Resend API key", {
+        recipients: emails.length,
       })
+      return NextResponse.json(
+        { error: "Resend API key not configured" },
+        { status: 500 },
+      )
     }
 
     const resend = new Resend(apiKey)
@@ -65,6 +73,7 @@ export async function POST(req: Request) {
     const BATCH_SIZE = 100
     let sent = 0
     let failed = 0
+    const errors: string[] = []
     
     for (let i = 0; i < batchEmails.length; i += BATCH_SIZE) {
       const batch = batchEmails.slice(i, i + BATCH_SIZE)
@@ -76,11 +85,27 @@ export async function POST(req: Request) {
         if (result.error) {
           console.error("[invite] Batch error:", result.error)
           failed += batch.length
+          errors.push(String(result.error?.message || result.error))
         }
       } catch (batchErr) {
         console.error("[invite] Batch send failed:", batchErr)
         failed += batch.length
+        errors.push(batchErr instanceof Error ? batchErr.message : String(batchErr))
       }
+    }
+
+    if (failed > 0) {
+      console.error("[invite] send incomplete", {
+        sent,
+        failed,
+        total: emails.length,
+        fromEmail,
+        sampleRecipients: emails.slice(0, 3).map(redactEmail),
+      })
+      return NextResponse.json(
+        { error: "One or more invitation emails failed to send", sent, failed, total: emails.length, errors },
+        { status: 502 },
+      )
     }
 
     return NextResponse.json({ sent, failed, total: emails.length })

@@ -348,13 +348,28 @@ export default function ManageUsersPage() {
       // Send invite emails via API
       if (emailsToSend.length > 0) {
         try {
-          await fetch("/api/invite", {
+          const res = await fetch("/api/invite", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ emails: emailsToSend, orgName }),
           })
+          const payload = (await res.json().catch(() => null)) as
+            | { sent?: number; failed?: number; total?: number; error?: string; errors?: string[] }
+            | null
+
+          if (!res.ok) {
+            const msg =
+              payload?.error ||
+              `Invite email failed (${res.status}). Please check email settings and try again.`
+            toast.error(msg)
+          } else {
+            const sent = payload?.sent ?? 0
+            const total = payload?.total ?? emailsToSend.length
+            toast.success(`Invitation email sent (${sent}/${total})`)
+          }
         } catch (emailErr) {
           console.warn("Email delivery failed, but invites were recorded:", emailErr)
+          toast.error("Invite email request failed. Please check your connection and try again.")
         }
       }
     } catch (err) {
