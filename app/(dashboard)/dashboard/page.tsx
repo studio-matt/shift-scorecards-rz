@@ -50,6 +50,7 @@ import {
   getUsersByOrg,
   getUserResponses,
   getUserResponsesUnordered,
+  getUserResponsesMerged,
   getResponsesByOrg,
   COLLECTIONS,
 } from "@/lib/firestore"
@@ -427,9 +428,8 @@ export default function DashboardPage() {
 
           // Personal metrics must come from raw responses: org aggregates update on a cron delay,
           // so "caught up" on the scorecard page could still show 0/1 here otherwise.
-          const [userResponseDocs, authResponseDocs, timeSavingIds, confidenceIds, templateDocs] = await Promise.all([
-            getUserResponses(user.id),
-            user.authId && user.authId !== user.id ? getUserResponses(user.authId) : Promise.resolve([]),
+          const [mergedUserDocs, timeSavingIds, confidenceIds, templateDocs] = await Promise.all([
+            getUserResponsesMerged(user, 12000),
             findTimeSavingQuestionIds(),
             findConfidenceQuestionIds(),
             getDocuments(COLLECTIONS.TEMPLATES),
@@ -437,26 +437,6 @@ export default function DashboardPage() {
 
           const toRaw = (docs: { id: string }[]): RawResponse[] =>
             docs.map((d) => ({ ...d } as unknown as RawResponse))
-
-          // orderBy(completedAt) excludes docs without that field; fall back for legacy rows
-          let userDocs = userResponseDocs
-          if (userDocs.length === 0) {
-            userDocs = await getUserResponsesUnordered(user.id)
-          }
-          let authDocs = authResponseDocs
-          if (user.authId && user.authId !== user.id && authDocs.length === 0) {
-            authDocs = await getUserResponsesUnordered(user.authId)
-          }
-
-          // Merge any legacy rows stored under authId into the user's stream
-          const mergedUserDocs = (() => {
-            const byId = new Map<string, unknown>()
-            for (const d of [...userDocs, ...authDocs]) {
-              const id = (d as unknown as { id?: string }).id
-              if (id) byId.set(id, d)
-            }
-            return Array.from(byId.values()) as typeof userDocs
-          })()
 
           const userRaw = toRaw(mergedUserDocs)
 

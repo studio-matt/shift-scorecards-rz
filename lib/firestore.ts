@@ -197,6 +197,27 @@ export async function getUserResponsesUnordered(userId: string, maxDocs = 5000) 
   return getDocuments(COLLECTIONS.RESPONSES, where("userId", "==", userId), limit(cap))
 }
 
+/**
+ * Canonical user response stream: merges docs stored under the user's Firestore doc id
+ * and any legacy docs stored under Firebase authId.
+ */
+export async function getUserResponsesMerged(
+  user: { id: string; authId?: string },
+  maxDocsPerKey = 5000,
+) {
+  const authId = user.authId && user.authId !== user.id ? user.authId : null
+  const [byUserId, byAuthId] = await Promise.all([
+    getUserResponsesUnordered(user.id, maxDocsPerKey),
+    authId ? getUserResponsesUnordered(authId, maxDocsPerKey) : Promise.resolve([]),
+  ])
+  const byId = new Map<string, unknown>()
+  for (const r of [...byUserId, ...byAuthId]) {
+    const id = (r as unknown as { id?: string }).id
+    if (id) byId.set(id, r)
+  }
+  return Array.from(byId.values()) as typeof byUserId
+}
+
 export async function getResponsesByOrg(orgId: string) {
   return getDocuments(
     COLLECTIONS.RESPONSES,

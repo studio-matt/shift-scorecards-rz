@@ -34,7 +34,7 @@ import {
   getAllReleases,
   filterActiveRelease,
   getDocument,
-  createDocument,
+  setDocument,
   updateDocument,
   deleteDocument,
   getUserResponsesUnordered,
@@ -81,6 +81,7 @@ export default function ScorecardPage() {
   const [submitting, setSubmitting] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveErrorDetail, setSaveErrorDetail] = useState<string | null>(null)
   
   // Draft auto-save state
   const [draftId, setDraftId] = useState<string | null>(null)
@@ -149,6 +150,33 @@ export default function ScorecardPage() {
           
           // Check for existing response (draft or completed) for this user + release
           if (user?.id) {
+            const deterministicId = `${rel.id}__${user.id}`
+            const deterministicDoc = await getDocument(COLLECTIONS.RESPONSES, deterministicId)
+
+            if (deterministicDoc) {
+              const data = deterministicDoc as unknown as Record<string, unknown>
+              const status = (data.status as string) || ""
+              if (status === "completed") {
+                setAlreadyCompleted(true)
+                setLoading(false)
+                return
+              }
+              if (status === "draft") {
+                setDraftId(deterministicId)
+                draftIdRef.current = deterministicId
+                setAnswers((data.answers as Record<string, string | number>) || {})
+                setSaveError(null)
+                const templateData = tmpl as unknown as TemplateData
+                const savedAnswers = (data.answers as Record<string, string | number>) || {}
+                const firstUnanswered =
+                  templateData.questions?.findIndex((q) => savedAnswers[q.id] === undefined) ?? 0
+                setCurrentQuestion(Math.max(0, firstUnanswered))
+                setLastSaved(parseDateLike((data as { updatedAt?: unknown }).updatedAt))
+                setLoading(false)
+                return
+              }
+            }
+
             const [byUserId, byAuthId] = await Promise.all([
               getUserResponsesUnordered(user.id, 2000),
               user.authId && user.authId !== user.id
@@ -313,31 +341,31 @@ export default function ScorecardPage() {
         weekOf: weekOfLabel,
         organizationId: release.organizationId,
         status: "draft" as const,
-        updatedAt: new Date().toISOString(),
       }
       
-      const effectiveDraftId = draftIdRef.current
+      const effectiveDraftId = draftIdRef.current || `${release.id}__${user.id}`
       if (effectiveDraftId) {
-        // Update existing draft
-        await updateDocument(COLLECTIONS.RESPONSES, effectiveDraftId, draftData)
-      } else {
-        // Create new draft
-        const newDocId = await createDocument(COLLECTIONS.RESPONSES, {
-          ...draftData,
-          createdAt: new Date().toISOString(),
-        })
-        if (newDocId) {
-          draftIdRef.current = newDocId
-          setDraftId(newDocId)
+        // Upsert draft at deterministic doc id
+        if (!draftIdRef.current) {
+          await setDocument(COLLECTIONS.RESPONSES, effectiveDraftId, draftData)
+        } else {
+          await updateDocument(COLLECTIONS.RESPONSES, effectiveDraftId, draftData)
         }
+        draftIdRef.current = effectiveDraftId
+        setDraftId(effectiveDraftId)
       }
       setLastSaved(new Date())
       setSaveError(null)
+      setSaveErrorDetail(null)
       saveRetryRef.current.attempt = 0
       return true
     } catch (err) {
       console.error("Failed to auto-save draft:", err)
+      const e = err as { code?: string; message?: string }
+      const code = e?.code ? String(e.code) : ""
+      const msg = e?.message ? String(e.message) : ""
       setSaveError("We’re having trouble saving right now. Your answers are kept locally and we’ll keep retrying.")
+      setSaveErrorDetail(code || msg ? `${code}${code && msg ? ": " : ""}${msg}` : null)
       // Best-effort retry with backoff (don’t spam writes).
       if (!saveRetryRef.current.timer) {
         const attempt = Math.min(saveRetryRef.current.attempt + 1, 6)
@@ -411,16 +439,14 @@ export default function ScorecardPage() {
         status: "completed" as const,
       }
       
-      if (draftId) {
-        // Update existing draft to completed status
-        await updateDocument(COLLECTIONS.RESPONSES, draftId, completedData)
+      const targetId = draftIdRef.current || `${release.id}__${user.id}`
+      if (draftIdRef.current) {
+        await updateDocument(COLLECTIONS.RESPONSES, targetId, completedData)
       } else {
-        // Create new completed response (no draft existed)
-        await createDocument(COLLECTIONS.RESPONSES, {
-          ...completedData,
-          createdAt: new Date().toISOString(),
-        })
+        await setDocument(COLLECTIONS.RESPONSES, targetId, completedData)
       }
+      draftIdRef.current = targetId
+      setDraftId(targetId)
       // Clear local backup on successful completion
       try {
         const key = `scorecardDraft:${user.id}:${release.id}`
@@ -431,11 +457,16 @@ export default function ScorecardPage() {
       setSubmitted(true)
     } catch (err) {
       console.error("Failed to submit scorecard:", err)
-      alert("We couldn’t submit your scorecard. Please check your connection and try again.")
+      const e = err as { code?: string; message?: string }
+      const code = e?.code ? String(e.code) : ""
+      const msg = e?.message ? String(e.message) : ""
+      alert(
+        `We couldn’t submit your scorecard. Please try again.\n\n${code || msg ? `Error: ${code}${code && msg ? ": " : ""}${msg}` : ""}`.trim(),
+      )
     } finally {
       setSubmitting(false)
     }
-  }, [release, template, user, answers, weekOfLabel, draftId])
+  }, [release, template, user, answers, weekOfLabel])
 
   const handleSaveAndExit = useCallback(async () => {
     if (!release || !template || !user) return
@@ -455,9 +486,11 @@ export default function ScorecardPage() {
     
     try {
       // Delete draft from DB if it exists
-      if (draftId) {
-        await deleteDocument(COLLECTIONS.RESPONSES, draftId)
+      const targetId = draftIdRef.current || draftId
+      if (targetId) {
+        await deleteDocument(COLLECTIONS.RESPONSES, targetId)
         setDraftId(null)
+        draftIdRef.current = null
       }
       
       // Reset local state
@@ -618,6 +651,11 @@ export default function ScorecardPage() {
             <div className="flex-1">
               <p className="font-medium text-amber-100">Saving issue</p>
               <p className="text-amber-200/90">{saveError}</p>
+              {saveErrorDetail ? (
+                <p className="mt-1 break-words font-mono text-[11px] text-amber-200/70">
+                  {saveErrorDetail}
+                </p>
+              ) : null}
             </div>
           </div>
         </div>

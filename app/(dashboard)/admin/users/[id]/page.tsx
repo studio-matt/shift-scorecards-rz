@@ -30,6 +30,7 @@ import {
 } from "@/lib/firestore"
 import { useAuth } from "@/lib/auth-context"
 import { parseTimeValue } from "@/lib/dashboard-data"
+import { authHeaders } from "@/lib/api-client"
 
 interface UserData {
   id: string
@@ -325,10 +326,15 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
 
       try {
         setCompletingId(response.id)
-        await updateDocument(COLLECTIONS.RESPONSES, response.id, {
-          status: "completed",
-          completedAt: new Date().toISOString(),
+        const res = await fetch("/api/admin/complete-response", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+          body: JSON.stringify({ responseId: response.id }),
         })
+        if (!res.ok) {
+          const payload = (await res.json().catch(() => null)) as { error?: string; reason?: string } | null
+          throw new Error(payload?.error || payload?.reason || `HTTP ${res.status}`)
+        }
         await fetchData()
       } catch (err) {
         console.error("Failed to mark draft completed:", err)
@@ -351,9 +357,14 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
 
       try {
         setReassigningFrom(fromUserId)
-        const docs = await getUserResponsesUnordered(fromUserId, 10000)
-        for (const d of docs) {
-          await updateDocument(COLLECTIONS.RESPONSES, d.id, { userId: userData.id })
+        const res = await fetch("/api/admin/reassign-responses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+          body: JSON.stringify({ fromUserId, toUserId: userData.id }),
+        })
+        if (!res.ok) {
+          const payload = (await res.json().catch(() => null)) as { error?: string; reason?: string } | null
+          throw new Error(payload?.error || payload?.reason || `HTTP ${res.status}`)
         }
         await fetchData()
       } catch (err) {
