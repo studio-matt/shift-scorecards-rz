@@ -65,6 +65,28 @@ interface TemplateQuestion {
 export default function UserDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: userId } = use(params)
   const { isSuperAdmin, isCompanyAdmin } = useAuth()
+
+  function parseDateLike(value: unknown): Date | null {
+    if (!value) return null
+    if (value instanceof Date) return isNaN(value.getTime()) ? null : value
+    if (typeof value === "string" || typeof value === "number") {
+      const d = new Date(value)
+      return isNaN(d.getTime()) ? null : d
+    }
+    if (typeof value === "object") {
+      const v = value as { toDate?: () => unknown; seconds?: unknown; nanoseconds?: unknown }
+      if (typeof v.toDate === "function") {
+        const d = v.toDate()
+        return d instanceof Date && !isNaN(d.getTime()) ? d : null
+      }
+      if (typeof v.seconds === "number") {
+        const nanos = typeof v.nanoseconds === "number" ? v.nanoseconds : 0
+        const d = new Date(v.seconds * 1000 + Math.floor(nanos / 1e6))
+        return isNaN(d.getTime()) ? null : d
+      }
+    }
+    return null
+  }
   
   const [userData, setUserData] = useState<UserData | null>(null)
   const [scorecards, setScorecards] = useState<ScorecardResponse[]>([])
@@ -462,7 +484,7 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
                       <p className="font-medium text-foreground">{sc.weekOf}</p>
                       <p className="text-xs text-muted-foreground">
                         {sc.status === "draft"
-                          ? `Last saved ${new Date(sc.updatedAt || sc.createdAt || sc.completedAt).toLocaleString()}`
+                          ? `Last saved ${(parseDateLike(sc.updatedAt) ?? parseDateLike(sc.createdAt) ?? parseDateLike(sc.completedAt))?.toLocaleString() ?? "-"}`
                           : `Completed ${new Date(sc.completedAt).toLocaleDateString()}`}
                       </p>
                     </div>
