@@ -28,8 +28,11 @@ export async function POST(req: NextRequest) {
     return json({ error: "Provide a valid email" }, 400)
   }
 
-  const origin = new URL(req.url).origin
-  const continueUrl = `${origin}/`
+  // IMPORTANT: On App Hosting, `req.url` may be a `*.a.run.app` host even when
+  // users hit our custom domain. Firebase Auth requires the continue URL domain to
+  // be authorized, so use the canonical app URL instead of req.url.
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://scorecard.envoydesign.com"
+  const continueUrl = `${appUrl.replace(/\\/$/, "")}/`
 
   const adminAuth = getAdminAuth()
 
