@@ -31,6 +31,8 @@ export const COLLECTIONS = {
   SETTINGS: "settings",
   WEBINARS: "webinars",
   REPORT_HISTORY: "report_history",
+  EXECUTIVE_REPORTS: "executive_reports",
+  ROLLUP_SNAPSHOTS: "rollup_snapshots",
 } as const
 
 // ─── UserProfile Mirror Type ──────────────────────────────────────────

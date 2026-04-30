@@ -35,6 +35,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Link from "next/link"
 import { getDocuments, COLLECTIONS, updateDocument } from "@/lib/firestore"
@@ -49,8 +50,10 @@ import {
   findConfidenceQuestionIds,
 } from "@/lib/dashboard-data"
 import type { Organization, ReportSchedule, ReportHistory, TopPerformer } from "@/lib/types"
-import { DEFAULT_REPORT_SCHEDULE } from "@/lib/types"
+import { DEFAULT_REPORT_SCHEDULE, DEFAULT_EXECUTIVE_REPORT_SCHEDULE } from "@/lib/types"
+import type { ExecutiveReportSchedule, DayOfWeek } from "@/lib/types"
 import type { UserStreak, NonResponder } from "@/lib/dashboard-data"
+import { computeNextScheduledAt } from "@/lib/executive-reports"
 
 interface ReportData {
   weekOf: string
@@ -94,6 +97,11 @@ export default function LeadershipReportsPage() {
   )
   const [savingSchedule, setSavingSchedule] = useState(false)
   const [scheduleMessage, setScheduleMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+
+  // Executive report schedule (org-level)
+  const [execSchedule, setExecSchedule] = useState<ExecutiveReportSchedule>(DEFAULT_EXECUTIVE_REPORT_SCHEDULE)
+  const [savingExecSchedule, setSavingExecSchedule] = useState(false)
+  const [execScheduleMessage, setExecScheduleMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   
   const [loadError, setLoadError] = useState<string | null>(null)
   
@@ -114,6 +122,13 @@ export default function LeadershipReportsPage() {
       
       // Determine which org to use
       const orgId = isSuperAdmin ? selectedOrg : (user?.organizationId || "all")
+      const selectedOrgDoc =
+        orgId !== "all" ? orgs.find((o) => o.id === orgId) : undefined
+      if (selectedOrgDoc?.executiveReportSchedule) {
+        setExecSchedule(selectedOrgDoc.executiveReportSchedule)
+      } else {
+        setExecSchedule(DEFAULT_EXECUTIVE_REPORT_SCHEDULE)
+      }
       
       const responses = await loadResponsesForDashboardFallback(orgId, "all", user?.id)
 
@@ -305,6 +320,38 @@ export default function LeadershipReportsPage() {
       setScheduleMessage({ type: "error", text: "Failed to save schedule. Please try again." })
     } finally {
       setSavingSchedule(false)
+    }
+  }
+
+  async function handleSaveExecSchedule() {
+    const orgId = isSuperAdmin ? selectedOrg : (user?.organizationId || "")
+    if (!orgId || orgId === "all") {
+      setExecScheduleMessage({ type: "error", text: "Select a single organization to save executive scheduling." })
+      setTimeout(() => setExecScheduleMessage(null), 3000)
+      return
+    }
+    setSavingExecSchedule(true)
+    setExecScheduleMessage(null)
+    try {
+      const now = new Date()
+      const nextScheduledAt = computeNextScheduledAt(execSchedule, now)
+      const updated = {
+        ...execSchedule,
+        intervalWeeks: Math.max(1, Math.min(26, Math.floor(execSchedule.intervalWeeks || 1))),
+        daysOfWeek: (execSchedule.daysOfWeek?.length ? execSchedule.daysOfWeek : ["monday"]) as DayOfWeek[],
+        nextScheduledAt: execSchedule.enabled ? nextScheduledAt : "",
+      }
+      await updateDocument(COLLECTIONS.ORGANIZATIONS, orgId, {
+        executiveReportSchedule: updated,
+      })
+      setExecSchedule(updated)
+      setExecScheduleMessage({ type: "success", text: "Executive report schedule saved." })
+      setTimeout(() => setExecScheduleMessage(null), 3000)
+    } catch (err) {
+      console.error("Failed to save executive schedule:", err)
+      setExecScheduleMessage({ type: "error", text: "Failed to save executive schedule. Please try again." })
+    } finally {
+      setSavingExecSchedule(false)
     }
   }
 
@@ -665,6 +712,186 @@ export default function LeadershipReportsPage() {
 
         {/* Scheduling Tab */}
         <TabsContent value="schedule" className="space-y-6">
+          <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CalendarClock className="h-5 w-5" />
+                Executive Report Generation
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Organization-wide cadence for the CEO-style report page (every N weeks on selected weekday(s)).
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-base">Enable Executive Reports</Label>
+                  <p className="text-sm text-muted-foreground">
+                    When enabled, a cron job will generate snapshots automatically on schedule.
+                  </p>
+                </div>
+                <Switch
+                  checked={execSchedule.enabled}
+                  onCheckedChange={(checked) => setExecSchedule((p) => ({ ...p, enabled: checked }))}
+                />
+              </div>
+
+              {execSchedule.enabled && (
+                <div className="space-y-5 border-t pt-6">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Every</Label>
+                      <Select
+                        value={String(execSchedule.intervalWeeks || 1)}
+                        onValueChange={(v) => setExecSchedule((p) => ({ ...p, intervalWeeks: parseInt(v, 10) || 1 }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[1, 2, 3, 4, 5, 6].map((n) => (
+                            <SelectItem key={n} value={String(n)}>
+                              {n === 1 ? "Week" : `${n} Weeks`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Example: set to 2 for every other week, 3 for every third week.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Anchor date (optional)</Label>
+                      <Input
+                        type="date"
+                        value={execSchedule.anchorDate || ""}
+                        onChange={(e) => setExecSchedule((p) => ({ ...p, anchorDate: e.target.value || undefined }))}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Sets the reference week for “every N weeks” (useful for “every third Monday”).
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Time of Day</Label>
+                      <Input
+                        type="time"
+                        value={execSchedule.timeOfDay}
+                        onChange={(e) => setExecSchedule((p) => ({ ...p, timeOfDay: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Weekday(s)</Label>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      {(
+                        [
+                          ["monday", "Monday"],
+                          ["tuesday", "Tuesday"],
+                          ["wednesday", "Wednesday"],
+                          ["thursday", "Thursday"],
+                          ["friday", "Friday"],
+                          ["saturday", "Saturday"],
+                          ["sunday", "Sunday"],
+                        ] as const
+                      ).map(([key, label]) => {
+                        const checked = execSchedule.daysOfWeek?.includes(key) ?? false
+                        return (
+                          <div key={key} className="flex items-center gap-2">
+                            <Checkbox
+                              id={`exec-dow-${key}`}
+                              checked={checked}
+                              onCheckedChange={(c) => {
+                                setExecSchedule((p) => {
+                                  const next = new Set(p.daysOfWeek || [])
+                                  if (c) next.add(key)
+                                  else next.delete(key)
+                                  return { ...p, daysOfWeek: [...next] as DayOfWeek[] }
+                                })
+                              }}
+                            />
+                            <Label htmlFor={`exec-dow-${key}`} className="text-sm">
+                              {label}
+                            </Label>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Timezone</Label>
+                    <Select
+                      value={execSchedule.timezone}
+                      onValueChange={(v) => setExecSchedule((p) => ({ ...p, timezone: v }))}
+                    >
+                      <SelectTrigger className="w-full sm:w-64">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="America/Los_Angeles">Pacific Time (PT)</SelectItem>
+                        <SelectItem value="America/Denver">Mountain Time (MT)</SelectItem>
+                        <SelectItem value="America/Chicago">Central Time (CT)</SelectItem>
+                        <SelectItem value="America/New_York">Eastern Time (ET)</SelectItem>
+                        <SelectItem value="UTC">UTC</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {execSchedule.nextScheduledAt && (
+                    <div className="rounded-md bg-muted p-3">
+                      <p className="text-sm text-muted-foreground">
+                        <strong>Next scheduled:</strong>{" "}
+                        {new Date(execSchedule.nextScheduledAt).toLocaleString("en-US", {
+                          weekday: "long",
+                          month: "long",
+                          day: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {execScheduleMessage && (
+                <div
+                  className={`rounded-md p-3 text-sm ${
+                    execScheduleMessage.type === "success"
+                      ? "bg-green-50 text-green-800 dark:bg-green-950/20 dark:text-green-300"
+                      : "bg-destructive/10 text-destructive"
+                  }`}
+                >
+                  {execScheduleMessage.text}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => window.open("/admin/executive-report", "_self")}
+                  className="gap-2"
+                >
+                  <FileText className="h-4 w-4" />
+                  View Executive Report
+                </Button>
+                <Button onClick={handleSaveExecSchedule} disabled={savingExecSchedule}>
+                  {savingExecSchedule ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Executive Schedule"
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">

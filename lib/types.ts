@@ -40,6 +40,91 @@ export const DEFAULT_REPORT_SCHEDULE: ReportSchedule = {
   timezone: "America/Los_Angeles",
 }
 
+export type DayOfWeek =
+  | "sunday"
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday"
+
+/**
+ * Org-level executive report schedule.
+ * Used to generate the "CEO TL;DR" style report page on a cadence like
+ * every 2nd/3rd Monday (intervalWeeks) and potentially multiple weekdays.
+ */
+export interface ExecutiveReportSchedule {
+  enabled: boolean
+  /** Generate every N weeks (1 = every week, 2 = every other week, 3 = every third week, etc.) */
+  intervalWeeks: number
+  /**
+   * Optional anchor date (YYYY-MM-DD). When set, the "every N weeks" cadence
+   * is evaluated relative to the anchor week, making "every third Monday" stable.
+   */
+  anchorDate?: string
+  /** One or more weekdays to allow generation on, evaluated in `timezone`. */
+  daysOfWeek: DayOfWeek[]
+  /** HH:MM in `timezone` */
+  timeOfDay: string
+  timezone: string
+  /** Last time a snapshot was generated (ISO). */
+  lastGeneratedAt?: string
+  /** Next time the report is due to generate (ISO). */
+  nextScheduledAt?: string
+}
+
+export const DEFAULT_EXECUTIVE_REPORT_SCHEDULE: ExecutiveReportSchedule = {
+  enabled: false,
+  intervalWeeks: 1,
+  anchorDate: undefined,
+  daysOfWeek: ["monday"],
+  timeOfDay: "09:00",
+  timezone: "America/New_York",
+}
+
+export interface WeeklyRollupSnapshot {
+  id: string
+  organizationId: string
+  organizationName: string
+  generatedAt: string
+  previousSnapshotId?: string
+  period: {
+    startDate: string // YYYY-MM-DD inclusive
+    endDate: string // YYYY-MM-DD inclusive
+  }
+  headline: {
+    scorecards: number
+    totalHoursSaved: number // monthly-equivalent hours
+    avgProductivityPercent: number
+    avgConfidence: number
+    annualRunRateHours: number
+    fteEquivalent: number
+    annualValue: number
+  }
+  deltas: {
+    totalHoursSaved: number
+    avgProductivityPercent: number
+    avgConfidence: number
+    scorecards: number
+  }
+  trend: Array<{
+    bucket: string // YYYY-MM or ISO week label
+    scorecards: number
+    totalHoursSaved: number
+    avgProductivityPercent: number
+    avgConfidence: number
+  }>
+  regions: Array<{
+    department: string
+    scorecards: number
+    totalHoursSaved: number
+    avgProductivityPercent: number
+    avgConfidence: number
+  }>
+  leaderboard: TopPerformer[]
+}
+
 export interface ReportHistory {
   id: string
   userId: string
@@ -105,6 +190,8 @@ export interface Organization {
     scorecardCadence?: "weekly" | "biweekly" | "monthly"
     autoReminders?: boolean
   }
+  /** Organization-wide cadence for the executive report snapshot + page. */
+  executiveReportSchedule?: ExecutiveReportSchedule
 }
 
 export interface ScorecardQuestion {

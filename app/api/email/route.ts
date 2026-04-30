@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { db } from "@/lib/firebase"
-import { doc, getDoc, setDoc, collection, getDocs } from "firebase/firestore"
+import { getAdminDb } from "@/lib/firebase-admin"
 import type { EmailSettings, EmailTemplate, EmailTemplateType } from "@/lib/types"
 
 // GET - Fetch email settings and/or templates
@@ -10,30 +9,30 @@ export async function GET(request: NextRequest) {
   const templateId = searchParams.get("templateId")
 
   try {
+    const adminDb = getAdminDb()
     if (type === "settings") {
-      const docRef = doc(db, "settings", "email_settings")
-      const docSnap = await getDoc(docRef)
-      return NextResponse.json(docSnap.exists() ? docSnap.data() : null)
+      const snap = await adminDb.collection("settings").doc("email_settings").get()
+      return NextResponse.json(snap.exists ? snap.data() : null)
     }
     
     if (type === "template" && templateId) {
-      const docRef = doc(db, "email_templates", templateId)
-      const docSnap = await getDoc(docRef)
-      return NextResponse.json(docSnap.exists() ? docSnap.data() : null)
+      const snap = await adminDb.collection("email_templates").doc(templateId).get()
+      return NextResponse.json(snap.exists ? snap.data() : null)
     }
     
     if (type === "templates") {
-      const templatesRef = collection(db, "email_templates")
-      const snapshot = await getDocs(templatesRef)
-      const templates: EmailTemplate[] = []
-      snapshot.forEach((doc) => {
-        templates.push(doc.data() as EmailTemplate)
-      })
+      const snapshot = await adminDb.collection("email_templates").get()
+      const templates: EmailTemplate[] = snapshot.docs.map((d) => d.data() as EmailTemplate)
       return NextResponse.json(templates)
     }
     
     return NextResponse.json({ error: "Invalid type parameter" }, { status: 400 })
   } catch (error) {
+    // Keep response shapes stable so admin UI can still render defaults.
+    if (type === "templates") {
+      console.error("[api/email] Failed to load templates:", error)
+      return NextResponse.json([] as EmailTemplate[], { status: 200 })
+    }
     return NextResponse.json({ error: String(error) }, { status: 500 })
   }
 }
@@ -44,12 +43,12 @@ export async function POST(request: NextRequest) {
   const action = searchParams.get("action") // "save_settings" | "save_template" | "send_test"
 
   try {
+    const adminDb = getAdminDb()
     const body = await request.json()
     
     if (action === "save_settings") {
       const settings = body as EmailSettings
-      const docRef = doc(db, "settings", "email_settings")
-      await setDoc(docRef, {
+      await adminDb.collection("settings").doc("email_settings").set({
         ...settings,
         updatedAt: new Date().toISOString(),
       })
@@ -58,8 +57,7 @@ export async function POST(request: NextRequest) {
     
     if (action === "save_template") {
       const template = body as EmailTemplate
-      const docRef = doc(db, "email_templates", template.id)
-      await setDoc(docRef, {
+      await adminDb.collection("email_templates").doc(template.id).set({
         ...template,
         updatedAt: new Date().toISOString(),
       })
@@ -74,8 +72,7 @@ export async function POST(request: NextRequest) {
       }
       
       // Get settings
-      const settingsRef = doc(db, "settings", "email_settings")
-      const settingsSnap = await getDoc(settingsRef)
+      const settingsSnap = await adminDb.collection("settings").doc("email_settings").get()
       
       if (!settingsSnap.exists()) {
         return NextResponse.json({ error: "Email settings not configured" }, { status: 400 })
@@ -88,11 +85,10 @@ export async function POST(request: NextRequest) {
       }
       
       // Get template
-      const templateRef = doc(db, "email_templates", templateType)
-      const templateSnap = await templateRef ? await getDoc(templateRef) : null
+      const templateSnap = await adminDb.collection("email_templates").doc(templateType).get()
       
       // Use default if not saved
-      const template = templateSnap?.exists() ? templateSnap.data() as EmailTemplate : getDefaultTemplate(templateType)
+      const template = templateSnap.exists ? (templateSnap.data() as EmailTemplate) : getDefaultTemplate(templateType)
       
       // Replace placeholders
       let subject = template.subject

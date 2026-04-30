@@ -177,11 +177,19 @@ export default function EmailSettingsPage() {
       // Load templates
       const templatesRes = await fetch("/api/email?type=templates")
       const templatesData = await templatesRes.json()
+      const savedTemplates: EmailTemplate[] = Array.isArray(templatesData) ? templatesData : []
+      if (!Array.isArray(templatesData)) {
+        console.error("Unexpected templates response:", templatesData)
+        setMessage({
+          type: "error",
+          text: "Could not load saved email templates from the server. Showing default templates.",
+        })
+      }
       
       // Merge with defaults
       const mergedTemplates: EmailTemplate[] = []
       for (const [id, defaultTemplate] of Object.entries(DEFAULT_TEMPLATES)) {
-        const saved = templatesData.find((t: EmailTemplate) => t.id === id)
+        const saved = savedTemplates.find((t: EmailTemplate) => t.id === id)
         if (saved) {
           mergedTemplates.push(saved)
         } else {
@@ -201,6 +209,19 @@ export default function EmailSettingsPage() {
       }
     } catch (error) {
       console.error("Failed to load email settings:", error)
+      // Always fall back to defaults so the UI never blanks out.
+      const fallbackTemplates: EmailTemplate[] = Object.values(DEFAULT_TEMPLATES).map((t) => ({
+        ...t,
+        updatedAt: new Date().toISOString(),
+        updatedBy: "system",
+      })) as EmailTemplate[]
+      setTemplates(fallbackTemplates)
+      const initialTemplate = fallbackTemplates.find((t) => t.id === "scorecard_posted")
+      if (initialTemplate) setEditingTemplate(initialTemplate)
+      setMessage({
+        type: "error",
+        text: "Failed to load email settings/templates. Showing default templates.",
+      })
     } finally {
       setLoading(false)
     }

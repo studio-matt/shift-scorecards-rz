@@ -1,7 +1,6 @@
 "use server"
 
-import { db } from "@/lib/firebase"
-import { doc, getDoc, setDoc, collection, getDocs } from "firebase/firestore"
+import { getAdminDb } from "@/lib/firebase-admin"
 import type { EmailSettings, EmailTemplate, EmailTemplateType, User } from "@/lib/types"
 
 // Default email templates
@@ -166,29 +165,26 @@ If you didn't request this, you can safely ignore this email. This link will exp
 
 // Get email settings from Firestore
 export async function getEmailSettings(): Promise<EmailSettings | null> {
-  const docRef = doc(db, "settings", "email_settings")
-  const docSnap = await getDoc(docRef)
-  if (docSnap.exists()) {
-    return docSnap.data() as EmailSettings
-  }
-  return null
+  const adminDb = getAdminDb()
+  const snap = await adminDb.collection("settings").doc("email_settings").get()
+  return snap.exists ? (snap.data() as EmailSettings) : null
 }
 
 // Save email settings to Firestore
 export async function saveEmailSettings(settings: EmailSettings): Promise<void> {
-  const docRef = doc(db, "settings", "email_settings")
-  await setDoc(docRef, settings)
+  const adminDb = getAdminDb()
+  await adminDb.collection("settings").doc("email_settings").set(settings)
 }
 
 // Get all email templates
 export async function getEmailTemplates(): Promise<EmailTemplate[]> {
-  const templatesRef = collection(db, "email_templates")
-  const snapshot = await getDocs(templatesRef)
-  
+  const adminDb = getAdminDb()
+  const snapshot = await adminDb.collection("email_templates").get()
+
   const savedTemplates = new Map<string, EmailTemplate>()
-  snapshot.forEach((doc) => {
-    savedTemplates.set(doc.id, doc.data() as EmailTemplate)
-  })
+  for (const d of snapshot.docs) {
+    savedTemplates.set(d.id, d.data() as EmailTemplate)
+  }
   
   // Merge with defaults (use saved if exists, otherwise default)
   const allTemplates: EmailTemplate[] = []
@@ -210,12 +206,9 @@ export async function getEmailTemplates(): Promise<EmailTemplate[]> {
 
 // Get a specific email template
 export async function getEmailTemplate(templateId: EmailTemplateType): Promise<EmailTemplate> {
-  const docRef = doc(db, "email_templates", templateId)
-  const docSnap = await getDoc(docRef)
-  
-  if (docSnap.exists()) {
-    return docSnap.data() as EmailTemplate
-  }
+  const adminDb = getAdminDb()
+  const snap = await adminDb.collection("email_templates").doc(templateId).get()
+  if (snap.exists) return snap.data() as EmailTemplate
   
   // Return default
   const defaultTemplate = DEFAULT_TEMPLATES[templateId]
@@ -228,8 +221,8 @@ export async function getEmailTemplate(templateId: EmailTemplateType): Promise<E
 
 // Save email template
 export async function saveEmailTemplate(template: EmailTemplate): Promise<void> {
-  const docRef = doc(db, "email_templates", template.id)
-  await setDoc(docRef, template)
+  const adminDb = getAdminDb()
+  await adminDb.collection("email_templates").doc(template.id).set(template)
 }
 
 // Replace placeholders in template (async for Server Actions compatibility)

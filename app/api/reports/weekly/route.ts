@@ -12,6 +12,8 @@ import {
 } from "@/lib/dashboard-data"
 import { getEmailSettings, getEmailTemplate, sendEmail } from "@/lib/email-service"
 import type { Organization, User } from "@/lib/types"
+import { getAdminDb } from "@/lib/firebase-admin"
+import { buildRollupSnapshot, getLatestRollupSnapshotForOrg, saveRollupSnapshot, defaultRollupPeriod } from "@/lib/rollup-snapshots"
 
 const DEFAULT_APP_URL = "https://scorecard.envoydesign.com"
 
@@ -119,6 +121,33 @@ export async function POST(request: Request) {
             orgUsers.length > 0 ? (activeParticipants / orgUsers.length) * 100 : 0
 
           const baseUrl = process.env.NEXT_PUBLIC_APP_URL || DEFAULT_APP_URL
+
+          // Create / update a stored rollup snapshot (aggregates-first) and link to it.
+          // This keeps the CEO-style page canonical and allows "since last report" comparisons.
+          let rollupLink = `${baseUrl}/admin/executive-report`
+          try {
+            const adminDb = getAdminDb()
+            const previous = await getLatestRollupSnapshotForOrg(adminDb, org.id)
+            const period = defaultRollupPeriod({ previous })
+            const orgsSnap = await adminDb.collection("organizations").get()
+            const orgNameById = new Map<string, string>()
+            for (const d of orgsSnap.docs) {
+              const data = d.data() as { name?: string }
+              orgNameById.set(d.id, data.name || d.id)
+            }
+            const snapshot = await buildRollupSnapshot({
+              adminDb,
+              organization: { id: org.id, name: org.name, hourlyRate: org.hourlyRate },
+              orgNameById,
+              periodStart: period.startDate,
+              periodEnd: period.endDate,
+              previous,
+            })
+            const id = await saveRollupSnapshot(adminDb, snapshot)
+            rollupLink = `${baseUrl}/admin/executive-report?snapshot=${id}`
+          } catch (e) {
+            console.warn("[weekly report] failed to write rollup snapshot; falling back to reports page link", e)
+          }
           const variables = {
             organizationName: org.name,
             weekOf,
@@ -129,7 +158,7 @@ export async function POST(request: Request) {
             topPerformersList,
             nonRespondersCount: String(orgNonResponders.length),
             nonRespondersList,
-            reportLink: `${baseUrl}/admin/reports`,
+            reportLink: rollupLink,
           }
 
           const sentEmails: string[] = []
