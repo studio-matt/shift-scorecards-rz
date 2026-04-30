@@ -81,6 +81,8 @@ interface TemplateQuestion {
   min?: number
   max?: number
   order: number
+  /** multichoice: letter in `label`, human copy in `value` (matches scorecard UI). */
+  options?: { label: string; value: string }[]
 }
 
 /** Human-readable question type for CSV export (no Firestore IDs). */
@@ -97,10 +99,44 @@ function questionTypeLabelForExport(type: string): string {
     text: "Short text",
     long_text: "Long text",
     select: "Single choice",
+    multichoice: "Multiple choice",
     multi_select: "Multiple choice",
     boolean: "Yes / no",
   }
   return labels[type] ?? type.replace(/_/g, " ")
+}
+
+/**
+ * Scorecard stores multichoice as the option letter (`label`). CSV should show the option copy (`value`).
+ */
+function formatAnswerForCsvExport(
+  q: TemplateQuestion,
+  raw: string | number | undefined | null,
+): string {
+  if (raw === undefined || raw === null) return ""
+  const asString = String(raw).trim()
+  if (!asString) return ""
+
+  const isMultichoice = q.type === "multichoice" || q.type === "multi_select"
+  if (!isMultichoice || !q.options?.length) return asString
+
+  const segments = asString.includes(",")
+    ? asString.split(",").map((p) => p.trim()).filter(Boolean)
+    : [asString]
+
+  return segments
+    .map((part) => {
+      const opt = q.options!.find(
+        (o) =>
+          o.label === part ||
+          o.value === part ||
+          (o.label && o.label.toLowerCase() === part.toLowerCase()),
+      )
+      if (!opt) return part
+      const copy = (opt.value || "").trim()
+      return copy || part
+    })
+    .join("; ")
 }
 
 function formatDate(iso: string) {
@@ -165,7 +201,7 @@ export default function PreviousScorecardsPage() {
   const [importing, setImporting] = useState(false)
   const [showLegend, setShowLegend] = useState(false)
   const [respondentByUserId, setRespondentByUserId] = useState<
-    Record<string, { name: string; email: string }>
+    Record<string, { name: string; email: string; regionOrCohort: string }>
   >({})
 
   const fetchScorecards = useCallback(async () => {
@@ -238,6 +274,7 @@ export default function PreviousScorecardsPage() {
         contactsById[u.id] = {
           name: fullName || "Unknown",
           email,
+          regionOrCohort: dept,
         }
         
         // Determine user's org ID - prefer organizationId field, fallback to company name match
@@ -738,6 +775,7 @@ export default function PreviousScorecardsPage() {
                         csvRows.push([
                           "Respondent Name",
                           "Respondent Email",
+                          "Region / Cohort",
                           "Organization",
                           "Week Of",
                           "Completed At",
@@ -750,17 +788,20 @@ export default function PreviousScorecardsPage() {
                           const contact = respondentByUserId[response.userId]
                           const respondentName = contact?.name ?? "Unknown"
                           const respondentEmail = contact?.email ?? ""
+                          const regionOrCohort = contact?.regionOrCohort ?? ""
                           for (const q of questions) {
                             const rawValue = response.answers[q.id]
+                            const answerCell = formatAnswerForCsvExport(q, rawValue)
                             csvRows.push([
                               respondentName,
                               respondentEmail,
+                              regionOrCohort,
                               selected.organizationName,
                               selected.weekOf,
                               response.completedAt,
                               q.text,
                               questionTypeLabelForExport(q.type),
-                              rawValue !== undefined && rawValue !== null ? String(rawValue) : "",
+                              answerCell,
                             ]
                               .map((v) => `"${String(v).replace(/"/g, '""')}"`)
                               .join(","))
@@ -785,7 +826,8 @@ export default function PreviousScorecardsPage() {
                   </span>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" align="end" className="max-w-[280px] text-xs">
-                  Downloads one row per answer. Includes names and emails only—no database or internal IDs.
+                  One row per answer. Includes name, email, region/cohort (from profile department), and
+                  multiple-choice option text—not just the letter.
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
