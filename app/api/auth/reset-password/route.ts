@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server"
-import { sendPasswordResetEmail } from "firebase/auth"
-import { auth } from "@/lib/firebase"
 import { getAdminAuth } from "@/lib/firebase-admin"
 import { sendEmail } from "@/lib/email-service"
 
@@ -40,18 +38,10 @@ export async function POST(request: Request) {
 
       if (!sendResult.success) {
         console.error("[reset-password] Failed sending reset email:", sendResult.error)
-        try {
-          await sendPasswordResetEmail(auth, normalizedEmail)
-        } catch (fallbackErr) {
-          console.error("[reset-password] Firebase fallback send failed:", fallbackErr)
-        }
       }
     } catch (err: unknown) {
-      // Fallback: attempt Firebase's built-in password reset email.
-      // (This may be misconfigured in some environments, but provides a best-effort backup.)
       const e = err as { code?: string; message?: string }
-      console.error("[reset-password] Admin-link flow failed, falling back:", e?.code, e?.message)
-      await sendPasswordResetEmail(auth, normalizedEmail)
+      console.error("[reset-password] Admin-link flow failed:", e?.code, e?.message, err)
     }
 
     return NextResponse.json({ 

@@ -186,18 +186,22 @@ export async function getEmailTemplates(): Promise<EmailTemplate[]> {
     savedTemplates.set(d.id, d.data() as EmailTemplate)
   }
   
-  // Merge with defaults (use saved if exists, otherwise default)
+  // Merge with defaults. If a default template is missing in Firestore,
+  // seed it so the "Email Templates" area is the source of truth.
   const allTemplates: EmailTemplate[] = []
   for (const [id, defaultTemplate] of Object.entries(DEFAULT_TEMPLATES)) {
     const saved = savedTemplates.get(id)
     if (saved) {
       allTemplates.push(saved)
     } else {
-      allTemplates.push({
+      const seeded: EmailTemplate = {
         ...defaultTemplate,
+        id: id as EmailTemplateType,
         updatedAt: new Date().toISOString(),
         updatedBy: "system",
-      })
+      } as EmailTemplate
+      await adminDb.collection("email_templates").doc(id).set(seeded)
+      allTemplates.push(seeded)
     }
   }
   
@@ -210,13 +214,16 @@ export async function getEmailTemplate(templateId: EmailTemplateType): Promise<E
   const snap = await adminDb.collection("email_templates").doc(templateId).get()
   if (snap.exists) return snap.data() as EmailTemplate
   
-  // Return default
+  // Seed missing templates into Firestore so the admin UI is the canonical source.
   const defaultTemplate = DEFAULT_TEMPLATES[templateId]
-  return {
+  const seeded: EmailTemplate = {
     ...defaultTemplate,
+    id: templateId,
     updatedAt: new Date().toISOString(),
     updatedBy: "system",
-  }
+  } as EmailTemplate
+  await adminDb.collection("email_templates").doc(templateId).set(seeded)
+  return seeded
 }
 
 // Save email template
@@ -251,14 +258,8 @@ export async function sendEmail({
     const settings = await getEmailSettings()
     const envResendApiKey = process.env.RESEND_API_KEY
     const envFromEmail = process.env.RESEND_FROM_EMAIL
-
-    // If Firestore settings are missing/disabled, allow an env-only fallback.
-    // This preserves deploy-time configuration for environments that don't manage settings in Firestore yet.
-    const allowEnvFallback = !!envResendApiKey && !!envFromEmail && envFromEmail.includes("@")
-    if (!settings || !settings.enabled) {
-      if (!allowEnvFallback) {
-        return { success: false, error: "Email is not configured or disabled" }
-      }
+    if (!settings?.enabled && !(envResendApiKey && envFromEmail)) {
+      return { success: false, error: "Email is not configured or disabled" }
     }
     
     const template = await getEmailTemplate(templateType)
@@ -271,53 +272,41 @@ export async function sendEmail({
     
     const recipients = Array.isArray(to) ? to : [to]
     
-    const provider = settings?.provider || "resend"
-
-    if (provider === "resend") {
-      const resendApiKey = settings?.resendApiKey || envResendApiKey
-      if (!resendApiKey) {
-        return { success: false, error: "Resend API key not configured" }
-      }
-
-      const fromName =
-        settings?.fromName?.trim() ||
-        "Shift Scorecards"
-      const fromEmail =
-        (settings?.fromEmail?.trim() && settings.fromEmail.includes("@") ? settings.fromEmail.trim() : "") ||
-        (envFromEmail?.trim() && envFromEmail.includes("@") ? envFromEmail.trim() : "")
-
-      if (!fromEmail) {
-        return { success: false, error: "From email not configured" }
-      }
-      
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${resendApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: `${fromName} <${fromEmail}>`,
-          to: recipients,
-          reply_to: settings?.replyToEmail || fromEmail,
-          subject,
-          html,
-        }),
-      })
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({} as { message?: string }))
-        return { success: false, error: errorData.message || "Failed to send via Resend" }
-      }
-      
-      return { success: true }
-    } else if (provider === "smtp") {
-      // For SMTP, we'd need nodemailer or similar
-      // This would be implemented server-side
-      return { success: false, error: "SMTP not yet implemented - use Resend" }
+    // Resend only
+    const resendApiKey = settings?.resendApiKey || envResendApiKey
+    if (!resendApiKey) {
+      return { success: false, error: "Resend API key not configured" }
     }
-    
-    return { success: false, error: "Unknown email provider" }
+
+    const fromName = settings?.fromName?.trim() || "Shift Scorecards"
+    const fromEmail =
+      (settings?.fromEmail?.trim() && settings.fromEmail.includes("@") ? settings.fromEmail.trim() : "") ||
+      (envFromEmail?.trim() && envFromEmail.includes("@") ? envFromEmail.trim() : "")
+    if (!fromEmail) {
+      return { success: false, error: "From email not configured" }
+    }
+
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${resendApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: `${fromName} <${fromEmail}>`,
+        to: recipients,
+        reply_to: settings?.replyToEmail || fromEmail,
+        subject,
+        html,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({} as { message?: string }))
+      return { success: false, error: errorData.message || "Failed to send via Resend" }
+    }
+
+    return { success: true }
   } catch (error) {
     return { success: false, error: String(error) }
   }
