@@ -120,6 +120,7 @@ export async function POST(request: Request) {
     const resend = new Resend(apiKey)
 
     let recorded = 0
+    let usersUpserted = 0
     let sent = 0
     let failed = 0
     const errors: string[] = []
@@ -130,23 +131,50 @@ export async function POST(request: Request) {
       const email = String(inv.email || "").trim().toLowerCase()
       if (!email || !email.includes("@")) continue
 
-      // Record invite in Firestore (admin SDK bypasses rules)
+      const organizationId = String(inv.organizationId || "").trim()
+      if (!organizationId) {
+        failed++
+        errors.push(`${email}: missing organizationId`)
+        continue
+      }
+
+      // Ensure a /users row exists so Manage Users shows them as pending immediately.
       try {
-        await db.collection("invites").add({
+        const existing = await db.collection("users").where("email", "==", email).limit(1).get()
+        const now = new Date().toISOString()
+        const base = {
           email,
           firstName: (inv.firstName || "").trim(),
           lastName: (inv.lastName || "").trim(),
           department: (inv.department || "").trim(),
-          organizationId: (inv.organizationId || "").trim(),
+          organizationId,
           role: (inv.role || "user").trim(),
           status: "pending",
-          createdAt: new Date().toISOString(),
+          updatedAt: now,
+        }
+        if (existing.empty) {
+          await db.collection("users").add({ ...base, createdAt: now })
+        } else {
+          await existing.docs[0].ref.set(base, { merge: true })
+        }
+        usersUpserted++
+
+        // Also record an invite row for legacy flows (optional but useful for audits).
+        await db.collection("invites").add({
+          email,
+          firstName: base.firstName,
+          lastName: base.lastName,
+          department: base.department,
+          organizationId: base.organizationId,
+          role: base.role,
+          status: "pending",
+          createdAt: now,
         })
         recorded++
         recipients.push(email)
       } catch (e) {
         failed++
-        errors.push(`${email}: failed to record invite (${String(e)})`)
+        errors.push(`${email}: failed to upsert user/invite (${String(e)})`)
       }
     }
 
@@ -190,6 +218,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       recorded,
+      usersUpserted,
       sent,
       failed,
       total: invites.length,

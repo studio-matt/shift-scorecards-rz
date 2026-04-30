@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, use } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Card,
   CardContent,
@@ -19,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ArrowLeft, Clock, TrendingUp, Award, CalendarDays, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 import {
   getDocument,
   getDocuments,
@@ -26,11 +29,18 @@ import {
   getUserResponsesUnordered,
   updateDocument,
   getUsersByEmailAll,
+  getOrganizations,
   COLLECTIONS,
 } from "@/lib/firestore"
 import { useAuth } from "@/lib/auth-context"
 import { parseTimeValue } from "@/lib/dashboard-data"
-import { authHeaders } from "@/lib/api-client"
+import { authHeaders, syncUserProfileMirrorAfterUserDocUpdate } from "@/lib/api-client"
+
+interface Organization {
+  id: string
+  name: string
+  departments?: string[]
+}
 
 interface UserData {
   id: string
@@ -78,7 +88,7 @@ interface TemplateQuestion {
 
 export default function UserDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: userId } = use(params)
-  const { isSuperAdmin, isCompanyAdmin } = useAuth()
+  const { isSuperAdmin, isCompanyAdmin, isActuallySuperAdmin } = useAuth()
 
   function parseDateLike(value: unknown): Date | null {
     if (!value) return null
@@ -103,6 +113,18 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
   }
   
   const [userData, setUserData] = useState<UserData | null>(null)
+  const [orgs, setOrgs] = useState<Organization[]>([])
+  const [editingProfile, setEditingProfile] = useState(false)
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [profileDraft, setProfileDraft] = useState<{
+    firstName: string
+    lastName: string
+    email: string
+    department: string
+    role: string
+    organizationId: string
+    status: string
+  } | null>(null)
   const [scorecards, setScorecards] = useState<ScorecardResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedScorecard, setSelectedScorecard] = useState<ScorecardResponse | null>(null)
@@ -124,13 +146,23 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
       setLoading(true)
       
       // Fetch user data
-      const userDoc = await getDocument(COLLECTIONS.USERS, userId)
+      const [userDoc, orgDocs] = await Promise.all([
+        getDocument(COLLECTIONS.USERS, userId),
+        getOrganizations(),
+      ])
       if (!userDoc) {
         setLoading(false)
         return
       }
       
       const uData = userDoc as Record<string, unknown>
+
+      const orgList = orgDocs.map((o) => ({
+        id: o.id,
+        name: (o as Record<string, unknown>).name as string,
+        departments: ((o as Record<string, unknown>).departments as string[]) ?? [],
+      })) as Organization[]
+      setOrgs(orgList)
       
       // Fetch org name
       let orgName = ""
@@ -153,6 +185,20 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
         status: uData.authId ? "active" : "pending",
         createdAt: (uData.createdAt as string) || "",
         authId: (uData.authId as string) || undefined,
+      })
+
+      // If not currently editing, keep draft in sync with latest DB values.
+      setProfileDraft((prev) => {
+        if (editingProfile && prev) return prev
+        return {
+          firstName: (uData.firstName as string) || "",
+          lastName: (uData.lastName as string) || "",
+          email: (uData.email as string) || "",
+          department: (uData.department as string) || "",
+          role: (uData.role as string) || "user",
+          organizationId: (uData.organizationId as string) || "",
+          status: (uData.status as string) || (uData.authId ? "active" : "pending"),
+        }
       })
 
       // Identity diagnostics: find duplicate user docs by email and see which one holds responses.
@@ -310,7 +356,7 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
     } finally {
       setLoading(false)
     }
-  }, [userId])
+  }, [userId, editingProfile])
   
   useEffect(() => {
     fetchData()
@@ -533,6 +579,184 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
           </CardContent>
         </Card>
       </div>
+
+      {/* Profile (super admin) */}
+      {isActuallySuperAdmin && profileDraft && (
+        <Card className="mb-6">
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle>User profile</CardTitle>
+              <CardDescription>View and edit core user credentials and org assignment.</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              {editingProfile ? (
+                <>
+                  <Button
+                    variant="outline"
+                    disabled={savingProfile}
+                    onClick={() => {
+                      setEditingProfile(false)
+                      setProfileDraft({
+                        firstName: userData.firstName,
+                        lastName: userData.lastName,
+                        email: userData.email,
+                        department: userData.department,
+                        role: userData.role,
+                        organizationId: userData.organizationId,
+                        status: userData.status,
+                      })
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    disabled={savingProfile}
+                    onClick={async () => {
+                      try {
+                        setSavingProfile(true)
+                        const next = profileDraft
+                        await updateDocument(COLLECTIONS.USERS, userData.id, {
+                          firstName: next.firstName,
+                          lastName: next.lastName,
+                          email: next.email.toLowerCase(),
+                          department: next.department,
+                          role: next.role,
+                          organizationId: next.organizationId,
+                          status: next.status,
+                          updatedAt: new Date().toISOString(),
+                        })
+                        await syncUserProfileMirrorAfterUserDocUpdate(userData.id)
+                        toast.success("User profile updated")
+                        setEditingProfile(false)
+                        await fetchData()
+                      } catch (e) {
+                        console.error("[admin user detail] failed to save profile", e)
+                        toast.error("Failed to update user profile")
+                      } finally {
+                        setSavingProfile(false)
+                      }
+                    }}
+                  >
+                    Save changes
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="outline"
+                  onClick={() => setEditingProfile(true)}
+                >
+                  Edit profile
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label>First name</Label>
+                <Input
+                  value={profileDraft.firstName}
+                  disabled={!editingProfile}
+                  onChange={(e) => setProfileDraft({ ...profileDraft, firstName: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Last name</Label>
+                <Input
+                  value={profileDraft.lastName}
+                  disabled={!editingProfile}
+                  onChange={(e) => setProfileDraft({ ...profileDraft, lastName: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <Label>Email</Label>
+                <Input
+                  value={profileDraft.email}
+                  disabled={!editingProfile}
+                  onChange={(e) => setProfileDraft({ ...profileDraft, email: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Company</Label>
+                <Select
+                  value={profileDraft.organizationId}
+                  onValueChange={(val) => setProfileDraft({ ...profileDraft, organizationId: val })}
+                  disabled={!editingProfile}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select company" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {orgs.map((org) => (
+                      <SelectItem key={org.id} value={org.id}>
+                        {org.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Department</Label>
+                <Input
+                  value={profileDraft.department}
+                  disabled={!editingProfile}
+                  onChange={(e) => setProfileDraft({ ...profileDraft, department: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Role</Label>
+                <Select
+                  value={profileDraft.role}
+                  onValueChange={(val) => setProfileDraft({ ...profileDraft, role: val })}
+                  disabled={!editingProfile}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="user">User</SelectItem>
+                    <SelectItem value="company_admin">Company Admin</SelectItem>
+                    <SelectItem value="admin">Super Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Status</Label>
+                <Select
+                  value={profileDraft.status}
+                  onValueChange={(val) => setProfileDraft({ ...profileDraft, status: val })}
+                  disabled={!editingProfile}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">pending</SelectItem>
+                    <SelectItem value="active">active</SelectItem>
+                    <SelectItem value="staging">staging</SelectItem>
+                    <SelectItem value="disabled">disabled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+              <div>
+                <span className="font-medium text-foreground">User doc id:</span>{" "}
+                <span className="font-mono">{userData.id}</span>
+              </div>
+              <div>
+                <span className="font-medium text-foreground">Auth UID:</span>{" "}
+                <span className="font-mono">{userData.authId || "-"}</span>
+              </div>
+              <div className="sm:col-span-2">
+                <span className="font-medium text-foreground">Created:</span>{" "}
+                {userData.createdAt ? new Date(userData.createdAt).toLocaleString() : "-"}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Identity diagnostics */}
       {identityCandidates.length > 1 && (

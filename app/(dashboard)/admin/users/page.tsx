@@ -71,11 +71,13 @@ interface InvitedUser {
 }
 
 export default function ManageUsersPage() {
-  const { user: authUser, isCompanyAdmin, isSuperAdmin } = useAuth()
+  const { user: authUser, isCompanyAdmin, isSuperAdmin, isActuallySuperAdmin } = useAuth()
   
   // ── Single invite fields ──
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState("user")
+  const [inviteOrgId, setInviteOrgId] = useState("")
+  const [inviteDepartment, setInviteDepartment] = useState("")
 
   // ── CSV bulk fields ──
   const [csvFile, setCsvFile] = useState<File | null>(null)
@@ -162,6 +164,9 @@ export default function ManageUsersPage() {
   const selectedOrg = orgs.find((o) => o.id === csvCompany)
   const orgDepartments = selectedOrg?.departments ?? []
 
+  const selectedInviteOrg = orgs.find((o) => o.id === inviteOrgId)
+  const inviteDepartments = selectedInviteOrg?.departments ?? []
+
   function handleDownloadTemplate() {
     const csvContent = "email,firstName,lastName,department\njane@company.com,Jane,Doe,Engineering\njohn@company.com,John,Smith,Sales\nmaria@company.com,Maria,Garcia,Product"
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
@@ -188,10 +193,12 @@ export default function ManageUsersPage() {
     reader.readAsText(file)
   }
 
-  const stagingQueue = isSuperAdmin ? users.filter((u) => u.fsStatus === "staging") : []
+  const unassignedQueue = isActuallySuperAdmin
+    ? users.filter((u) => u.fsStatus === "staging" || !u.orgId)
+    : []
   const teamMembers = users.filter((u) => u.fsStatus !== "staging")
 
-  async function handleAssignStaging(userId: string) {
+  async function handleAssignUnassigned(userId: string) {
     const draft = stagingEdits[userId]
     if (!draft?.orgId) {
       toast.error("Select a company first")
@@ -204,7 +211,7 @@ export default function ManageUsersPage() {
         organizationId: draft.orgId,
         department: draft.department,
         role: draft.role,
-        status: "active",
+        status: u.authId ? "active" : "pending",
       })
       await syncUserProfileMirrorAfterUserDocUpdate(userId)
       toast.success("User assigned to organization")
@@ -294,10 +301,15 @@ export default function ManageUsersPage() {
         const invites = [
           {
             email: inviteEmail.toLowerCase(),
-            department: "",
+            department: inviteDepartment || "",
+            organizationId: inviteOrgId || "",
             role: inviteRole,
           },
         ]
+        if (!inviteOrgId) {
+          toast.error("Select a company first")
+          return
+        }
         const res = await fetch("/api/admin/invite-users", {
           method: "POST",
           headers: {
@@ -325,6 +337,8 @@ export default function ManageUsersPage() {
     setDialogOpen(false)
     setInviteEmail("")
     setInviteRole("user")
+    setInviteOrgId("")
+    setInviteDepartment("")
     setCsvFile(null)
     setCsvPreviewCount(0)
     setCsvCompany("")
@@ -359,7 +373,7 @@ export default function ManageUsersPage() {
           </p>
         </div>
         {/* Only super admins can invite users */}
-        {isSuperAdmin && (
+        {isActuallySuperAdmin && (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button>
@@ -401,7 +415,7 @@ export default function ManageUsersPage() {
                   <SelectContent>
                     <SelectItem value="user">User</SelectItem>
                     <SelectItem value="company_admin">Company Admin (CEO View)</SelectItem>
-                    {isSuperAdmin && (
+                    {isActuallySuperAdmin && (
                       <SelectItem value="admin">Super Admin</SelectItem>
                     )}
                   </SelectContent>
@@ -411,6 +425,58 @@ export default function ManageUsersPage() {
                     Bulk CSV imports are automatically assigned Role = User
                   </p>
                 )}
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-2">
+                  <Label>Company</Label>
+                  <Select
+                    value={inviteOrgId}
+                    onValueChange={(val) => {
+                      setInviteOrgId(val)
+                      setInviteDepartment("")
+                    }}
+                    disabled={!!csvFile}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select company" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {orgs.map((org) => (
+                        <SelectItem key={org.id} value={org.id}>
+                          {org.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label>Department</Label>
+                  <Select
+                    value={inviteDepartment}
+                    onValueChange={setInviteDepartment}
+                    disabled={!!csvFile || !inviteOrgId || inviteDepartments.length === 0}
+                  >
+                    <SelectTrigger>
+                      <SelectValue
+                        placeholder={
+                          !inviteOrgId
+                            ? "Select a company first"
+                            : inviteDepartments.length === 0
+                              ? "No departments configured"
+                              : "Select department (optional)"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {inviteDepartments.map((dept) => (
+                        <SelectItem key={dept} value={dept}>
+                          {dept}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               {/* ── CSV Bulk Upload Section ── */}
@@ -527,16 +593,16 @@ export default function ManageUsersPage() {
       </div>
 
       {/* Staging: self-signup users waiting for org assignment (super admin only) */}
-      {isSuperAdmin && stagingQueue.length > 0 && (
+      {isActuallySuperAdmin && unassignedQueue.length > 0 && (
         <Card className="mb-6 border-amber-500/30">
           <CardHeader>
-            <CardTitle className="text-base font-semibold">Staging customers</CardTitle>
+            <CardTitle className="text-base font-semibold">Unassigned users</CardTitle>
             <CardDescription>
-              Assign a company, department, and role. This removes them from staging and grants app access.
+              Assign a company, department, and role. This removes them from unassigned and grants app access.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            {stagingQueue.map((su) => {
+            {unassignedQueue.map((su) => {
               const draft =
                 stagingEdits[su.id] ?? {
                   orgId: "",
@@ -616,7 +682,7 @@ export default function ManageUsersPage() {
                   <div className="flex gap-2">
                     <Button
                       size="sm"
-                      onClick={() => void handleAssignStaging(su.id)}
+                      onClick={() => void handleAssignUnassigned(su.id)}
                       disabled={!draft.orgId}
                     >
                       Save assignment
