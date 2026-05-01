@@ -244,8 +244,10 @@ export async function getUserResponsesMerged(
   ])
   const byId = new Map<string, unknown>()
   for (const r of [...byUserId, ...byAuthId]) {
-    const id = (r as unknown as { id?: string }).id
-    if (id) byId.set(id, r)
+    const response = r as unknown as { id?: string; userId?: string } & Record<string, unknown>
+    const id = response.id
+    if (!id) continue
+    byId.set(id, authId && response.userId === authId ? { ...response, userId: user.id } : response)
   }
   return Array.from(byId.values()) as typeof byUserId
 }
@@ -277,7 +279,9 @@ export async function getResponsesForOrgCompletedBetween(
   completedAtMaxExclusive: string,
   maxDocs = 25000,
 ) {
-  const cap = Math.min(Math.max(maxDocs, 1), 50000)
+  // Firestore client structured query limit has a hard maximum of 10,000.
+  // Keeping this helper safe prevents runtime export/report failures.
+  const cap = Math.min(Math.max(maxDocs, 1), 10000)
   return getDocuments(
     COLLECTIONS.RESPONSES,
     where("organizationId", "==", organizationId),
