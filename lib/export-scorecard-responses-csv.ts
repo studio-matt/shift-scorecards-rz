@@ -28,6 +28,7 @@ export interface RespondentContact {
   name: string
   email: string
   regionOrCohort: string
+  excludeFromReporting?: boolean
 }
 
 export function questionTypeLabelForExport(type: string): string {

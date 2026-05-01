@@ -126,7 +126,7 @@ export default function PreviousScorecardsPage() {
   const isSuperAdmin = user?.role === "admin"
   // Check if user is any admin type (can filter by department)
   const isAdmin = user?.role === "admin" || user?.role === "company_admin"
-  const [orgs, setOrgs] = useState<Array<{ id: string; name: string }>>([])
+  const [orgs, setOrgs] = useState<Array<{ id: string; name: string; hourlyRate?: number }>>([])
   const [departments, setDepartments] = useState<string[]>([])
   const [users, setUsers] = useState<Array<{ id: string; name: string; orgId: string; department: string }>>([])
   const userOrgId = user?.organizationId
@@ -173,13 +173,19 @@ export default function PreviousScorecardsPage() {
       // Build org name map and populate orgs list
       const orgNameMap = new Map<string, string>()
       const orgNameToIdMap = new Map<string, string>() // For matching by company name
-      const orgsList: Array<{ id: string; name: string }> = []
+      const orgsList: Array<{ id: string; name: string; hourlyRate?: number }> = []
       for (const org of orgDocs) {
         const data = org as Record<string, unknown>
         const name = (data.name as string) || "Unknown Organization"
         orgNameMap.set(org.id, name)
         orgNameToIdMap.set(name.toLowerCase(), org.id)
-        orgsList.push({ id: org.id, name })
+        const rawHourlyRate = data.hourlyRate
+        const parsedHourlyRate =
+          typeof rawHourlyRate === "number"
+            ? rawHourlyRate
+            : Number.parseFloat(String(rawHourlyRate ?? ""))
+        const hourlyRate = Number.isFinite(parsedHourlyRate) ? parsedHourlyRate : undefined
+        orgsList.push({ id: org.id, name, hourlyRate })
       }
       setOrgs(orgsList.sort((a, b) => a.name.localeCompare(b.name)))
 
@@ -229,6 +235,7 @@ export default function PreviousScorecardsPage() {
           name: fullName || "Unknown",
           email,
           regionOrCohort: dept,
+          excludeFromReporting: data.excludeFromReporting === true,
         }
         
         // Determine user's org ID - prefer organizationId field, fallback to company name match
