@@ -111,6 +111,20 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
     }
     return null
   }
+
+  function dateLikeToIsoString(value: unknown): string {
+    return parseDateLike(value)?.toISOString() ?? ""
+  }
+
+  function formatDateTime(value: unknown): string {
+    const date = parseDateLike(value)
+    return date ? date.toLocaleString() : "-"
+  }
+
+  function formatDateOnly(value: unknown): string {
+    const date = parseDateLike(value)
+    return date ? date.toLocaleDateString() : "-"
+  }
   
   const [userData, setUserData] = useState<UserData | null>(null)
   const [orgs, setOrgs] = useState<Organization[]>([])
@@ -186,7 +200,7 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
         organizationId: (uData.organizationId as string) || "",
         organizationName: orgName,
         status: uData.authId ? "active" : "pending",
-        createdAt: (uData.createdAt as string) || "",
+        createdAt: dateLikeToIsoString(uData.createdAt),
         authId: (uData.authId as string) || undefined,
       })
 
@@ -228,7 +242,7 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
               authId: (cd.authId as string) || undefined,
               organizationId: (cd.organizationId as string) || undefined,
               department: (cd.department as string) || undefined,
-              createdAt: (cd.createdAt as string) || undefined,
+              createdAt: dateLikeToIsoString(cd.createdAt) || undefined,
               status: (cd.authId as string) ? "active" : "pending",
               completedCount,
               draftCount,
@@ -311,9 +325,9 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
             templateId,
             templateName: (data.templateName as string) || "Unknown Template",
             weekOf: (data.weekOf as string) || "",
-            completedAt: (data.completedAt as string) || "",
-            updatedAt: (data.updatedAt as string) || "",
-            createdAt: (data.createdAt as string) || "",
+            completedAt: dateLikeToIsoString(data.completedAt),
+            updatedAt: dateLikeToIsoString(data.updatedAt),
+            createdAt: dateLikeToIsoString(data.createdAt),
             status: (data.status as string) || "completed",
             answers,
             totalHours: Math.round(hours * 10) / 10,
@@ -799,7 +813,7 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
               </div>
               <div className="sm:col-span-2">
                 <span className="font-medium text-foreground">Created:</span>{" "}
-                {userData.createdAt ? new Date(userData.createdAt).toLocaleString() : "-"}
+                {formatDateTime(userData.createdAt)}
               </div>
             </div>
 
@@ -899,7 +913,7 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
                     <div className="text-xs text-muted-foreground">
                       {c.organizationId ? `org: ${c.organizationId}` : "org: -"}{" "}
                       {c.department ? `· dept: ${c.department}` : ""}{" "}
-                      {c.createdAt ? `· created: ${new Date(c.createdAt).toLocaleDateString()}` : ""}
+                      {c.createdAt ? `· created: ${formatDateOnly(c.createdAt)}` : ""}
                     </div>
                   </div>
                 )
@@ -967,7 +981,7 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
                       <p className="text-xs text-muted-foreground">
                         {sc.status === "draft"
                           ? `Last saved ${(parseDateLike(sc.updatedAt) ?? parseDateLike(sc.createdAt) ?? parseDateLike(sc.completedAt))?.toLocaleString() ?? "-"}`
-                          : `Completed ${new Date(sc.completedAt).toLocaleDateString()}`}
+                          : `Completed ${formatDateOnly(sc.completedAt)}`}
                       </p>
                     </div>
                   </div>

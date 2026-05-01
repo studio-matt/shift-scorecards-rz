@@ -294,7 +294,8 @@ export async function getResponsesForOrgCompletedBetween(
 
 /** Newest completions first — requires composite index (organizationId + completedAt desc). */
 export async function getResponsesForOrgRecent(organizationId: string, maxDocs = 12000) {
-  const cap = Math.min(Math.max(maxDocs, 1), 25000)
+  // Firestore client structured query limit has a hard maximum of 10,000.
+  const cap = Math.min(Math.max(maxDocs, 1), 10000)
   return getDocuments(
     COLLECTIONS.RESPONSES,
     where("organizationId", "==", organizationId),

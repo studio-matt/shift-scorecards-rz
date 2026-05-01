@@ -3,6 +3,8 @@
  * Used by Previous Scorecards UI and custom export modal.
  */
 
+import { dateLikeToIsoString } from "./date-utils"
+
 export interface ExportTemplateQuestion {
   id: string
   text: string
@@ -84,8 +86,8 @@ export function formatAnswerForCsvExport(
 
 export function isCompletedResponseDoc(data: Record<string, unknown>): boolean {
   const status = (data.status as string) ?? ""
-  const completedAt = (data.completedAt as string) ?? ""
-  return status === "completed" || (typeof completedAt === "string" && completedAt.trim().length > 0)
+  const completedAt = dateLikeToIsoString(data.completedAt)
+  return status === "completed" || completedAt.length > 0
 }
 
 export function docToExportResponseRow(
@@ -95,7 +97,7 @@ export function docToExportResponseRow(
   return {
     id: doc.id,
     templateId: (doc.templateId as string) ?? "",
-    completedAt: (doc.completedAt as string) ?? "",
+    completedAt: dateLikeToIsoString(doc.completedAt),
     weekOf: (doc.weekOf as string) ?? "",
     organizationId: (doc.organizationId as string) ?? "",
     userId: (doc.userId as string) ?? "",

@@ -114,6 +114,7 @@ import {
 } from "@/lib/aggregates"
 import { loadResponsesForDashboardFallback } from "@/lib/reporting-responses"
 import { Badge } from "@/components/ui/badge"
+import { dateLikeToIsoString } from "@/lib/date-utils"
 
 import { LoadingSection } from "@/components/ui/section-loader"
 
@@ -122,10 +123,17 @@ function normalizeResponsesForUser(
   userId: string,
   authId?: string,
 ): RawResponse[] {
-  if (!authId || authId === userId) return responses
-  return responses.map((response) =>
-    response.userId === authId ? { ...response, userId } : response,
-  )
+  return responses.map((response) => {
+    const raw = response as unknown as Record<string, unknown>
+    const normalized: RawResponse = {
+      ...response,
+      completedAt: dateLikeToIsoString(raw.completedAt),
+      weekDate: dateLikeToIsoString(raw.weekDate) || String(raw.weekDate ?? ""),
+    }
+    return authId && authId !== userId && normalized.userId === authId
+      ? { ...normalized, userId }
+      : normalized
+  })
 }
 
 export default function DashboardPage() {

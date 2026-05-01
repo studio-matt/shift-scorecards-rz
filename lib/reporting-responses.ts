@@ -10,6 +10,7 @@ import {
   getResponsesForOrgLimited,
   getUserResponsesUnordered,
 } from "@/lib/firestore"
+import { dateLikeToIsoString } from "@/lib/date-utils"
 
 export const REPORT_LOOKBACK_DAYS_DEFAULT = 120
 export const DASH_FALLBACK_MAX_PER_ORG = 8000
@@ -41,8 +42,16 @@ async function fetchOrgResponsesBoundedOrFallback(
       `[reporting] completedAt range query failed for org ${organizationId}; using capped org read.`,
       e,
     )
-    return getResponsesForOrgLimited(organizationId, Math.min(cap, 25000))
+    return getResponsesForOrgLimited(organizationId, Math.min(cap, 10000))
   }
+}
+
+function toRawResponse(doc: { id: string } & Record<string, unknown>): RawResponse {
+  return {
+    ...doc,
+    completedAt: dateLikeToIsoString(doc.completedAt),
+    weekDate: dateLikeToIsoString(doc.weekDate) || String(doc.weekDate ?? ""),
+  } as unknown as RawResponse
 }
 
 /** Bounded window for weekly email KPIs — one organization. */
@@ -53,7 +62,7 @@ export async function loadResponsesForWeeklyOrg(
   const min = completedLowerBoundISO(lookbackDays)
   const maxEx = completedUpperBoundExclusiveISO()
   const docs = await fetchOrgResponsesBoundedOrFallback(organizationId, min, maxEx, 25000)
-  return docs.map((d) => ({ ...d } as unknown as RawResponse))
+  return docs.map(toRawResponse)
 }
 
 /**
@@ -112,7 +121,7 @@ export async function loadResponsesForDashboardFallback(
       maxEx,
       maxDocsPerOrg * 2,
     )
-    for (const d of docs) byId.set(d.id, { ...d } as unknown as RawResponse)
+    for (const d of docs) byId.set(d.id, toRawResponse(d))
   } else {
     const loads = await Promise.all(
       orgDocs.map((o) =>
@@ -120,13 +129,13 @@ export async function loadResponsesForDashboardFallback(
       ),
     )
     for (const docs of loads) {
-      for (const d of docs) byId.set(d.id, { ...d } as unknown as RawResponse)
+      for (const d of docs) byId.set(d.id, toRawResponse(d))
     }
   }
 
   if (includeUserId) {
     const mine = await getUserResponsesUnordered(includeUserId, 12000)
-    for (const d of mine) byId.set(d.id, { ...d } as unknown as RawResponse)
+    for (const d of mine) byId.set(d.id, toRawResponse(d as { id: string } & Record<string, unknown>))
   }
 
   let responses = [...byId.values()]

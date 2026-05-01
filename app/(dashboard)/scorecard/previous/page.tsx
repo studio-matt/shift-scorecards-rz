@@ -55,6 +55,7 @@ import {
   type RespondentContact,
 } from "@/lib/export-scorecard-responses-csv"
 import { ExportScorecardsDialog } from "@/components/admin/export-scorecards-dialog"
+import { dateLikeToIsoString } from "@/lib/date-utils"
 
 interface RawResponse {
   id: string
@@ -310,18 +311,20 @@ export default function PreviousScorecardsPage() {
       const completedOnly: RawResponse[] = responseDocs
         .map((doc) => {
           const d = doc as { id: string } & Record<string, unknown>
-          return d
+          return {
+            ...d,
+            completedAt: dateLikeToIsoString(d.completedAt),
+          }
         })
         .filter((d) => {
           const status = (d.status as string) ?? ""
-          const completedAt = (d.completedAt as string) ?? ""
-          return status === "completed" || (completedAt && completedAt.trim().length > 0)
+          return status === "completed" || d.completedAt.length > 0
         })
         .map((d) => ({
           id: d.id,
           templateId: (d.templateId as string) ?? "",
           templateName: (d.templateName as string) ?? "",
-          completedAt: (d.completedAt as string) ?? "",
+          completedAt: d.completedAt,
           weekOf: (d.weekOf as string) ?? "",
           organizationId: (d.organizationId as string) ?? "",
           userId: (d.userId as string) ?? "",
@@ -449,7 +452,7 @@ export default function PreviousScorecardsPage() {
             id: d.id,
             templateId: (data.templateId as string) ?? "",
             templateName: (data.templateName as string) ?? "",
-            completedAt: (data.completedAt as string) ?? "",
+            completedAt: dateLikeToIsoString(data.completedAt),
             weekOf: (data.weekOf as string) ?? "",
             organizationId: (data.organizationId as string) ?? "",
             userId: (data.userId as string) ?? "",

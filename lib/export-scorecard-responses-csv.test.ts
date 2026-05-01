@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   completedAtUtcRangeInclusiveDates,
+  docToExportResponseRow,
   filterExportResponsesByDepartment,
   type ExportResponseRow,
   type RespondentContact,
@@ -19,6 +20,23 @@ describe("completedAtUtcRangeInclusiveDates", () => {
     expect(completedAtUtcRangeInclusiveDates("1999-12-31", "2026-04-30")).toBeNull()
     expect(completedAtUtcRangeInclusiveDates("2026-02-31", "2026-04-30")).toBeNull()
     expect(completedAtUtcRangeInclusiveDates("2026-05-01", "2026-04-30")).toBeNull()
+  })
+})
+
+describe("docToExportResponseRow", () => {
+  it("normalizes Firestore timestamp-like completedAt values", () => {
+    const row = docToExportResponseRow({
+      id: "response-1",
+      templateId: "template",
+      completedAt: { seconds: 1775001600, nanoseconds: 0 },
+      weekOf: "2026-04-01",
+      organizationId: "org",
+      userId: "user",
+      status: "completed",
+      answers: {},
+    })
+
+    expect(row?.completedAt).toBe("2026-04-01T00:00:00.000Z")
   })
 })
 
