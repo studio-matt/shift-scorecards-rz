@@ -108,9 +108,30 @@ export function completedAtUtcRangeInclusiveDates(
   endDateYmd: string,
 ): { minInclusive: string; maxExclusive: string } | null {
   if (!startDateYmd?.trim() || !endDateYmd?.trim()) return null
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDateYmd) || !/^\d{4}-\d{2}-\d{2}$/.test(endDateYmd)) {
+    return null
+  }
+  if (!startDateYmd.startsWith("20") || !endDateYmd.startsWith("20")) return null
   if (startDateYmd > endDateYmd) return null
+  const [startYear, startMonth, startDay] = startDateYmd.split("-").map(Number)
+  const [endYear, endMonth, endDay] = endDateYmd.split("-").map(Number)
+  const start = new Date(Date.UTC(startYear, startMonth - 1, startDay))
+  if (
+    start.getUTCFullYear() !== startYear ||
+    start.getUTCMonth() !== startMonth - 1 ||
+    start.getUTCDate() !== startDay
+  ) {
+    return null
+  }
   const minInclusive = `${startDateYmd}T00:00:00.000Z`
-  const end = new Date(`${endDateYmd}T00:00:00.000Z`)
+  const end = new Date(Date.UTC(endYear, endMonth - 1, endDay))
+  if (
+    end.getUTCFullYear() !== endYear ||
+    end.getUTCMonth() !== endMonth - 1 ||
+    end.getUTCDate() !== endDay
+  ) {
+    return null
+  }
   end.setUTCDate(end.getUTCDate() + 1)
   return { minInclusive, maxExclusive: end.toISOString() }
 }

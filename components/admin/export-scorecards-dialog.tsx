@@ -20,6 +20,12 @@ import {
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Calendar } from "@/components/ui/calendar"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import { FileDown, Loader2, Calendar as CalendarIcon } from "lucide-react"
 import {
   COLLECTIONS,
@@ -64,6 +70,102 @@ export interface ExportScorecardsDialogProps {
 }
 
 const RANGE_QUERY_MAX = 25000
+const MIN_EXPORT_DATE = new Date(2000, 0, 1)
+const MAX_EXPORT_DATE = new Date(2099, 11, 31)
+
+function parseYmdToLocalNoon(ymd: string): Date | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return undefined
+  const [year, month, day] = ymd.split("-").map(Number)
+  if (!year || !month || !day) return undefined
+  const date = new Date(year, month - 1, day, 12, 0, 0, 0)
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return undefined
+  }
+  return date
+}
+
+function formatLocalYmd(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+function formatDateDigits(digits: string): string {
+  if (digits.length <= 4) return digits
+  if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`
+}
+
+function normalizeExportDateInput(raw: string, previous: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 8)
+  if (!digits) return ""
+  if (digits[0] !== "2") return previous
+  if (digits.length >= 2 && digits[1] !== "0") return previous
+  return formatDateDigits(digits)
+}
+
+function ExportDatePickerField({
+  label,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  disabled: boolean
+}) {
+  const selectedDate = parseYmdToLocalNoon(value)
+
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <div className="relative">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute left-1 top-1/2 z-10 h-8 w-8 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              disabled={disabled}
+              aria-label={`Open ${label.toLowerCase()} calendar`}
+            >
+              <CalendarIcon className="h-4 w-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              defaultMonth={selectedDate ?? new Date()}
+              disabled={{ before: MIN_EXPORT_DATE, after: MAX_EXPORT_DATE }}
+              onSelect={(date) => {
+                if (date) onChange(formatLocalYmd(date))
+              }}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
+        <Input
+          type="text"
+          inputMode="numeric"
+          placeholder="YYYY-MM-DD"
+          maxLength={10}
+          className="pl-10"
+          value={value}
+          onChange={(e) => onChange(normalizeExportDateInput(e.target.value, value))}
+          disabled={disabled}
+        />
+      </div>
+    </div>
+  )
+}
 
 export function ExportScorecardsDialog({
   open,
@@ -307,37 +409,23 @@ export function ExportScorecardsDialog({
               <div>
                 <Label>Completion dates (optional)</Label>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Each field opens your browser&apos;s date picker. Bounds are applied to{" "}
+                  Use the calendar icon or type YYYY-MM-DD. Bounds are applied to{" "}
                   <code className="text-xs">completedAt</code> in UTC (inclusive start, inclusive end).
                 </p>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Start date</Label>
-                  <div className="relative">
-                    <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      type="date"
-                      className="pl-9"
-                      value={dateStart}
-                      onChange={(e) => setDateStart(e.target.value)}
-                      disabled={!exportOrgId}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">End date</Label>
-                  <div className="relative">
-                    <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      type="date"
-                      className="pl-9"
-                      value={dateEnd}
-                      onChange={(e) => setDateEnd(e.target.value)}
-                      disabled={!exportOrgId}
-                    />
-                  </div>
-                </div>
+                <ExportDatePickerField
+                  label="Start date"
+                  value={dateStart}
+                  onChange={setDateStart}
+                  disabled={!exportOrgId}
+                />
+                <ExportDatePickerField
+                  label="End date"
+                  value={dateEnd}
+                  onChange={setDateEnd}
+                  disabled={!exportOrgId}
+                />
               </div>
             </div>
 
