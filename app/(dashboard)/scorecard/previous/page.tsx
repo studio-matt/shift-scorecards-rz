@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import {
   Card,
   CardContent,
@@ -46,6 +46,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import {
+  buildScorecardResponsesCsv,
+  downloadScorecardResponsesCsvFile,
+  type ExportTemplateQuestion as TemplateQuestion,
+  type RespondentContact,
+} from "@/lib/export-scorecard-responses-csv"
+import { ExportScorecardsDialog } from "@/components/admin/export-scorecards-dialog"
 
 interface RawResponse {
   id: string
@@ -72,71 +79,6 @@ interface AggregatedScorecard {
   avgHours: number
   departments: Set<string> // Track unique departments for filtering
   userIds: Set<string> // Track unique users for filtering
-}
-
-interface TemplateQuestion {
-  id: string
-  text: string
-  type: string
-  min?: number
-  max?: number
-  order: number
-  /** multichoice: letter in `label`, human copy in `value` (matches scorecard UI). */
-  options?: { label: string; value: string }[]
-}
-
-/** Human-readable question type for CSV export (no Firestore IDs). */
-function questionTypeLabelForExport(type: string): string {
-  const labels: Record<string, string> = {
-    time_saving: "Weekly time saved (hours)",
-    time_saving_minutes: "Weekly time saved (minutes)",
-    scale: "Rating scale",
-    number: "Number",
-    confidence: "Confidence",
-    goals: "Goals",
-    goals_narrative: "Goals (narrative)",
-    win: "Win / highlight",
-    text: "Short text",
-    long_text: "Long text",
-    select: "Single choice",
-    multichoice: "Multiple choice",
-    multi_select: "Multiple choice",
-    boolean: "Yes / no",
-  }
-  return labels[type] ?? type.replace(/_/g, " ")
-}
-
-/**
- * Scorecard stores multichoice as the option letter (`label`). CSV should show the option copy (`value`).
- */
-function formatAnswerForCsvExport(
-  q: TemplateQuestion,
-  raw: string | number | undefined | null,
-): string {
-  if (raw === undefined || raw === null) return ""
-  const asString = String(raw).trim()
-  if (!asString) return ""
-
-  const isMultichoice = q.type === "multichoice" || q.type === "multi_select"
-  if (!isMultichoice || !q.options?.length) return asString
-
-  const segments = asString.includes(",")
-    ? asString.split(",").map((p) => p.trim()).filter(Boolean)
-    : [asString]
-
-  return segments
-    .map((part) => {
-      const opt = q.options!.find(
-        (o) =>
-          o.label === part ||
-          o.value === part ||
-          (o.label && o.label.toLowerCase() === part.toLowerCase()),
-      )
-      if (!opt) return part
-      const copy = (opt.value || "").trim()
-      return copy || part
-    })
-    .join("; ")
 }
 
 function formatDate(iso: string) {
@@ -189,9 +131,21 @@ export default function PreviousScorecardsPage() {
   const [users, setUsers] = useState<Array<{ id: string; name: string; orgId: string; department: string }>>([])
   const userOrgId = user?.organizationId
   const [templates, setTemplates] = useState<Array<{ id: string; name: string; questions: TemplateQuestion[] }>>([])
+
+  const userResolvedOrganizationId = useMemo(() => {
+    if (!user) return undefined
+    const profile = user as { organizationId?: string; company?: string }
+    if (profile.organizationId) return profile.organizationId
+    if (profile.company) {
+      const n = profile.company.toLowerCase()
+      return orgs.find((o) => o.name.toLowerCase() === n)?.id
+    }
+    return undefined
+  }, [user, orgs])
   
   // Import state
   const [importModalOpen, setImportModalOpen] = useState(false)
+  const [exportModalOpen, setExportModalOpen] = useState(false)
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importOrg, setImportOrg] = useState("")
   const [importTemplate, setImportTemplate] = useState("")
@@ -201,7 +155,7 @@ export default function PreviousScorecardsPage() {
   const [importing, setImporting] = useState(false)
   const [showLegend, setShowLegend] = useState(false)
   const [respondentByUserId, setRespondentByUserId] = useState<
-    Record<string, { name: string; email: string; regionOrCohort: string }>
+    Record<string, RespondentContact>
   >({})
 
   const fetchScorecards = useCallback(async () => {
@@ -259,7 +213,7 @@ export default function PreviousScorecardsPage() {
       const userOrgMap = new Map<string, string>() // Maps userId -> their ACTUAL org ID from profile
       const deptSet = new Set<string>()
       const usersList: Array<{ id: string; name: string; orgId: string; department: string }> = []
-      const contactsById: Record<string, { name: string; email: string }> = {}
+      const contactsById: Record<string, RespondentContact> = {}
       
       for (const u of userDocs) {
         const data = u as Record<string, unknown>
@@ -331,7 +285,10 @@ export default function PreviousScorecardsPage() {
       // Only include completed submissions (exclude drafts / partial auto-saves).
       // Some legacy rows may not have `status` — treat non-empty `completedAt` as completed.
       const completedOnly: RawResponse[] = responseDocs
-        .map((d) => ({ id: d.id, ...(d as unknown as Record<string, unknown>) }))
+        .map((doc) => {
+          const d = doc as { id: string } & Record<string, unknown>
+          return d
+        })
         .filter((d) => {
           const status = (d.status as string) ?? ""
           const completedAt = (d.completedAt as string) ?? ""
@@ -771,53 +728,36 @@ export default function PreviousScorecardsPage() {
                       size="sm"
                       className="gap-2"
                       onClick={() => {
-                        const csvRows: string[] = []
-                        csvRows.push([
-                          "Respondent Name",
-                          "Respondent Email",
-                          "Region / Cohort",
-                          "Organization",
-                          "Week Of",
-                          "Completed At",
-                          "Question",
-                          "Question Type",
-                          "Answer",
-                        ].map((h) => `"${h}"`).join(","))
-
-                        for (const response of selectedResponses) {
-                          const contact = respondentByUserId[response.userId]
-                          const respondentName = contact?.name ?? "Unknown"
-                          const respondentEmail = contact?.email ?? ""
-                          const regionOrCohort = contact?.regionOrCohort ?? ""
-                          for (const q of questions) {
-                            const rawValue = response.answers[q.id]
-                            const answerCell = formatAnswerForCsvExport(q, rawValue)
-                            csvRows.push([
-                              respondentName,
-                              respondentEmail,
-                              regionOrCohort,
-                              selected.organizationName,
-                              selected.weekOf,
-                              response.completedAt,
-                              q.text,
-                              questionTypeLabelForExport(q.type),
-                              answerCell,
-                            ]
-                              .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-                              .join(","))
-                          }
-                        }
-
-                        const csvContent = csvRows.join("\n")
-                        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-                        const url = URL.createObjectURL(blob)
-                        const link = document.createElement("a")
-                        link.href = url
-                        link.download = `${selected.organizationName.replace(/[^a-zA-Z0-9]/g, "_")}_${selected.weekOf}_responses.csv`
-                        document.body.appendChild(link)
-                        link.click()
-                        document.body.removeChild(link)
-                        URL.revokeObjectURL(url)
+                        const organizationNameByOrgId = new Map(
+                          orgs.map((o) => [o.id, o.name] as const),
+                        )
+                        organizationNameByOrgId.set(
+                          selected.organizationId,
+                          selected.organizationName,
+                        )
+                        const templateQuestionsByTemplateId = new Map<
+                          string,
+                          TemplateQuestion[]
+                        >()
+                        templateQuestionsByTemplateId.set(selected.templateId, questions)
+                        const csv = buildScorecardResponsesCsv({
+                          responses: selectedResponses.map((r) => ({
+                            id: r.id,
+                            templateId: r.templateId,
+                            completedAt: r.completedAt,
+                            weekOf: r.weekOf,
+                            organizationId: r.organizationId,
+                            userId: r.userId,
+                            answers: r.answers,
+                          })),
+                          templateQuestionsByTemplateId,
+                          respondentByUserId,
+                          organizationNameByOrgId,
+                        })
+                        downloadScorecardResponsesCsvFile(
+                          csv,
+                          `${selected.organizationName.replace(/[^a-zA-Z0-9]/g, "_")}_${String(selected.weekOf).replace(/[^a-zA-Z0-9]/g, "_")}_responses.csv`,
+                        )
                       }}
                     >
                       <FileDown className="h-4 w-4" />
@@ -929,6 +869,34 @@ export default function PreviousScorecardsPage() {
   </p>
         </div>
         
+        <div className="flex flex-wrap items-center gap-2">
+        {isAdmin && (
+          <>
+            <Button className="gap-2" onClick={() => setExportModalOpen(true)}>
+              <FileDown className="h-4 w-4" />
+              Export scorecards…
+            </Button>
+            <ExportScorecardsDialog
+              open={exportModalOpen}
+              onOpenChange={setExportModalOpen}
+              isSuperAdmin={isSuperAdmin}
+              companyAdminOrgId={
+                userResolvedOrganizationId ?? user?.organizationId ?? undefined
+              }
+              companyAdminOrgName={
+                orgs.find(
+                  (o) =>
+                    o.id ===
+                    (userResolvedOrganizationId ?? user?.organizationId ?? ""),
+                )?.name
+              }
+              orgs={orgs}
+              scorecards={scorecards}
+              templates={templates}
+              respondentByUserId={respondentByUserId}
+            />
+          </>
+        )}
         {/* Import Button */}
         <Dialog open={importModalOpen} onOpenChange={setImportModalOpen}>
           <DialogTrigger asChild>
@@ -1135,6 +1103,7 @@ export default function PreviousScorecardsPage() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Filter bar */}
