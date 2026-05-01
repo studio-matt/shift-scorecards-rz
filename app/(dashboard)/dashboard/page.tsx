@@ -48,8 +48,6 @@ import {
   getDocument,
   getDocuments,
   getUsersByOrg,
-  getUserResponses,
-  getUserResponsesUnordered,
   getUserResponsesMerged,
   getResponsesByOrg,
   COLLECTIONS,
@@ -118,6 +116,17 @@ import { loadResponsesForDashboardFallback } from "@/lib/reporting-responses"
 import { Badge } from "@/components/ui/badge"
 
 import { LoadingSection } from "@/components/ui/section-loader"
+
+function normalizeResponsesForUser(
+  responses: RawResponse[],
+  userId: string,
+  authId?: string,
+): RawResponse[] {
+  if (!authId || authId === userId) return responses
+  return responses.map((response) =>
+    response.userId === authId ? { ...response, userId } : response,
+  )
+}
 
 export default function DashboardPage() {
   const { isAdmin, isSuperAdmin, isCompanyAdmin, user } = useAuth()
@@ -438,7 +447,7 @@ export default function DashboardPage() {
           const toRaw = (docs: { id: string }[]): RawResponse[] =>
             docs.map((d) => ({ ...d } as unknown as RawResponse))
 
-          const userRaw = toRaw(mergedUserDocs)
+          const userRaw = normalizeResponsesForUser(toRaw(mergedUserDocs), user.id, user.authId)
 
           const isCompleted = (r: RawResponse) =>
             (r as unknown as { status?: string }).status === "completed" || Boolean(r.completedAt)
@@ -463,7 +472,11 @@ export default function DashboardPage() {
           let orgSliceRaw: RawResponse[] = userRaw
           if (user.organizationId) {
             try {
-              const orgRaw = toRaw(await getResponsesByOrg(user.organizationId))
+              const orgRaw = normalizeResponsesForUser(
+                toRaw(await getResponsesByOrg(user.organizationId)),
+                user.id,
+                user.authId,
+              )
               orgSliceRaw = mergeByDocId(orgRaw, userRaw)
             } catch (e) {
               console.warn("[dashboard] getResponsesByOrg failed; using user responses only", e)
@@ -659,8 +672,12 @@ export default function DashboardPage() {
         // User-specific metrics - fetch ALL responses (unfiltered) for user's personal data
         // This ensures the user sees their own data regardless of admin filters
         if (user?.id) {
-          const unordered = await getUserResponsesUnordered(user.id, 12000)
-          const myRaw = unordered as unknown as RawResponse[]
+          const mergedUserDocs = await getUserResponsesMerged(user, 12000)
+          const myRaw = normalizeResponsesForUser(
+            mergedUserDocs as unknown as RawResponse[],
+            user.id,
+            user.authId,
+          )
           setPersonalStreak(computePersonalStreak(myRaw, user.id))
           setPersonalTrend(computePersonalTrend(myRaw, user.id))
           setPersonalBenchmark(computePersonalBenchmark(myRaw, user.id))

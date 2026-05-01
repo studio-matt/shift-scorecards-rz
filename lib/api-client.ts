@@ -25,3 +25,19 @@ export async function syncUserProfileMirrorAfterUserDocUpdate(userDocId: string)
     throw new Error(body.error || "Failed to sync profile mirror")
   }
 }
+
+/** Sync the signed-in user's own `userProfiles` mirror via Admin SDK. */
+export async function syncCurrentUserProfileMirror(userDocId?: string): Promise<void> {
+  const res = await fetch("/api/auth/sync-profile-mirror", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(await authHeaders()),
+    },
+    body: JSON.stringify({ userDocId }),
+  })
+  const body = (await res.json().catch(() => ({}))) as { error?: string }
+  if (!res.ok) {
+    throw new Error(body.error || "Failed to sync current user profile mirror")
+  }
+}

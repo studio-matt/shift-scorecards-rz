@@ -21,7 +21,7 @@ import {
 } from "firebase/auth"
 import { auth } from "./firebase"
 import { getUserByAuthId, getUserByEmail, createDocument, updateDocument, deleteDocument, getInviteByEmail, upsertUserProfile, COLLECTIONS } from "./firestore"
-import { syncUserProfileMirrorAfterUserDocUpdate } from "./api-client"
+import { syncCurrentUserProfileMirror } from "./api-client"
 import type { User, UserRole } from "./types"
 
 // Temp store for signup extras that get applied after profile creation
@@ -84,7 +84,7 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
     } catch (e) {
       const err = e as { code?: string; message?: string }
       if (/permission|insufficient|PERMISSION_DENIED/i.test(String(err.code || err.message || ""))) {
-        await syncUserProfileMirrorAfterUserDocUpdate(existingByAuthId.id)
+        await syncCurrentUserProfileMirror(existingByAuthId.id)
       } else {
         throw e
       }
@@ -140,7 +140,7 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
       } catch (e) {
         const err = e as { code?: string; message?: string }
         if (/permission|insufficient|PERMISSION_DENIED/i.test(String(err.code || err.message || ""))) {
-          await syncUserProfileMirrorAfterUserDocUpdate(existingByEmail.id)
+          await syncCurrentUserProfileMirror(existingByEmail.id)
         } else {
           throw e
         }
@@ -227,7 +227,7 @@ async function resolveUserProfile(fbUser: FirebaseUser): Promise<User> {
   } catch (e) {
     const err = e as { code?: string; message?: string }
     if (/permission|insufficient|PERMISSION_DENIED/i.test(String(err.code || err.message || ""))) {
-      await syncUserProfileMirrorAfterUserDocUpdate(createdUser.id)
+      await syncCurrentUserProfileMirror(createdUser.id)
     } else {
       throw e
     }
@@ -316,13 +316,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = useCallback(async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password)
+    await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password)
   }, [])
 
   const signup = useCallback(async (email: string, password: string, name: string, company?: string, department?: string) => {
     // Store extras so resolveUserProfile can pick them up
     pendingSignupExtras = { company, department }
-    const cred = await createUserWithEmailAndPassword(auth, email, password)
+    const cred = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password)
     await updateProfile(cred.user, { displayName: name })
   }, [])
 

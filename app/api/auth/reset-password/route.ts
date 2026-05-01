@@ -33,8 +33,31 @@ export async function POST(request: Request) {
       const adminAuth = getAdminAuth()
 
       console.log("[reset-password] requested", { email: redactEmail(normalizedEmail) })
+      let userRecord
+      try {
+        userRecord = await adminAuth.getUserByEmail(normalizedEmail)
+      } catch (err: unknown) {
+        const e = err as { code?: string; message?: string }
+        console.warn("[reset-password] no Firebase Auth user", {
+          email: redactEmail(normalizedEmail),
+          code: e?.code,
+          message: e?.message,
+        })
+        return NextResponse.json({
+          success: true,
+          message: "If an account exists with this email, a password reset link has been sent.",
+        })
+      }
+
       const resetLink = await adminAuth.generatePasswordResetLink(normalizedEmail, {
         url: continueUrl,
+      })
+      console.log("[reset-password] reset link generated", {
+        email: redactEmail(normalizedEmail),
+        uid: userRecord.uid,
+        providers: userRecord.providerData.map(
+          (provider: { providerId: string }) => provider.providerId,
+        ),
       })
 
       // If the user exists, send a templated email via configured provider.

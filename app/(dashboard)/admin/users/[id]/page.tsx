@@ -140,6 +140,9 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
   const [completingId, setCompletingId] = useState<string | null>(null)
   const [identityCandidates, setIdentityCandidates] = useState<IdentityCandidate[]>([])
   const [reassigningFrom, setReassigningFrom] = useState<string | null>(null)
+  const [passwordDraft, setPasswordDraft] = useState("")
+  const [passwordConfirm, setPasswordConfirm] = useState("")
+  const [passwordWorking, setPasswordWorking] = useState(false)
   
   const fetchData = useCallback(async () => {
     try {
@@ -422,6 +425,51 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
     },
     [fetchData, userData],
   )
+
+  const handleSetPassword = useCallback(async () => {
+    if (!userData) return
+    if (passwordDraft.length < 8) {
+      toast.error("Password must be at least 8 characters")
+      return
+    }
+    if (passwordDraft !== passwordConfirm) {
+      toast.error("Passwords do not match")
+      return
+    }
+
+    try {
+      setPasswordWorking(true)
+      const res = await fetch("/api/admin/set-user-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({
+          userDocId: userData.id,
+          password: passwordDraft,
+        }),
+      })
+      const payload = (await res.json().catch(() => ({}))) as {
+        error?: string
+        createdAuthUser?: boolean
+      }
+      if (!res.ok) {
+        throw new Error(payload.error || `HTTP ${res.status}`)
+      }
+
+      toast.success(
+        payload.createdAuthUser
+          ? "Password set and Firebase Auth account created"
+          : "Password updated",
+      )
+      setPasswordDraft("")
+      setPasswordConfirm("")
+      await fetchData()
+    } catch (error) {
+      console.error("[admin user detail] failed to set password", error)
+      toast.error(error instanceof Error ? error.message : "Failed to set password")
+    } finally {
+      setPasswordWorking(false)
+    }
+  }, [fetchData, passwordConfirm, passwordDraft, userData])
   
   // Load template questions when scorecard is selected
   useEffect(() => {
@@ -752,6 +800,47 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
               <div className="sm:col-span-2">
                 <span className="font-medium text-foreground">Created:</span>{" "}
                 {userData.createdAt ? new Date(userData.createdAt).toLocaleString() : "-"}
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-lg border border-border bg-muted/10 p-4">
+              <div className="mb-4">
+                <p className="text-sm font-medium text-foreground">Set user password</p>
+                <p className="text-xs text-muted-foreground">
+                  Super admins can set a temporary password when a user is locked out. If the
+                  user does not yet have a Firebase Auth account, this will create and link one.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                <div className="flex flex-col gap-1.5">
+                  <Label>New password</Label>
+                  <Input
+                    type="password"
+                    autoComplete="new-password"
+                    value={passwordDraft}
+                    onChange={(e) => setPasswordDraft(e.target.value)}
+                    placeholder="At least 8 characters"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>Confirm password</Label>
+                  <Input
+                    type="password"
+                    autoComplete="new-password"
+                    value={passwordConfirm}
+                    onChange={(e) => setPasswordConfirm(e.target.value)}
+                    placeholder="Re-enter password"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={passwordWorking || passwordDraft.length === 0 || passwordConfirm.length === 0}
+                  onClick={handleSetPassword}
+                >
+                  {passwordWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Set password
+                </Button>
               </div>
             </div>
           </CardContent>

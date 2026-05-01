@@ -37,6 +37,8 @@ import {
   COLLECTIONS,
   getResponsesForOrgLimited,
   getDocumentsByIds,
+  getUserResponsesMerged,
+  getUsersByOrg,
 } from "@/lib/firestore"
 import { useAuth } from "@/lib/auth-context"
 import { parseTimeValue } from "@/lib/dashboard-data"
@@ -163,11 +165,23 @@ export default function PreviousScorecardsPage() {
     try {
       setLoading(true)
       
-      // Fetch organizations, templates, and users (responses: org-scoped / capped — Tier C)
+      const profile = user as { organizationId?: string; company?: string }
+      const profileOrgId = profile.organizationId?.trim()
+
+      // Regular users cannot query all orgs/users under production rules.
+      // Keep their reads scoped to their own profile and responses.
       const [orgDocs, templateDocs, userDocs] = await Promise.all([
-        getDocuments(COLLECTIONS.ORGANIZATIONS),
+        isSuperAdmin
+          ? getDocuments(COLLECTIONS.ORGANIZATIONS)
+          : profileOrgId
+            ? getDocument(COLLECTIONS.ORGANIZATIONS, profileOrgId).then((doc) => (doc ? [doc] : []))
+            : Promise.resolve([]),
         getDocuments(COLLECTIONS.TEMPLATES),
-        getDocuments(COLLECTIONS.USERS),
+        isSuperAdmin
+          ? getDocuments(COLLECTIONS.USERS)
+          : profileOrgId && isAdmin
+            ? getUsersByOrg(profileOrgId)
+            : getDocument(COLLECTIONS.USERS, user.id).then((doc) => (doc ? [doc] : [])),
       ])
 
       // Build org name map and populate orgs list
@@ -193,7 +207,6 @@ export default function PreviousScorecardsPage() {
       setOrgs(orgsList.sort((a, b) => a.name.localeCompare(b.name)))
 
       // Determine user's organization ID (by organizationId or by matching company name)
-      const profile = user as { organizationId?: string; company?: string }
       let userOrgResolved: string | undefined = profile.organizationId
       if (!userOrgResolved && profile.company) {
         userOrgResolved = orgNameToIdMap.get(profile.company.toLowerCase())
@@ -210,10 +223,10 @@ export default function PreviousScorecardsPage() {
             orgsList.map((o) => getResponsesForOrgLimited(o.id, perOrgCap)),
           )
         ).flat()
-      } else if (userOrgResolved) {
+      } else if (isAdmin && userOrgResolved) {
         responseDocs = await getResponsesForOrgLimited(userOrgResolved, 22000)
       } else {
-        responseDocs = []
+        responseDocs = await getUserResponsesMerged(user, 22000)
       }
       
       // Build user department AND organization maps, collect unique departments, and build users list for filtering

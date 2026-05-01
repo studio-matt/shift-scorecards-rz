@@ -38,6 +38,7 @@ import {
   updateDocument,
   deleteDocument,
   getUserResponsesUnordered,
+  getUserResponsesMerged,
   COLLECTIONS,
 } from "@/lib/firestore"
 import {
@@ -59,6 +60,7 @@ interface TemplateData {
   name: string
   description: string
   questions: ScorecardQuestion[]
+  useGlobalInsights?: boolean
   scoreInsightRules?: InsightRule[]
   percentileInsightRules?: InsightRule[]
 }
@@ -131,7 +133,7 @@ export default function ScorecardPage() {
           return
         }
 
-        const rel = activeRel as ScorecardRelease
+        const rel = activeRel as unknown as ScorecardRelease
         const untilDate = new Date(rel.activeUntil)
         if (untilDate.getTime() < Date.now()) {
           setExpired(true)
@@ -150,20 +152,31 @@ export default function ScorecardPage() {
           
           // Check for existing response (draft or completed) for this user + release
           if (user?.id) {
-            const deterministicId = `${rel.id}__${user.id}`
-            const deterministicDoc = await getDocument(COLLECTIONS.RESPONSES, deterministicId)
+            const userIds = [user.id, user.authId].filter(Boolean) as string[]
+            const myIds = new Set(userIds)
+            const deterministicIds = userIds.map((id) => `${rel.id}__${id}`)
+            const deterministicDocs = await Promise.all(
+              deterministicIds.map(async (id) => ({
+                id,
+                doc: await getDocument(COLLECTIONS.RESPONSES, id),
+              })),
+            )
+            const deterministicHit = deterministicDocs.find((entry) => entry.doc)
+            const deterministicDoc = deterministicHit?.doc
 
             if (deterministicDoc) {
               const data = deterministicDoc as unknown as Record<string, unknown>
               const status = (data.status as string) || ""
-              if (status === "completed") {
+              const completedAt = String(data.completedAt ?? "")
+              if (status === "completed" || completedAt.trim().length > 0) {
                 setAlreadyCompleted(true)
                 setLoading(false)
                 return
               }
               if (status === "draft") {
-                setDraftId(deterministicId)
-                draftIdRef.current = deterministicId
+                const draftDocId = deterministicHit?.id ?? `${rel.id}__${user.id}`
+                setDraftId(draftDocId)
+                draftIdRef.current = draftDocId
                 setAnswers((data.answers as Record<string, string | number>) || {})
                 setSaveError(null)
                 const templateData = tmpl as unknown as TemplateData
@@ -177,28 +190,17 @@ export default function ScorecardPage() {
               }
             }
 
-            const [byUserId, byAuthId] = await Promise.all([
-              getUserResponsesUnordered(user.id, 2000),
-              user.authId && user.authId !== user.id
-                ? getUserResponsesUnordered(user.authId, 2000)
-                : Promise.resolve([]),
-            ])
-            const allResponses = (() => {
-              const byId = new Map<string, unknown>()
-              for (const r of [...byUserId, ...byAuthId]) {
-                const id = (r as unknown as { id?: string }).id
-                if (id) byId.set(id, r)
-              }
-              return Array.from(byId.values()) as typeof byUserId
-            })()
+            const allResponses = await getUserResponsesMerged(user, 2000)
             
             // First check if user already COMPLETED this release
             const existingCompleted = allResponses.find((r) => {
               const data = r as Record<string, unknown>
+              const status = String(data.status ?? "")
+              const completedAt = String(data.completedAt ?? "")
               return (
-                data.userId === user.id &&
+                myIds.has(String(data.userId ?? "")) &&
                 data.releaseId === rel.id &&
-                data.status === "completed"
+                (status === "completed" || completedAt.trim().length > 0)
               )
             })
             
@@ -214,7 +216,7 @@ export default function ScorecardPage() {
               .filter((r) => {
                 const data = r as Record<string, unknown>
                 return (
-                  data.userId === user.id &&
+                  myIds.has(String(data.userId ?? "")) &&
                   data.releaseId === rel.id &&
                   data.status === "draft"
                 )
@@ -1137,7 +1139,8 @@ const [loading, setLoading] = useState(true)
         const trend = computePersonalTrend(allRaw, userId)
         const bench = computePersonalBenchmark(allRaw, userId)
         
-        // Get previous hours from last submission
+        // Get previous hours/score from last submission
+        let previousScore: number | null = null
         const myResponses = allResponses.filter(r => r.userId === userId)
         if (myResponses.length >= 2) {
           // Sort by date and get previous submission
@@ -1158,6 +1161,14 @@ const [loading, setLoading] = useState(true)
               }
             }
             setPrevHours(Math.round(prevHoursTotal * 10) / 10)
+
+            const prevScaleVals = Object.values(prevResponse.answers).filter(
+              (v) => typeof v === "number" && v >= 1 && v <= 10,
+            ) as number[]
+            previousScore =
+              prevScaleVals.length > 0
+                ? Math.round((prevScaleVals.reduce((a, b) => a + b, 0) / prevScaleVals.length) * 10) / 10
+                : null
           }
         }
 
@@ -1206,7 +1217,7 @@ const [loading, setLoading] = useState(true)
         if (trend.length === 0) {
           insightLines.push("Great job completing your first scorecard! Keep it up to build your personal trend data.")
         } else {
-          const delta = prevScore !== null ? thisScore - (prevScore ?? 0) : 0
+          const delta = previousScore !== null ? thisScore - previousScore : 0
           if (delta > 0.5) {
             insightLines.push(`Strong improvement! Your score jumped ${Math.abs(delta).toFixed(1)} points since your last submission.`)
           } else if (delta < -0.5) {

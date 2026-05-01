@@ -211,7 +211,7 @@ export interface Organization {
 export interface ScorecardQuestion {
   id: string
   text: string
-  type: "scale" | "number" | "text" | "multichoice" | "confidence" | "win" | "goals" | "time_saving"
+  type: "scale" | "number" | "text" | "multichoice" | "confidence" | "win" | "goals" | "time_saving" | "time_saving_minutes"
   scaleMin?: number
   scaleMax?: number
   options?: { label: string; value: string }[] // For multichoice questions (A, B, C, etc.)
