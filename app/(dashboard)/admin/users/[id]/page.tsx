@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ArrowLeft, Clock, TrendingUp, Award, CalendarDays, Loader2 } from "lucide-react"
+import { ArrowLeft, Clock, TrendingUp, Award, CalendarDays, CheckCircle2, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import {
   getDocument,
@@ -593,6 +593,92 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
   }
   
   const fullName = `${userData.firstName} ${userData.lastName}`.trim() || userData.email
+
+  if (selectedScorecard) {
+    return (
+      <div>
+        <Button
+          variant="ghost"
+          className="mb-4"
+          onClick={() => setSelectedScorecard(null)}
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to {fullName}
+        </Button>
+
+        <div className="mb-6">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+            <CalendarDays className="h-4 w-4" />
+            {userData.organizationName || "Scorecard"}
+          </div>
+          <h1 className="text-2xl font-bold text-foreground">
+            {selectedScorecard.templateName || "Scorecard"}
+          </h1>
+          <p className="text-sm font-medium text-primary">
+            {selectedScorecard.weekOf ? `Week of ${selectedScorecard.weekOf}` : ""}
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <Badge variant="secondary" className="text-xs">
+              {selectedScorecard.status === "draft"
+                ? `Last saved ${formatDateTime(selectedScorecard.updatedAt || selectedScorecard.createdAt || selectedScorecard.completedAt)}`
+                : `Completed ${formatDateOnly(selectedScorecard.completedAt)}`}
+            </Badge>
+            {selectedScorecard.status === "draft" && <Badge variant="outline">Draft</Badge>}
+            <Badge className="bg-primary text-primary-foreground text-xs flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {selectedScorecard.totalHours} hrs saved
+            </Badge>
+            {selectedScorecard.status === "draft" && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={completingId === selectedScorecard.id}
+                onClick={() => handleMarkDraftCompleted(selectedScorecard)}
+              >
+                {completingId === selectedScorecard.id ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Mark completed
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          {templateQuestions.map((q) => {
+            const answer = selectedScorecard.answers[q.id]
+            return (
+              <Card key={q.id} className="border-border/60">
+                <CardContent className="flex items-start gap-4 p-4">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+                    <CheckCircle2 className="h-4 w-4" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground">{q.text}</p>
+                    <div className="mt-2">
+                      {answer !== undefined && answer !== null && answer !== "" ? (
+                        <span className="rounded-md bg-primary/10 px-3 py-2 text-sm font-semibold text-primary inline-block">
+                          {String(answer)}
+                        </span>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No response</p>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+          {templateQuestions.length === 0 && (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Template questions could not be loaded.
+            </p>
+          )}
+        </div>
+      </div>
+    )
+  }
   
   return (
     <div>
@@ -964,79 +1050,36 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
       {/* Scorecards Section */}
       <Card>
         <CardHeader>
-          {selectedScorecard ? (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="-ml-2 mb-2"
-                  onClick={() => setSelectedScorecard(null)}
-                >
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back to {fullName}
-                </Button>
-                <CardTitle>Scorecard Details - {selectedScorecard.weekOf || "Scorecard"}</CardTitle>
-                <CardDescription>
-                  {selectedScorecard.templateName} ·{" "}
-                  {selectedScorecard.status === "draft"
-                    ? `Last saved ${formatDateTime(selectedScorecard.updatedAt || selectedScorecard.createdAt || selectedScorecard.completedAt)}`
-                    : `Completed ${formatDateOnly(selectedScorecard.completedAt)}`}
-                </CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                {selectedScorecard.status === "draft" && <Badge variant="outline">Draft</Badge>}
-                <Badge variant="secondary">{selectedScorecard.templateName}</Badge>
-                <p className="text-lg font-bold text-primary">{selectedScorecard.totalHours} hrs</p>
-              </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Scorecard History</CardTitle>
+              <CardDescription>View completed scorecards and saved drafts for this user</CardDescription>
             </div>
-          ) : (
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Scorecard History</CardTitle>
-                <CardDescription>View completed scorecards and saved drafts for this user</CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant={showDrafts ? "secondary" : "outline"}
-                  size="sm"
-                  onClick={() => setShowDrafts((v) => !v)}
-                >
-                  {showDrafts ? "Showing drafts" : "Hiding drafts"}
-                </Button>
-                <Select value={timePeriod} onValueChange={setTimePeriod}>
-                  <SelectTrigger className="w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Time</SelectItem>
-                    <SelectItem value="last-30">Last 30 Days</SelectItem>
-                    <SelectItem value="last-90">Last 90 Days</SelectItem>
-                    <SelectItem value="ytd">Year to Date</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant={showDrafts ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setShowDrafts((v) => !v)}
+              >
+                {showDrafts ? "Showing drafts" : "Hiding drafts"}
+              </Button>
+              <Select value={timePeriod} onValueChange={setTimePeriod}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="last-30">Last 30 Days</SelectItem>
+                  <SelectItem value="last-90">Last 90 Days</SelectItem>
+                  <SelectItem value="ytd">Year to Date</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          )}
+          </div>
         </CardHeader>
         <CardContent>
-          {selectedScorecard ? (
-            <div className="flex flex-col gap-2">
-              {templateQuestions.map((q) => {
-                const answer = selectedScorecard.answers[q.id]
-                return (
-                  <div key={q.id} className="flex items-start justify-between rounded-lg bg-background p-3">
-                    <p className="flex-1 text-sm text-foreground">{q.text}</p>
-                    <p className="ml-4 font-medium text-primary">
-                      {answer !== undefined && answer !== null && answer !== "" ? String(answer) : "-"}
-                    </p>
-                  </div>
-                )
-              })}
-            </div>
-          ) : filteredScorecards.length === 0 ? (
+          {filteredScorecards.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <CalendarDays className="mb-4 h-10 w-10 text-muted-foreground" />
               <p className="text-lg font-medium text-foreground">No scorecards found</p>
