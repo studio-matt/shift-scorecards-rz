@@ -964,36 +964,79 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
       {/* Scorecards Section */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Scorecard History</CardTitle>
-              <CardDescription>View completed scorecards and saved drafts for this user</CardDescription>
+          {selectedScorecard ? (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="-ml-2 mb-2"
+                  onClick={() => setSelectedScorecard(null)}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to {fullName}
+                </Button>
+                <CardTitle>Scorecard Details - {selectedScorecard.weekOf || "Scorecard"}</CardTitle>
+                <CardDescription>
+                  {selectedScorecard.templateName} ·{" "}
+                  {selectedScorecard.status === "draft"
+                    ? `Last saved ${formatDateTime(selectedScorecard.updatedAt || selectedScorecard.createdAt || selectedScorecard.completedAt)}`
+                    : `Completed ${formatDateOnly(selectedScorecard.completedAt)}`}
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedScorecard.status === "draft" && <Badge variant="outline">Draft</Badge>}
+                <Badge variant="secondary">{selectedScorecard.templateName}</Badge>
+                <p className="text-lg font-bold text-primary">{selectedScorecard.totalHours} hrs</p>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant={showDrafts ? "secondary" : "outline"}
-                size="sm"
-                onClick={() => setShowDrafts((v) => !v)}
-              >
-                {showDrafts ? "Showing drafts" : "Hiding drafts"}
-              </Button>
-              <Select value={timePeriod} onValueChange={setTimePeriod}>
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Time</SelectItem>
-                  <SelectItem value="last-30">Last 30 Days</SelectItem>
-                  <SelectItem value="last-90">Last 90 Days</SelectItem>
-                  <SelectItem value="ytd">Year to Date</SelectItem>
-                </SelectContent>
-              </Select>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Scorecard History</CardTitle>
+                <CardDescription>View completed scorecards and saved drafts for this user</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant={showDrafts ? "secondary" : "outline"}
+                  size="sm"
+                  onClick={() => setShowDrafts((v) => !v)}
+                >
+                  {showDrafts ? "Showing drafts" : "Hiding drafts"}
+                </Button>
+                <Select value={timePeriod} onValueChange={setTimePeriod}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Time</SelectItem>
+                    <SelectItem value="last-30">Last 30 Days</SelectItem>
+                    <SelectItem value="last-90">Last 90 Days</SelectItem>
+                    <SelectItem value="ytd">Year to Date</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          </div>
+          )}
         </CardHeader>
         <CardContent>
-          {filteredScorecards.length === 0 ? (
+          {selectedScorecard ? (
+            <div className="flex flex-col gap-2">
+              {templateQuestions.map((q) => {
+                const answer = selectedScorecard.answers[q.id]
+                return (
+                  <div key={q.id} className="flex items-start justify-between rounded-lg bg-background p-3">
+                    <p className="flex-1 text-sm text-foreground">{q.text}</p>
+                    <p className="ml-4 font-medium text-primary">
+                      {answer !== undefined && answer !== null && answer !== "" ? String(answer) : "-"}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+          ) : filteredScorecards.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <CalendarDays className="mb-4 h-10 w-10 text-muted-foreground" />
               <p className="text-lg font-medium text-foreground">No scorecards found</p>
@@ -1007,10 +1050,8 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
                 <button
                   key={sc.id}
                   type="button"
-                  onClick={() => setSelectedScorecard(selectedScorecard?.id === sc.id ? null : sc)}
-                  className={`flex w-full items-center justify-between rounded-lg border p-4 text-left transition-colors hover:bg-muted/50 ${
-                    selectedScorecard?.id === sc.id ? "border-primary bg-primary/5" : "border-border"
-                  }`}
+                  onClick={() => setSelectedScorecard(sc)}
+                  className="flex w-full items-center justify-between rounded-lg border border-border p-4 text-left transition-colors hover:bg-muted/50"
                 >
                   <div className="flex items-center gap-3">
                     <CalendarDays className="h-5 w-5 text-muted-foreground" />
@@ -1050,26 +1091,6 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
                   </div>
                 </button>
               ))}
-            </div>
-          )}
-          
-          {/* Expanded scorecard details */}
-          {selectedScorecard && (
-            <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
-              <h4 className="mb-3 font-medium text-foreground">Scorecard Details - {selectedScorecard.weekOf}</h4>
-              <div className="flex flex-col gap-2">
-                {templateQuestions.map((q) => {
-                  const answer = selectedScorecard.answers[q.id]
-                  return (
-                    <div key={q.id} className="flex items-start justify-between rounded-lg bg-background p-3">
-                      <p className="flex-1 text-sm text-foreground">{q.text}</p>
-                      <p className="ml-4 font-medium text-primary">
-                        {answer !== undefined && answer !== null && answer !== "" ? String(answer) : "-"}
-                      </p>
-                    </div>
-                  )
-                })}
-              </div>
             </div>
           )}
         </CardContent>
