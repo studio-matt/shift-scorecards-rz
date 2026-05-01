@@ -370,6 +370,7 @@ export function ExportScorecardsDialog({
         templateQuestionsByTemplateId,
         respondentByUserId,
         organizationNameByOrgId,
+        organizationNameOverride: organizationNameByOrgId.get(exportOrgId) || "Unknown",
       })
       const organization = organizationByOrgId.get(exportOrgId) ?? {
         id: exportOrgId,

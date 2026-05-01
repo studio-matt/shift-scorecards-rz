@@ -763,6 +763,7 @@ export default function PreviousScorecardsPage() {
                           templateQuestionsByTemplateId,
                           respondentByUserId,
                           organizationNameByOrgId,
+                          organizationNameOverride: selected.organizationName,
                         })
                         downloadScorecardResponsesCsvFile(
                           csv,

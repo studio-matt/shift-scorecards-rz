@@ -154,9 +154,16 @@ export function buildScorecardResponsesCsv(params: {
   templateQuestionsByTemplateId: Map<string, ExportTemplateQuestion[]>
   respondentByUserId: Record<string, RespondentContact>
   organizationNameByOrgId: Map<string, string>
+  /** If provided, overrides per-response organization lookup in the CSV column. */
+  organizationNameOverride?: string
 }): string {
-  const { responses, templateQuestionsByTemplateId, respondentByUserId, organizationNameByOrgId } =
-    params
+  const {
+    responses,
+    templateQuestionsByTemplateId,
+    respondentByUserId,
+    organizationNameByOrgId,
+    organizationNameOverride,
+  } = params
 
   const csvRows: string[] = []
   csvRows.push(
@@ -183,7 +190,9 @@ export function buildScorecardResponsesCsv(params: {
     const respondentEmail = contact?.email ?? ""
     const regionOrCohort = contact?.regionOrCohort ?? ""
     const organizationName =
-      organizationNameByOrgId.get(response.organizationId) || "Unknown"
+      organizationNameOverride ??
+      organizationNameByOrgId.get(response.organizationId) ??
+      "Unknown"
 
     for (const q of sorted) {
       const rawValue = response.answers[q.id]
