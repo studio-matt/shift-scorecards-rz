@@ -320,6 +320,133 @@ export default function DashboardPage() {
     }
     
     try {
+      if (!isAdmin) {
+        setUsingAggregates(false)
+        const orgDocPromise = user?.organizationId
+          ? getDocument(COLLECTIONS.ORGANIZATIONS, user.organizationId)
+          : Promise.resolve(null)
+
+        if (!user?.id) {
+          setLoadingStats(false)
+          setLoadingTrends(false)
+          setLoadingEngagement(false)
+          setLoadingChampions(false)
+          setLoadingQuestions(false)
+          setLoadingPersonal(false)
+          return
+        }
+
+        const [orgDoc, mergedUserDocs, timeSavingIds, confidenceIds, templateDocs, userDoc] =
+          await Promise.all([
+            orgDocPromise,
+            getUserResponsesMerged(user, 12000),
+            findTimeSavingQuestionIds(),
+            findConfidenceQuestionIds(),
+            getDocuments(COLLECTIONS.TEMPLATES),
+            getDocument(COLLECTIONS.USERS, user.id),
+          ])
+
+        setOrgs(orgDoc ? [orgDoc as unknown as Organization] : [])
+        setOrgUserDepartments(user.department ? [user.department] : [])
+        setWeeklyTrend([])
+        setWeeklyHoursTrend([])
+        setDeptPerformance([])
+        setTopPerformers([])
+        setMostImproved([])
+        setQuestionResults([])
+        setRecentScorecards([])
+        setStreaks([])
+        setNonResponders([])
+        setDeptOverTime([])
+        setFieldReport(null)
+        setAlerts([])
+        setLoadingStats(false)
+        setLoadingTrends(false)
+        setLoadingEngagement(false)
+        setLoadingChampions(false)
+        setLoadingQuestions(false)
+
+        const userRaw = normalizeResponsesForUser(
+          mergedUserDocs as unknown as RawResponse[],
+          user.id,
+          user.authId,
+        )
+        const isCompleted = (r: RawResponse) =>
+          (r as unknown as { status?: string }).status === "completed" || Boolean(r.completedAt)
+        const myCompleted = userRaw.filter(isCompleted)
+
+        setUserHoursMetrics(computeUserHoursMetrics(myCompleted, user.id, timeSavingIds, confidenceIds))
+        setPersonalStreak(computePersonalStreak(myCompleted, user.id))
+        setPersonalTrend(computePersonalTrend(myCompleted, user.id))
+        setPersonalBenchmark(computePersonalBenchmark(myCompleted, user.id))
+
+        const savedStatuses = (userDoc as Record<string, unknown>)?.goalStatuses as
+          | Record<string, { status: string }>
+          | undefined
+        const templateMap = new Map<
+          string,
+          {
+            questions: Array<{
+              id: string
+              type: string
+              text?: string
+              options?: Array<{ label: string; value: string }>
+            }>
+          }
+        >()
+        for (const t of templateDocs) {
+          const template = t as unknown as {
+            id: string
+            questions: Array<{
+              id: string
+              type: string
+              text?: string
+              options?: Array<{ label: string; value: string }>
+            }>
+          }
+          templateMap.set(template.id, template)
+        }
+
+        const extractedGoals: GoalEntry[] = []
+        for (const response of myCompleted) {
+          const responseId =
+            (response as unknown as { id: string }).id || `${response.userId}-${response.completedAt}`
+          const template = templateMap.get(response.templateId)
+          if (!template?.questions) continue
+
+          for (const question of template.questions) {
+            const answer = response.answers?.[question.id]
+            if (!answer || typeof answer !== "string" || !answer.trim()) continue
+
+            if (question.type === "goals" || question.type === "goal") {
+              let goalText = answer
+              if (question.options && question.options.length > 0) {
+                const option = question.options.find((opt) => opt.value === answer)
+                if (option) goalText = option.label
+              }
+              if (goalText.length < 3) continue
+
+              const goalId = `${responseId}-${question.id}`
+              const savedStatus = savedStatuses?.[goalId]?.status as GoalEntry["status"] | undefined
+              extractedGoals.push({
+                id: goalId,
+                text: goalText,
+                weekOf: response.weekOf || response.completedAt?.slice(0, 10) || "",
+                status: savedStatus || "in-progress",
+              })
+            }
+          }
+        }
+        extractedGoals.sort((a, b) => b.weekOf.localeCompare(a.weekOf))
+        setUserGoals(extractedGoals.slice(0, 10))
+
+        const { computeUserQuestionResults } = await import("@/lib/dashboard-data")
+        setUserQuestionResults(await computeUserQuestionResults(myCompleted))
+        setRecentScorecards(await computeRecentScorecards(myCompleted))
+        setLoadingPersonal(false)
+        return
+      }
+
       
       // ══════════════════════════════════════════════════════════════════════
       // FAST PATH: Try to load from pre-computed aggregates first
@@ -776,7 +903,7 @@ export default function DashboardPage() {
       setLoadingQuestions(false)
       setLoadingPersonal(false)
     }
-  }, [selectedOrg, selectedDept, user, timePeriod, filterByTimePeriod, isSuperAdmin, getDateRange])
+  }, [selectedOrg, selectedDept, user, timePeriod, filterByTimePeriod, isSuperAdmin, isAdmin, getDateRange])
 
   useEffect(() => {
     loadData()
