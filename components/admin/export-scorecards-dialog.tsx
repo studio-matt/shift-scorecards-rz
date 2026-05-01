@@ -146,7 +146,20 @@ function ExportDatePickerField({
               mode="single"
               selected={selectedDate}
               defaultMonth={selectedDate ?? new Date()}
+              captionLayout="dropdown"
+              fromYear={MIN_EXPORT_DATE.getFullYear()}
+              toYear={MAX_EXPORT_DATE.getFullYear()}
+              fixedWeeks
               disabled={{ before: MIN_EXPORT_DATE, after: MAX_EXPORT_DATE }}
+              classNames={{
+                table: "w-full border-collapse",
+                head_row: "grid grid-cols-7",
+                head_cell:
+                  "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem] text-center",
+                row: "grid grid-cols-7 mt-2",
+                cell:
+                  "h-9 w-9 text-center text-sm p-0 relative focus-within:relative focus-within:z-20",
+              }}
               onSelect={(date) => {
                 if (date) onChange(formatLocalYmd(date))
               }}
