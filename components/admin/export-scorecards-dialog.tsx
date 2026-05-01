@@ -20,15 +20,7 @@ import {
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Calendar } from "@/components/ui/calendar"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
 import { FileDown, Loader2, Calendar as CalendarIcon } from "lucide-react"
-import { format } from "date-fns"
-import type { DateRange } from "react-day-picker"
 import {
   COLLECTIONS,
   getDocumentsByIds,
@@ -42,7 +34,10 @@ import {
   type ExportTemplateQuestion,
   type RespondentContact,
 } from "@/lib/export-scorecard-responses-csv"
-import { cn } from "@/lib/utils"
+import {
+  buildPlatformSummaryCsv,
+  buildPlatformSummaryMetrics,
+} from "@/lib/export-scorecard-platform-summary"
 
 /** Minimal bucket shape from Previous Scorecards aggregation. */
 export interface ScorecardExportBucket {
@@ -62,20 +57,13 @@ export interface ExportScorecardsDialogProps {
   isSuperAdmin: boolean
   companyAdminOrgId: string | null | undefined
   companyAdminOrgName?: string
-  orgs: Array<{ id: string; name: string }>
+  orgs: Array<{ id: string; name: string; hourlyRate?: number }>
   scorecards: ScorecardExportBucket[]
   templates: Array<{ id: string; name: string; questions: ExportTemplateQuestion[] }>
   respondentByUserId: Record<string, RespondentContact>
 }
 
 const RANGE_QUERY_MAX = 25000
-
-function parseYmdToLocalNoon(ymd: string): Date | undefined {
-  if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return undefined
-  const [y, m, d] = ymd.split("-").map(Number)
-  if (!y || !m || !d) return undefined
-  return new Date(y, m - 1, d, 12, 0, 0, 0)
-}
 
 export function ExportScorecardsDialog({
   open,
@@ -162,6 +150,17 @@ export function ExportScorecardsDialog({
     return m
   }, [orgs, scorecards])
 
+  const organizationByOrgId = useMemo(() => {
+    const m = new Map<string, { id: string; name: string; hourlyRate?: number }>()
+    for (const o of orgs) m.set(o.id, o)
+    for (const sc of scorecards) {
+      if (sc.organizationId && sc.organizationName && !m.has(sc.organizationId)) {
+        m.set(sc.organizationId, { id: sc.organizationId, name: sc.organizationName })
+      }
+    }
+    return m
+  }, [orgs, scorecards])
+
   const handleExport = async () => {
     setError(null)
     if (!exportOrgId) {
@@ -236,12 +235,24 @@ export function ExportScorecardsDialog({
         respondentByUserId,
         organizationNameByOrgId,
       })
+      const organization = organizationByOrgId.get(exportOrgId) ?? {
+        id: exportOrgId,
+        name: organizationNameByOrgId.get(exportOrgId) || "Unknown",
+      }
+      const summaryMetrics = buildPlatformSummaryMetrics({
+        responses,
+        templateQuestionsByTemplateId,
+        respondentByUserId,
+        organization,
+      })
+      const summaryCsv = buildPlatformSummaryCsv({ metrics: summaryMetrics })
 
       const orgSlug =
         (organizationNameByOrgId.get(exportOrgId) || "export").replace(/[^a-zA-Z0-9]/g, "_") ||
         "export"
       const rangePart =
         range && dateStart && dateEnd ? `_${dateStart}_to_${dateEnd}` : "_custom"
+      downloadScorecardResponsesCsvFile(summaryCsv, `${orgSlug}_platform_summary${rangePart}.csv`)
       downloadScorecardResponsesCsvFile(csv, `${orgSlug}_responses${rangePart}.csv`)
       onOpenChange(false)
     } catch (e) {
@@ -254,45 +265,16 @@ export function ExportScorecardsDialog({
 
   const orgDisplayName = organizationNameByOrgId.get(exportOrgId) || companyAdminOrgName || ""
 
-  const calendarRangeSelected: DateRange | undefined = dateStart
-    ? {
-        from: parseYmdToLocalNoon(dateStart),
-        to: dateEnd ? parseYmdToLocalNoon(dateEnd) : undefined,
-      }
-    : undefined
-
-  const applyPresetDays = (n: number) => {
-    const end = new Date()
-    end.setHours(12, 0, 0, 0)
-    const start = new Date(end)
-    start.setDate(start.getDate() - (n - 1))
-    setDateStart(format(start, "yyyy-MM-dd"))
-    setDateEnd(format(end, "yyyy-MM-dd"))
-  }
-
-  const applyPresetThisMonth = () => {
-    const end = new Date()
-    end.setHours(12, 0, 0, 0)
-    const start = new Date(end.getFullYear(), end.getMonth(), 1, 12, 0, 0, 0)
-    setDateStart(format(start, "yyyy-MM-dd"))
-    setDateEnd(format(end, "yyyy-MM-dd"))
-  }
-
-  const clearDateRange = () => {
-    setDateStart("")
-    setDateEnd("")
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-lg overflow-hidden flex flex-col gap-0 p-0">
         <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
           <DialogTitle>Export scorecard responses</DialogTitle>
           <DialogDescription>
-            Choose an organization, optionally select specific weeks, and/or a completion date range
-            (UTC, inclusive). Results are merged (union) and deduplicated. Only completed submissions are
-            included. Date filtering uses each response&apos;s <code className="text-xs">completedAt</code>,
-            not the week label.
+            Choose an organization, optionally select specific weeks, and/or optional start/end completion
+            dates (UTC day bounds on <code className="text-xs">completedAt</code>). Results are merged
+            (union) and deduplicated. Only completed submissions are included. Downloads include a platform
+            summary CSV and raw response CSV.
           </DialogDescription>
         </DialogHeader>
 
@@ -323,98 +305,17 @@ export function ExportScorecardsDialog({
 
             <div className="space-y-3">
               <div>
-                <Label>Completion date range (optional)</Label>
+                <Label>Completion dates (optional)</Label>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Calendar dates use your local day; export still maps to UTC midnight bounds for{" "}
-                  <code className="text-xs">completedAt</code> (same as before).
+                  Each field opens your browser&apos;s date picker. Bounds are applied to{" "}
+                  <code className="text-xs">completedAt</code> in UTC (inclusive start, inclusive end).
                 </p>
               </div>
-
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={!exportOrgId}
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !dateStart && "text-muted-foreground",
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                    {dateStart && dateEnd ? (
-                      <>
-                        {format(parseYmdToLocalNoon(dateStart)!, "LLL d, y")} –{" "}
-                        {format(parseYmdToLocalNoon(dateEnd)!, "LLL d, y")}
-                      </>
-                    ) : dateStart ? (
-                      format(parseYmdToLocalNoon(dateStart)!, "LLL d, y") + " – …"
-                    ) : (
-                      "Pick a range in the calendar"
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="range"
-                    numberOfMonths={1}
-                    selected={calendarRangeSelected}
-                    onSelect={(range) => {
-                      if (!range?.from) {
-                        clearDateRange()
-                        return
-                      }
-                      setDateStart(format(range.from, "yyyy-MM-dd"))
-                      setDateEnd(range.to ? format(range.to, "yyyy-MM-dd") : "")
-                    }}
-                    initialFocus
-                  />
-                  <div className="flex flex-wrap gap-2 border-t border-border p-3">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="text-xs"
-                      onClick={() => applyPresetDays(7)}
-                    >
-                      Last 7 days
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="text-xs"
-                      onClick={() => applyPresetDays(30)}
-                    >
-                      Last 30 days
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="text-xs"
-                      onClick={() => applyPresetThisMonth()}
-                    >
-                      Month to date
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs"
-                      onClick={() => clearDateRange()}
-                    >
-                      Clear
-                    </Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Start date</Label>
                   <div className="relative">
-                    <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       type="date"
                       className="pl-9"
@@ -427,7 +328,7 @@ export function ExportScorecardsDialog({
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">End date</Label>
                   <div className="relative">
-                    <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       type="date"
                       className="pl-9"
@@ -508,7 +409,7 @@ export function ExportScorecardsDialog({
             ) : (
               <>
                 <FileDown className="mr-2 h-4 w-4" />
-                Download CSV
+                Download CSVs
               </>
             )}
           </Button>
