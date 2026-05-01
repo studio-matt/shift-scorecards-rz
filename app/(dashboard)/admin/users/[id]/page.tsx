@@ -125,6 +125,48 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
     const date = parseDateLike(value)
     return date ? date.toLocaleDateString() : "-"
   }
+
+  function scorecardSortTime(response: ScorecardResponse): number {
+    return (
+      parseDateLike(response.completedAt)?.getTime() ??
+      parseDateLike(response.updatedAt)?.getTime() ??
+      parseDateLike(response.createdAt)?.getTime() ??
+      0
+    )
+  }
+
+  function scorecardHistoryKey(response: ScorecardResponse): string {
+    const dateKey =
+      response.weekOf ||
+      response.completedAt.slice(0, 10) ||
+      response.updatedAt?.slice(0, 10) ||
+      response.createdAt?.slice(0, 10) ||
+      response.id
+    return `${response.templateId || response.templateName}__${dateKey}`
+  }
+
+  function collapseScorecardHistory(responses: ScorecardResponse[]): ScorecardResponse[] {
+    const byScorecard = new Map<
+      string,
+      { completed?: ScorecardResponse; draft?: ScorecardResponse }
+    >()
+
+    for (const response of responses) {
+      const key = scorecardHistoryKey(response)
+      const existing = byScorecard.get(key) ?? {}
+      const bucket = response.status === "draft" ? "draft" : "completed"
+      const current = existing[bucket]
+      if (!current || scorecardSortTime(response) > scorecardSortTime(current)) {
+        existing[bucket] = response
+      }
+      byScorecard.set(key, existing)
+    }
+
+    return Array.from(byScorecard.values())
+      .map((entry) => entry.completed ?? entry.draft)
+      .filter((response): response is ScorecardResponse => Boolean(response))
+      .sort((a, b) => scorecardSortTime(b) - scorecardSortTime(a))
+  }
   
   const [userData, setUserData] = useState<UserData | null>(null)
   const [orgs, setOrgs] = useState<Organization[]>([])
@@ -333,16 +375,12 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
             totalHours: Math.round(hours * 10) / 10,
           }
         })
-        .sort((a, b) => {
-          const aDate = a.completedAt || a.updatedAt || a.createdAt || ""
-          const bDate = b.completedAt || b.updatedAt || b.createdAt || ""
-          return bDate.localeCompare(aDate)
-        })
+      const collapsedUserResponses = collapseScorecardHistory(allUserResponses)
       
-      setScorecards(allUserResponses)
+      setScorecards(collapsedUserResponses)
       
       // Calculate stats
-      const completedOnly = allUserResponses.filter((r) => r.status !== "draft")
+      const completedOnly = collapsedUserResponses.filter((r) => r.status !== "draft")
       const total = completedOnly.reduce((sum, r) => sum + r.totalHours, 0)
       setTotalHours(Math.round(total * 10) / 10)
       setScorecardsCount(completedOnly.length)
