@@ -31,6 +31,7 @@ import {
   History,
   ExternalLink,
   CalendarClock,
+  ArrowRightLeft,
 } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -320,6 +321,55 @@ export default function LeadershipReportsPage() {
       setScheduleMessage({ type: "error", text: "Failed to save schedule. Please try again." })
     } finally {
       setSavingSchedule(false)
+    }
+  }
+
+  function legacyReportScheduleToExecutive(rs: ReportSchedule): ExecutiveReportSchedule {
+    const dow = (rs.dayOfWeek || "monday") as DayOfWeek
+    let intervalWeeks = 1
+    if (rs.frequency === "biweekly") intervalWeeks = 2
+    if (rs.frequency === "monthly") intervalWeeks = 4
+    return {
+      enabled: rs.enabled,
+      intervalWeeks,
+      daysOfWeek: [dow],
+      timeOfDay: rs.timeOfDay || "09:00",
+      timezone: rs.timezone || "America/New_York",
+      anchorDate: undefined,
+    }
+  }
+
+  async function handleMigrateLegacyScheduleToOrg() {
+    const orgId = isSuperAdmin ? selectedOrg : user?.organizationId || ""
+    if (!orgId || orgId === "all") {
+      setExecScheduleMessage({ type: "error", text: "Select a single organization first." })
+      setTimeout(() => setExecScheduleMessage(null), 4000)
+      return
+    }
+    setSavingExecSchedule(true)
+    setExecScheduleMessage(null)
+    try {
+      const mapped = legacyReportScheduleToExecutive(schedule)
+      const now = new Date()
+      const nextScheduledAt = computeNextScheduledAt(mapped, now)
+      const updated: ExecutiveReportSchedule = {
+        ...mapped,
+        nextScheduledAt: mapped.enabled ? nextScheduledAt : "",
+      }
+      await updateDocument(COLLECTIONS.ORGANIZATIONS, orgId, {
+        executiveReportSchedule: updated,
+      })
+      setExecSchedule(updated)
+      setExecScheduleMessage({
+        type: "success",
+        text: "Copied legacy per-user email schedule into org rollup schedule. Review weekdays / interval (monthly → ~4 weeks).",
+      })
+      setTimeout(() => setExecScheduleMessage(null), 5000)
+    } catch (err) {
+      console.error("Migrate schedule failed:", err)
+      setExecScheduleMessage({ type: "error", text: "Could not migrate schedule." })
+    } finally {
+      setSavingExecSchedule(false)
     }
   }
 
@@ -889,6 +939,32 @@ export default function LeadershipReportsPage() {
                   )}
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-dashed">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ArrowRightLeft className="h-5 w-5" />
+                Legacy schedule → org rollup
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Per-user <strong>Report Schedule</strong> below only drives legacy email digests saved on your user doc.
+                The <strong>executive rollup</strong> cron uses <strong>organization-level</strong> settings above. Use this to
+                copy your legacy cadence as a starting point (monthly maps to every ~4 weeks — adjust as needed).
+              </p>
+            </CardHeader>
+            <CardContent>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleMigrateLegacyScheduleToOrg}
+                disabled={savingExecSchedule}
+                className="gap-2"
+              >
+                {savingExecSchedule ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRightLeft className="h-4 w-4" />}
+                Copy legacy settings to org rollup
+              </Button>
             </CardContent>
           </Card>
 

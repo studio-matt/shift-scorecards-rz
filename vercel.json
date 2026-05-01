@@ -5,6 +5,10 @@
     {
       "path": "/api/cron/aggregate-responses",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/executive-reports",
+      "schedule": "0 * * * *"
     }
   ]
 }

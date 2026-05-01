@@ -12,7 +12,6 @@ import {
 } from "@/lib/rollup-snapshots"
 
 const ORGS = "organizations"
-const AGGREGATES = "aggregates"
 
 async function orgNameMap(adminDb: ReturnType<typeof getAdminDb>): Promise<Map<string, string>> {
   const snap = await adminDb.collection(ORGS).get()

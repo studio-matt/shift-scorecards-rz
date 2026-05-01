@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAdminDb } from "@/lib/firebase-admin"
 import { verifyCallerIsAdmin } from "@/lib/verify-admin-request"
 import type { Organization } from "@/lib/types"
-import { buildRollupSnapshot, defaultRollupPeriod, getLatestRollupSnapshotForOrg, saveRollupSnapshot } from "@/lib/rollup-snapshots"
+import {
+  buildRollupSnapshot,
+  defaultRollupPeriod,
+  getLatestRollupSnapshotForOrg,
+  getRollupSnapshotById,
+  saveRollupSnapshot,
+} from "@/lib/rollup-snapshots"
 
 const ORGS = "organizations"
 
@@ -21,10 +27,22 @@ export async function GET(request: NextRequest) {
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
   const url = new URL(request.url)
+  const snapshotId = url.searchParams.get("snapshot") || url.searchParams.get("id")
+  const adminDb = getAdminDb()
+
+  if (snapshotId) {
+    const snap = await getRollupSnapshotById(adminDb, snapshotId)
+    if (!snap) return NextResponse.json({ error: "Snapshot not found" }, { status: 404 })
+    const isSuperAdmin = auth.role === "admin"
+    if (!isSuperAdmin && snap.organizationId !== auth.organizationId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+    return NextResponse.json({ snapshot: snap })
+  }
+
   const organizationId = url.searchParams.get("organizationId") || auth.organizationId
   if (!organizationId) return NextResponse.json({ error: "Missing organizationId" }, { status: 400 })
 
-  const adminDb = getAdminDb()
   const latest = await getLatestRollupSnapshotForOrg(adminDb, organizationId)
   return NextResponse.json({ latest })
 }
@@ -59,6 +77,7 @@ export async function POST(request: NextRequest) {
     periodStart: period.startDate,
     periodEnd: period.endDate,
     previous,
+    createdBy: auth.uid,
   })
 
   const id = await saveRollupSnapshot(adminDb, snapshot)

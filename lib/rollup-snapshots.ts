@@ -2,7 +2,6 @@ import type { Firestore } from "firebase-admin/firestore"
 import type { DailyAggregate } from "@/lib/aggregates"
 import type { Organization, TopPerformer, WeeklyRollupSnapshot } from "@/lib/types"
 import {
-  aggregateDocsToWeeklyHoursTrend,
   orgHoursMetricsFromAggregateStats,
   aggregateTopPerformersToTopPerformers,
 } from "@/lib/dashboard-from-aggregates"
@@ -11,6 +10,8 @@ import { orgAvgProductivityPercent } from "@/lib/dashboard-metrics-formulas"
 
 export const ROLLUP_SNAPSHOTS_COLLECTION = "rollup_snapshots"
 export const AGGREGATES_COLLECTION = "aggregates"
+
+export const ROLLUP_SNAPSHOT_SCHEMA_VERSION = 1
 
 function yyyyMmDd(d: Date): string {
   return d.toISOString().slice(0, 10)
@@ -22,8 +23,29 @@ function clampDaysLookback(now: Date, days: number): string {
   return yyyyMmDd(d)
 }
 
+function subtractDaysFromYyyyMmDd(isoDay: string, days: number): string {
+  const d = new Date(isoDay + "T12:00:00Z")
+  d.setUTCDate(d.getUTCDate() - days)
+  return d.toISOString().slice(0, 10)
+}
+
+/** Earlier of two YYYY-MM-DD strings. */
+function minYyyyMmDd(a: string, b: string): string {
+  return a <= b ? a : b
+}
+
 function monthKey(isoDay: string): string {
   return isoDay.slice(0, 7)
+}
+
+/** ISO week key (Monday) YYYY-MM-DD — matches dashboard-from-aggregates. */
+function mondayOfDate(isoDay: string): string {
+  const d = new Date(isoDay + "T12:00:00Z")
+  const day = d.getUTCDay()
+  const diff = day === 0 ? -6 : 1 - day
+  const m = new Date(d)
+  m.setUTCDate(d.getUTCDate() + diff)
+  return m.toISOString().split("T")[0]!
 }
 
 function sumConfidence(agg: DailyAggregate): number {
@@ -43,7 +65,7 @@ function computeOrgMetricsFromDailies(params: {
   annualValue: number
 } {
   const responseCountSum = params.dailies.reduce((s, d) => s + (d.responseCount || 0), 0)
-  const totalHoursSavedSum = params.dailies.reduce((s, d) => s + (d.totalHoursSaved || 0), 0) // weekly-hour totals across days
+  const totalHoursSavedSum = params.dailies.reduce((s, d) => s + (d.totalHoursSaved || 0), 0)
   const confidenceSum = params.dailies.reduce((s, d) => s + sumConfidence(d), 0)
   const avgConfidence = responseCountSum > 0 ? confidenceSum / responseCountSum : 0
   const participants = new Set<string>()
@@ -74,7 +96,6 @@ function computeDeptRows(params: {
   deptDailies: DailyAggregate[]
   hourlyRate: number
 }): WeeklyRollupSnapshot["regions"] {
-  // Group dept-level (userId=all, dept!=all) by department, summing weekly-hour totals.
   const map = new Map<
     string,
     {
@@ -118,7 +139,10 @@ function computeDeptRows(params: {
     }
   })
 
-  rows.sort((a, b) => (b.avgProductivityPercent - a.avgProductivityPercent) || (b.totalHoursSaved - a.totalHoursSaved))
+  rows.sort(
+    (a, b) =>
+      b.avgProductivityPercent - a.avgProductivityPercent || b.totalHoursSaved - a.totalHoursSaved,
+  )
   return rows
 }
 
@@ -147,6 +171,56 @@ function computeMonthlyTrend(params: {
   })
 }
 
+function computeWeeklyTrend(params: {
+  orgDailies: DailyAggregate[]
+  hourlyRate: number
+  maxWeeks: number
+}): NonNullable<WeeklyRollupSnapshot["trendWeekly"]> {
+  const byWeek = new Map<string, DailyAggregate[]>()
+  for (const d of params.orgDailies) {
+    const w = mondayOfDate(d.date)
+    if (!byWeek.has(w)) byWeek.set(w, [])
+    byWeek.get(w)!.push(d)
+  }
+  const keys = [...byWeek.keys()].sort().slice(-Math.max(1, params.maxWeeks))
+  return keys.map((w) => {
+    const bucket = byWeek.get(w) || []
+    const metrics = computeOrgMetricsFromDailies({ dailies: bucket, hourlyRate: params.hourlyRate })
+    return {
+      bucket: w,
+      scorecards: metrics.scorecards,
+      totalHoursSaved: metrics.totalHoursSavedMonthly,
+      avgProductivityPercent: metrics.avgProductivityPercent,
+      avgConfidence: metrics.avgConfidence,
+    }
+  })
+}
+
+function buildPullQuotes(params: {
+  headline: WeeklyRollupSnapshot["headline"]
+  deltas: WeeklyRollupSnapshot["deltas"]
+  hasPrevious: boolean
+  period: WeeklyRollupSnapshot["period"]
+}): string[] {
+  const { headline, deltas, hasPrevious, period } = params
+  const fmt = (n: number) => Math.round(n).toLocaleString()
+  const quotes: string[] = [
+    `THE HEADLINE — ${period.startDate} → ${period.endDate}: ${fmt(headline.totalHoursSaved)} hours reclaimed across ${fmt(headline.scorecards)} scorecards, at ${headline.avgProductivityPercent}% productivity and ${headline.avgConfidence.toFixed(1)}/10 confidence; annualized ${fmt(headline.annualRunRateHours)} hrs (~${headline.fteEquivalent.toFixed(1)} FTE).`,
+  ]
+  if (hasPrevious) {
+    const dh = deltas.totalHoursSaved
+    const dp = deltas.avgProductivityPercent
+    const dc = deltas.avgConfidence
+    quotes.push(
+      `Vs prior rollup snapshot — hours ${dh >= 0 ? "+" : ""}${fmt(dh)}; productivity ${dp >= 0 ? "+" : ""}${dp.toFixed(1)} pts; confidence ${dc >= 0 ? "+" : ""}${dc.toFixed(1)}; scorecards ${deltas.scorecards >= 0 ? "+" : ""}${deltas.scorecards}.`,
+    )
+  }
+  quotes.push(
+    "Trend and regions below are computed only from memorialized /aggregates (snapshot v1); see docs/WEEKLY_ROLLUP_V2_GAPS.md for survey and editorial content.",
+  )
+  return quotes
+}
+
 export async function getLatestRollupSnapshotForOrg(
   adminDb: Firestore,
   organizationId: string,
@@ -162,6 +236,15 @@ export async function getLatestRollupSnapshotForOrg(
   return { id: d.id, ...(d.data() as Omit<WeeklyRollupSnapshot, "id">) }
 }
 
+export async function getRollupSnapshotById(
+  adminDb: Firestore,
+  snapshotId: string,
+): Promise<WeeklyRollupSnapshot | null> {
+  const doc = await adminDb.collection(ROLLUP_SNAPSHOTS_COLLECTION).doc(snapshotId).get()
+  if (!doc.exists) return null
+  return { id: doc.id, ...(doc.data() as Omit<WeeklyRollupSnapshot, "id">) }
+}
+
 export async function buildRollupSnapshot(args: {
   adminDb: Firestore
   organization: Pick<Organization, "id" | "name" | "hourlyRate">
@@ -169,30 +252,36 @@ export async function buildRollupSnapshot(args: {
   periodStart: string // YYYY-MM-DD inclusive
   periodEnd: string // YYYY-MM-DD inclusive
   previous?: WeeklyRollupSnapshot | null
+  createdBy?: string
 }): Promise<Omit<WeeklyRollupSnapshot, "id">> {
   const { adminDb, organization, periodStart, periodEnd } = args
 
-  // Load all org aggregates for the date range (all levels), then filter in-memory.
+  const trendLookbackStart = subtractDaysFromYyyyMmDd(periodEnd, 200)
+  const aggStart = minYyyyMmDd(periodStart, trendLookbackStart)
+
   const aggSnap = await adminDb
     .collection(AGGREGATES_COLLECTION)
     .where("organizationId", "==", organization.id)
-    .where("date", ">=", periodStart)
+    .where("date", ">=", aggStart)
     .where("date", "<=", periodEnd)
     .get()
   const all = aggSnap.docs.map((d) => d.data() as DailyAggregate)
 
-  const orgDailies = all.filter((d) => d.department === "all" && d.userId === "all")
-  const deptDailies = all.filter((d) => d.department !== "all" && d.userId === "all")
-  const userDailies = all.filter((d) => d.userId !== "all")
+  const inPeriod = (d: DailyAggregate) => d.date >= periodStart && d.date <= periodEnd
+
+  const periodDocs = all.filter(inPeriod)
+  const orgDailiesPeriod = periodDocs.filter((d) => d.department === "all" && d.userId === "all")
+  const deptDailiesPeriod = periodDocs.filter((d) => d.department !== "all" && d.userId === "all")
+  const userDailiesPeriod = periodDocs.filter((d) => d.userId !== "all")
+
+  const orgDailiesTrend = all.filter((d) => d.department === "all" && d.userId === "all")
 
   const hourlyRate = organization.hourlyRate || 100
 
-  const headline = computeOrgMetricsFromDailies({ dailies: orgDailies, hourlyRate })
+  const headline = computeOrgMetricsFromDailies({ dailies: orgDailiesPeriod, hourlyRate })
 
-  const regions = computeDeptRows({ deptDailies, hourlyRate }).slice(0, 12)
+  const regions = computeDeptRows({ deptDailies: deptDailiesPeriod, hourlyRate }).slice(0, 12)
 
-  // Leaderboard: we reuse the existing mapping helper but need "top performers rows" shape.
-  // We build that from user-level daily aggregates by userId.
   const userMap = new Map<
     string,
     {
@@ -206,7 +295,7 @@ export async function buildRollupSnapshot(args: {
     }
   >()
 
-  for (const d of userDailies) {
+  for (const d of userDailiesPeriod) {
     const key = d.userId
     if (!key) continue
     if (!userMap.has(key)) {
@@ -244,7 +333,8 @@ export async function buildRollupSnapshot(args: {
     50,
   )
 
-  const trend = computeMonthlyTrend({ orgDailies, hourlyRate, monthsBack: 6 })
+  const trend = computeMonthlyTrend({ orgDailies: orgDailiesTrend, hourlyRate, monthsBack: 6 })
+  const trendWeekly = computeWeeklyTrend({ orgDailies: orgDailiesTrend, hourlyRate, maxWeeks: 12 })
 
   const previous = args.previous || null
   const deltas = previous
@@ -261,23 +351,36 @@ export async function buildRollupSnapshot(args: {
         scorecards: 0,
       }
 
+  const headlineBlock: WeeklyRollupSnapshot["headline"] = {
+    scorecards: headline.scorecards,
+    totalHoursSaved: headline.totalHoursSavedMonthly,
+    avgProductivityPercent: headline.avgProductivityPercent,
+    avgConfidence: headline.avgConfidence,
+    annualRunRateHours: headline.annualRunRateHours,
+    fteEquivalent: headline.fteEquivalent,
+    annualValue: headline.annualValue,
+  }
+
+  const pullQuotes = buildPullQuotes({
+    headline: headlineBlock,
+    deltas,
+    hasPrevious: Boolean(previous),
+    period: { startDate: periodStart, endDate: periodEnd },
+  })
+
   return {
     organizationId: organization.id,
     organizationName: organization.name,
     generatedAt: new Date().toISOString(),
+    scheduleVersion: ROLLUP_SNAPSHOT_SCHEMA_VERSION,
+    createdBy: args.createdBy,
     previousSnapshotId: previous?.id,
     period: { startDate: periodStart, endDate: periodEnd },
-    headline: {
-      scorecards: headline.scorecards,
-      totalHoursSaved: headline.totalHoursSavedMonthly,
-      avgProductivityPercent: headline.avgProductivityPercent,
-      avgConfidence: headline.avgConfidence,
-      annualRunRateHours: headline.annualRunRateHours,
-      fteEquivalent: headline.fteEquivalent,
-      annualValue: headline.annualValue,
-    },
+    headline: headlineBlock,
     deltas,
     trend,
+    trendWeekly,
+    pullQuotes,
     regions,
     leaderboard,
   }
@@ -302,4 +405,3 @@ export function defaultRollupPeriod(args: {
     : clampDaysLookback(now, 7)
   return { startDate, endDate }
 }
-

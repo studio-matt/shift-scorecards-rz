@@ -88,6 +88,10 @@ export interface WeeklyRollupSnapshot {
   organizationId: string
   organizationName: string
   generatedAt: string
+  /** Schema version for rollup snapshot documents (increment when shape changes). */
+  scheduleVersion?: number
+  /** Firebase Auth UID of admin who triggered manual generation, if any. */
+  createdBy?: string
   previousSnapshotId?: string
   period: {
     startDate: string // YYYY-MM-DD inclusive
@@ -115,6 +119,16 @@ export interface WeeklyRollupSnapshot {
     avgProductivityPercent: number
     avgConfidence: number
   }>
+  /** Calendar-week buckets (Monday YYYY-MM-DD) for growth story; aggregates-only. */
+  trendWeekly?: Array<{
+    bucket: string
+    scorecards: number
+    totalHoursSaved: number
+    avgProductivityPercent: number
+    avgConfidence: number
+  }>
+  /** Short pull-quotes; strings interpolate only snapshot metrics (no survey/editorial fabrication). */
+  pullQuotes?: string[]
   regions: Array<{
     department: string
     scorecards: number
