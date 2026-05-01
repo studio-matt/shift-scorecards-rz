@@ -73,7 +73,7 @@ export interface ExportScorecardsDialogProps {
 
 // Firestore client structured queries max limit is 10,000.
 const RANGE_QUERY_MAX = 10000
-const RANGE_FALLBACK_MAX = 25000
+const RANGE_FALLBACK_MAX = 10000
 const MIN_EXPORT_DATE = new Date(2000, 0, 1)
 const MAX_EXPORT_DATE = new Date(2099, 11, 31)
 

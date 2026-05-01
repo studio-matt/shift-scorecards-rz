@@ -261,7 +261,8 @@ export async function getResponsesByOrg(orgId: string) {
 
 /** Tier C: bounded org read (no order; includes rows missing completedAt). */
 export async function getResponsesForOrgLimited(organizationId: string, maxDocs = 15000) {
-  const cap = Math.min(Math.max(maxDocs, 1), 25000)
+  // Firestore client structured query limit has a hard maximum of 10,000.
+  const cap = Math.min(Math.max(maxDocs, 1), 10000)
   return getDocuments(
     COLLECTIONS.RESPONSES,
     where("organizationId", "==", organizationId),
