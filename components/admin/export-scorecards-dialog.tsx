@@ -37,6 +37,7 @@ import {
   completedAtUtcRangeInclusiveDates,
   docToExportResponseRow,
   downloadScorecardResponsesCsvFile,
+  filterExportResponsesByDepartment,
   type ExportTemplateQuestion,
   type RespondentContact,
 } from "@/lib/export-scorecard-responses-csv"
@@ -63,7 +64,7 @@ export interface ExportScorecardsDialogProps {
   isSuperAdmin: boolean
   companyAdminOrgId: string | null | undefined
   companyAdminOrgName?: string
-  orgs: Array<{ id: string; name: string; hourlyRate?: number }>
+  orgs: Array<{ id: string; name: string; hourlyRate?: number; departments?: string[] }>
   scorecards: ScorecardExportBucket[]
   templates: Array<{ id: string; name: string; questions: ExportTemplateQuestion[] }>
   respondentByUserId: Record<string, RespondentContact>
@@ -180,6 +181,7 @@ export function ExportScorecardsDialog({
 }: ExportScorecardsDialogProps) {
   const [exportOrgId, setExportOrgId] = useState("")
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
+  const [exportDepartment, setExportDepartment] = useState("all")
   const [dateStart, setDateStart] = useState("")
   const [dateEnd, setDateEnd] = useState("")
   const [busy, setBusy] = useState(false)
@@ -196,10 +198,15 @@ export function ExportScorecardsDialog({
   useEffect(() => {
     if (!open) {
       setSelectedKeys(new Set())
+      setExportDepartment("all")
       setDateStart("")
       setDateEnd("")
     }
   }, [open])
+
+  useEffect(() => {
+    setExportDepartment("all")
+  }, [exportOrgId])
 
   const orgBuckets = useMemo(() => {
     if (!exportOrgId) return []
@@ -253,7 +260,7 @@ export function ExportScorecardsDialog({
   }, [orgs, scorecards])
 
   const organizationByOrgId = useMemo(() => {
-    const m = new Map<string, { id: string; name: string; hourlyRate?: number }>()
+    const m = new Map<string, { id: string; name: string; hourlyRate?: number; departments?: string[] }>()
     for (const o of orgs) m.set(o.id, o)
     for (const sc of scorecards) {
       if (sc.organizationId && sc.organizationName && !m.has(sc.organizationId)) {
@@ -262,6 +269,23 @@ export function ExportScorecardsDialog({
     }
     return m
   }, [orgs, scorecards])
+
+  const departmentOptions = useMemo(() => {
+    if (!exportOrgId) return []
+    const configuredDepartments = organizationByOrgId.get(exportOrgId)?.departments ?? []
+    const departments = new Set(configuredDepartments.filter((d) => d.trim().length > 0))
+    for (const contact of Object.values(respondentByUserId)) {
+      if (contact.organizationId === exportOrgId && contact.regionOrCohort.trim()) {
+        departments.add(contact.regionOrCohort)
+      }
+    }
+    return [...departments].sort((a, b) => a.localeCompare(b))
+  }, [exportOrgId, organizationByOrgId, respondentByUserId])
+
+  useEffect(() => {
+    if (exportDepartment === "all") return
+    if (!departmentOptions.includes(exportDepartment)) setExportDepartment("all")
+  }, [departmentOptions, exportDepartment])
 
   const handleExport = async () => {
     setError(null)
@@ -324,15 +348,24 @@ export function ExportScorecardsDialog({
       const responses = [...byId.values()].filter(Boolean) as NonNullable<
         ReturnType<typeof docToExportResponseRow>
       >[]
+      const filteredResponses = filterExportResponsesByDepartment(
+        responses,
+        respondentByUserId,
+        exportDepartment,
+      )
 
-      if (responses.length === 0) {
-        setError("No completed responses matched your filters.")
+      if (filteredResponses.length === 0) {
+        setError(
+          exportDepartment === "all"
+            ? "No completed responses matched your filters."
+            : "No completed responses matched that organization, department, date, and week filter.",
+        )
         setBusy(false)
         return
       }
 
       const csv = buildScorecardResponsesCsv({
-        responses,
+        responses: filteredResponses,
         templateQuestionsByTemplateId,
         respondentByUserId,
         organizationNameByOrgId,
@@ -342,7 +375,7 @@ export function ExportScorecardsDialog({
         name: organizationNameByOrgId.get(exportOrgId) || "Unknown",
       }
       const summaryMetrics = buildPlatformSummaryMetrics({
-        responses,
+        responses: filteredResponses,
         templateQuestionsByTemplateId,
         respondentByUserId,
         organization,
@@ -354,8 +387,12 @@ export function ExportScorecardsDialog({
         "export"
       const rangePart =
         range && dateStart && dateEnd ? `_${dateStart}_to_${dateEnd}` : "_custom"
-      downloadScorecardResponsesCsvFile(summaryCsv, `${orgSlug}_platform_summary${rangePart}.csv`)
-      downloadScorecardResponsesCsvFile(csv, `${orgSlug}_responses${rangePart}.csv`)
+      const deptPart =
+        exportDepartment !== "all"
+          ? `_department_${exportDepartment.replace(/[^a-zA-Z0-9]/g, "_") || "department"}`
+          : ""
+      downloadScorecardResponsesCsvFile(summaryCsv, `${orgSlug}_platform_summary${deptPart}${rangePart}.csv`)
+      downloadScorecardResponsesCsvFile(csv, `${orgSlug}_responses${deptPart}${rangePart}.csv`)
       onOpenChange(false)
     } catch (e) {
       console.error(e)
@@ -404,6 +441,30 @@ export function ExportScorecardsDialog({
                 </Select>
               </div>
             )}
+
+            <div className="space-y-2">
+              <Label>Department (optional)</Label>
+              <Select
+                value={exportDepartment}
+                onValueChange={setExportDepartment}
+                disabled={!exportOrgId || departmentOptions.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All departments" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All departments</SelectItem>
+                  {departmentOptions.map((department) => (
+                    <SelectItem key={department} value={department}>
+                      {department}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Optional. Select a department to create a report only for that department.
+              </p>
+            </div>
 
             <div className="space-y-3">
               <div>
@@ -473,6 +534,10 @@ export function ExportScorecardsDialog({
                 {dateStart && dateEnd
                   ? `up to ${RANGE_QUERY_MAX.toLocaleString()} docs (union with week selection)`
                   : "not used"}
+              </p>
+              <p>
+                <span className="font-medium text-foreground">Department filter:</span>{" "}
+                {exportDepartment === "all" ? "all departments" : exportDepartment}
               </p>
             </div>
 

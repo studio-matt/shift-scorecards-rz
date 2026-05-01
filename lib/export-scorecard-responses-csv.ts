@@ -28,6 +28,7 @@ export interface RespondentContact {
   name: string
   email: string
   regionOrCohort: string
+  organizationId?: string
   excludeFromReporting?: boolean
 }
 
@@ -134,6 +135,18 @@ export function completedAtUtcRangeInclusiveDates(
   }
   end.setUTCDate(end.getUTCDate() + 1)
   return { minInclusive, maxExclusive: end.toISOString() }
+}
+
+export function filterExportResponsesByDepartment(
+  responses: ExportResponseRow[],
+  respondentByUserId: Record<string, RespondentContact>,
+  department: string,
+): ExportResponseRow[] {
+  if (!department || department === "all") return responses
+  return responses.filter((response) => {
+    const respondentDepartment = respondentByUserId[response.userId]?.regionOrCohort ?? ""
+    return respondentDepartment === department
+  })
 }
 
 export function buildScorecardResponsesCsv(params: {

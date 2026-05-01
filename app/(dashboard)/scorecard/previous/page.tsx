@@ -126,7 +126,7 @@ export default function PreviousScorecardsPage() {
   const isSuperAdmin = user?.role === "admin"
   // Check if user is any admin type (can filter by department)
   const isAdmin = user?.role === "admin" || user?.role === "company_admin"
-  const [orgs, setOrgs] = useState<Array<{ id: string; name: string; hourlyRate?: number }>>([])
+  const [orgs, setOrgs] = useState<Array<{ id: string; name: string; hourlyRate?: number; departments?: string[] }>>([])
   const [departments, setDepartments] = useState<string[]>([])
   const [users, setUsers] = useState<Array<{ id: string; name: string; orgId: string; department: string }>>([])
   const userOrgId = user?.organizationId
@@ -173,7 +173,7 @@ export default function PreviousScorecardsPage() {
       // Build org name map and populate orgs list
       const orgNameMap = new Map<string, string>()
       const orgNameToIdMap = new Map<string, string>() // For matching by company name
-      const orgsList: Array<{ id: string; name: string; hourlyRate?: number }> = []
+      const orgsList: Array<{ id: string; name: string; hourlyRate?: number; departments?: string[] }> = []
       for (const org of orgDocs) {
         const data = org as Record<string, unknown>
         const name = (data.name as string) || "Unknown Organization"
@@ -185,7 +185,10 @@ export default function PreviousScorecardsPage() {
             ? rawHourlyRate
             : Number.parseFloat(String(rawHourlyRate ?? ""))
         const hourlyRate = Number.isFinite(parsedHourlyRate) ? parsedHourlyRate : undefined
-        orgsList.push({ id: org.id, name, hourlyRate })
+        const departments = Array.isArray(data.departments)
+          ? data.departments.filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+          : []
+        orgsList.push({ id: org.id, name, hourlyRate, departments })
       }
       setOrgs(orgsList.sort((a, b) => a.name.localeCompare(b.name)))
 
@@ -230,16 +233,16 @@ export default function PreviousScorecardsPage() {
         const lastName = (data.lastName as string) || ""
         const fullName = `${firstName} ${lastName}`.trim()
         const email = typeof data.email === "string" ? data.email : ""
+        // Determine user's org ID - prefer organizationId field, fallback to company name match
+        const userResolvedOrgId = userOrgIdField || orgNameToIdMap.get(userCompany.toLowerCase()) || ""
 
         contactsById[u.id] = {
           name: fullName || "Unknown",
           email,
           regionOrCohort: dept,
+          organizationId: userResolvedOrgId,
           excludeFromReporting: data.excludeFromReporting === true,
         }
-        
-        // Determine user's org ID - prefer organizationId field, fallback to company name match
-        const userResolvedOrgId = userOrgIdField || orgNameToIdMap.get(userCompany.toLowerCase()) || ""
         
         // Store in userOrgMap for response grouping
         if (userResolvedOrgId) {
