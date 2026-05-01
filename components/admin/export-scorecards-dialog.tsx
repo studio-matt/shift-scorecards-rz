@@ -31,6 +31,7 @@ import {
   COLLECTIONS,
   getDocumentsByIds,
   getResponsesForOrgCompletedBetween,
+  getResponsesForOrgLimited,
 } from "@/lib/firestore"
 import {
   buildScorecardResponsesCsv,
@@ -72,6 +73,7 @@ export interface ExportScorecardsDialogProps {
 
 // Firestore client structured queries max limit is 10,000.
 const RANGE_QUERY_MAX = 10000
+const RANGE_FALLBACK_MAX = 25000
 const MIN_EXPORT_DATE = new Date(2000, 0, 1)
 const MAX_EXPORT_DATE = new Date(2099, 11, 31)
 
@@ -109,6 +111,20 @@ function normalizeExportDateInput(raw: string, previous: string): string {
   if (digits[0] !== "2") return previous
   if (digits.length >= 2 && digits[1] !== "0") return previous
   return formatDateDigits(digits)
+}
+
+function isMissingFirestoreIndexError(error: unknown): boolean {
+  const err = error as { code?: string; message?: string }
+  const message = String(err?.message ?? error ?? "")
+  return err?.code === "failed-precondition" || /requires an index/i.test(message)
+}
+
+function completedAtInRange(
+  row: ReturnType<typeof docToExportResponseRow>,
+  range: { minInclusive: string; maxExclusive: string },
+): boolean {
+  if (!row?.completedAt) return false
+  return row.completedAt >= range.minInclusive && row.completedAt < range.maxExclusive
 }
 
 function ExportDatePickerField({
@@ -151,15 +167,6 @@ function ExportDatePickerField({
               toYear={MAX_EXPORT_DATE.getFullYear()}
               fixedWeeks
               disabled={{ before: MIN_EXPORT_DATE, after: MAX_EXPORT_DATE }}
-              classNames={{
-                table: "w-full border-collapse",
-                head_row: "grid grid-cols-7",
-                head_cell:
-                  "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem] text-center",
-                row: "grid grid-cols-7 mt-2",
-                cell:
-                  "h-9 w-9 text-center text-sm p-0 relative focus-within:relative focus-within:z-20",
-              }}
               onSelect={(date) => {
                 if (date) onChange(formatLocalYmd(date))
               }}
@@ -347,15 +354,25 @@ export function ExportScorecardsDialog({
       }
 
       if (range) {
-        const docs = await getResponsesForOrgCompletedBetween(
-          exportOrgId,
-          range.minInclusive,
-          range.maxExclusive,
-          RANGE_QUERY_MAX,
-        )
+        let docs: Array<{ id: string } & Record<string, unknown>>
+        try {
+          docs = await getResponsesForOrgCompletedBetween(
+            exportOrgId,
+            range.minInclusive,
+            range.maxExclusive,
+            RANGE_QUERY_MAX,
+          )
+        } catch (error) {
+          if (!isMissingFirestoreIndexError(error)) throw error
+          console.warn(
+            "[export-scorecards] completedAt index missing; falling back to capped org read",
+            error,
+          )
+          docs = await getResponsesForOrgLimited(exportOrgId, RANGE_FALLBACK_MAX)
+        }
         for (const d of docs) {
           const row = docToExportResponseRow(d as { id: string } & Record<string, unknown>)
-          if (row) byId.set(row.id, row)
+          if (row && completedAtInRange(row, range)) byId.set(row.id, row)
         }
       }
 
