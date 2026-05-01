@@ -348,7 +348,9 @@ export function ExportScorecardsDialog({
           const docs = await getDocumentsByIds(COLLECTIONS.RESPONSES, uniqueIds)
           for (const d of docs) {
             const row = docToExportResponseRow(d as { id: string } & Record<string, unknown>)
-            if (row && row.organizationId === exportOrgId) byId.set(row.id, row)
+            // Do not filter by response.organizationId here. Buckets are built from profile-resolved org,
+            // but legacy docs may still have a stale/wrong organizationId (exports would drop every row).
+            if (row) byId.set(row.id, row)
           }
         }
       }
@@ -379,6 +381,19 @@ export function ExportScorecardsDialog({
       const responses = [...byId.values()].filter(Boolean) as NonNullable<
         ReturnType<typeof docToExportResponseRow>
       >[]
+
+      if (responses.length === 0) {
+        setError(
+          range && !hasWeeks
+            ? "No completed responses in that date range for this organization in Firestore. Try widening the dates, or use scorecard weeks instead. Note: date-range queries only include responses whose organizationId matches the selected org."
+            : hasWeeks && range
+              ? "No completed responses matched the selected weeks and date range combined. Try widening the date range or adjusting week selection."
+              : "No completed responses matched your filters (drafts and incomplete saves are excluded).",
+        )
+        setBusy(false)
+        return
+      }
+
       const filteredResponses = filterExportResponsesByDepartment(
         responses,
         respondentByUserId,
@@ -387,9 +402,7 @@ export function ExportScorecardsDialog({
 
       if (filteredResponses.length === 0) {
         setError(
-          exportDepartment === "all"
-            ? "No completed responses matched your filters."
-            : "No completed responses matched that organization, department, date, and week filter.",
+          "No responses in the selected department. Set Department to “All departments”, or pick a department that matches respondents’ Region / cohort (profile department).",
         )
         setBusy(false)
         return
