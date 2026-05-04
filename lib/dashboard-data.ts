@@ -1749,15 +1749,24 @@ export interface OrgHoursMetrics {
 // ── Helper: Find time-saving question IDs from templates ──────────────────
 // Returns ALL questions that measure time/hours saved
 // Each question represents hours saved on a different task, so we sum them all
+function addQuestionIdAliases(ids: Set<string>, id: string, index: number) {
+  if (id) ids.add(id)
+  const oneBased = index + 1
+  // Legacy imported/autosaved responses used positional answer keys while templates later changed IDs.
+  ids.add(`q${oneBased}`)
+  ids.add(`sr${oneBased}`)
+}
+
 export async function findTimeSavingQuestionIds(): Promise<string[]> {
   const templates = await fetchTemplates()
-  const ids: string[] = []
+  const ids = new Set<string>()
   
   for (const t of templates) {
-    for (const q of t.questions || []) {
+    for (let index = 0; index < (t.questions || []).length; index++) {
+      const q = t.questions[index]
       // First check for explicit time_saving type
       if (q.type === "time_saving") {
-        ids.push(q.id)
+        addQuestionIdAliases(ids, q.id, index)
         continue
       }
       
@@ -1770,12 +1779,12 @@ export async function findTimeSavingQuestionIds(): Promise<string[]> {
         text.includes("time saving") ||
         text.includes("minutes saved")
       ) {
-        ids.push(q.id)
+        addQuestionIdAliases(ids, q.id, index)
       }
     }
   }
   
-  return ids
+  return [...ids]
 }
 
 // ── Helper: Find time-saving MINUTES question IDs from templates ──────────
@@ -1783,39 +1792,41 @@ export async function findTimeSavingQuestionIds(): Promise<string[]> {
 // Values are in minutes and need to be converted to hours for reporting
 export async function findTimeSavingMinutesQuestionIds(): Promise<string[]> {
   const templates = await fetchTemplates()
-  const ids: string[] = []
+  const ids = new Set<string>()
   
   for (const t of templates) {
-    for (const q of t.questions || []) {
+    for (let index = 0; index < (t.questions || []).length; index++) {
+      const q = t.questions[index]
       if (q.type === "time_saving_minutes") {
-        ids.push(q.id)
+        addQuestionIdAliases(ids, q.id, index)
       }
     }
   }
   
-  return ids
+  return [...ids]
 }
 
 // ── Helper: Find ALL confidence question IDs from templates ─────��──────────
 // Looks for questions with type === "confidence" OR text containing "confidence"
 export async function findConfidenceQuestionIds(): Promise<string[]> {
   const templates = await fetchTemplates()
-  const ids: string[] = []
+  const ids = new Set<string>()
   for (const t of templates) {
-    for (const q of t.questions || []) {
+    for (let index = 0; index < (t.questions || []).length; index++) {
+      const q = t.questions[index]
       // First check for explicit confidence type
       if (q.type === "confidence") {
-        ids.push(q.id)
+        addQuestionIdAliases(ids, q.id, index)
         continue
       }
       // Fallback: Match questions containing "confidence" in text
       const text = (q.text || "").toLowerCase()
       if (text.includes("confidence")) {
-        ids.push(q.id)
+        addQuestionIdAliases(ids, q.id, index)
       }
     }
   }
-  return ids
+  return [...ids]
 }
 
 // Backwards compatibility - returns first confidence question ID
@@ -1879,9 +1890,10 @@ export function computeUserHoursMetrics(
     // Track confidence scores from ALL confidence-type questions
     for (const confId of confidenceIds) {
       const conf = r.answers[confId]
-      if (typeof conf === "number" && conf >= 1 && conf <= 10) {
-        confidenceScores.push(conf)
-        if (isLastMonth) lastMonthConfidenceScores.push(conf)
+      const score = typeof conf === "number" ? conf : Number.parseFloat(String(conf ?? ""))
+      if (Number.isFinite(score) && score >= 1 && score <= 10) {
+        confidenceScores.push(score)
+        if (isLastMonth) lastMonthConfidenceScores.push(score)
       }
     }
   }
