@@ -14,6 +14,7 @@ interface DashboardDateRangeFilterProps {
   endDate?: string
   onChange: (range: { startDate?: string; endDate?: string }) => void
   className?: string
+  label?: string
 }
 
 function dateFromYmd(value?: string): Date | undefined {
@@ -30,11 +31,12 @@ export function DashboardDateRangeFilter({
   endDate,
   onChange,
   className,
+  label = "Responses completed",
 }: DashboardDateRangeFilterProps) {
   return (
     <div className={cn("flex flex-wrap items-end gap-2", className)}>
       <div className="space-y-1">
-        <Label className="text-xs text-muted-foreground">Responses completed</Label>
+        <Label className="text-xs text-muted-foreground">{label}</Label>
         <div className="flex items-center gap-2">
           <Input
             aria-label="Responses completed from"

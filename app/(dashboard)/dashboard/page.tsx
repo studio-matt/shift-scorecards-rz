@@ -118,6 +118,7 @@ import {
 import { loadResponsesForDashboardFallback } from "@/lib/reporting-responses"
 import { Badge } from "@/components/ui/badge"
 import { DashboardDateRangeFilter } from "@/components/dashboard/dashboard-date-range-filter"
+import { Label } from "@/components/ui/label"
 import { dateLikeToIsoString } from "@/lib/date-utils"
 
 import { LoadingSection } from "@/components/ui/section-loader"
@@ -140,6 +141,44 @@ function normalizeResponsesForUser(
   })
 }
 
+type CompletionPreset = "all" | "this-month" | "last-30" | "this-quarter" | "last-quarter" | "ytd" | "custom"
+
+function toYmd(date: Date): string {
+  return date.toISOString().split("T")[0]
+}
+
+function completionPresetRange(preset: CompletionPreset): { startDate?: string; endDate?: string } {
+  const now = new Date()
+  const endDate = toYmd(now)
+
+  switch (preset) {
+    case "this-month":
+      return { startDate: toYmd(new Date(now.getFullYear(), now.getMonth(), 1)), endDate }
+    case "last-30":
+      return { startDate: toYmd(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)), endDate }
+    case "this-quarter": {
+      const quarter = Math.floor(now.getMonth() / 3)
+      return { startDate: toYmd(new Date(now.getFullYear(), quarter * 3, 1)), endDate }
+    }
+    case "last-quarter": {
+      const quarter = Math.floor(now.getMonth() / 3)
+      const start =
+        quarter === 0
+          ? new Date(now.getFullYear() - 1, 9, 1)
+          : new Date(now.getFullYear(), (quarter - 1) * 3, 1)
+      const end =
+        quarter === 0
+          ? new Date(now.getFullYear(), 0, 0)
+          : new Date(now.getFullYear(), quarter * 3, 0)
+      return { startDate: toYmd(start), endDate: toYmd(end) }
+    }
+    case "ytd":
+      return { startDate: toYmd(new Date(now.getFullYear(), 0, 1)), endDate }
+    default:
+      return {}
+  }
+}
+
 export default function DashboardPage() {
   const { isAdmin, isSuperAdmin, isCompanyAdmin, user } = useAuth()
   const { setSelectedOrgColor, setSelectedOrgButtonColor, setSelectedOrgButtonFontColor, setSelectedOrgAccentColor } = useBackground()
@@ -147,6 +186,7 @@ export default function DashboardPage() {
   // Admin filter state
   const [selectedOrg, setSelectedOrg] = useState("all")
   const [selectedDept, setSelectedDept] = useState("all")
+  const [completionPreset, setCompletionPreset] = useState<CompletionPreset>("all")
   const [completionStartDate, setCompletionStartDate] = useState<string | undefined>()
   const [completionEndDate, setCompletionEndDate] = useState<string | undefined>()
   const [adminPeriodLabel, setAdminPeriodLabel] = useState<string>("Latest scorecard")
@@ -199,6 +239,20 @@ export default function DashboardPage() {
   const completionFilterLabel = useMemo(
     () => completionDateLabel(completionDateRange),
     [completionDateRange],
+  )
+  const handleCompletionPresetChange = useCallback((preset: CompletionPreset) => {
+    const range = completionPresetRange(preset)
+    setCompletionPreset(preset)
+    setCompletionStartDate(range.startDate)
+    setCompletionEndDate(range.endDate)
+  }, [])
+  const handleCompletionDateRangeChange = useCallback(
+    ({ startDate, endDate }: { startDate?: string; endDate?: string }) => {
+      setCompletionPreset(startDate || endDate ? "custom" : "all")
+      setCompletionStartDate(startDate)
+      setCompletionEndDate(endDate)
+    },
+    [],
   )
 
   // Handle marking a goal as complete
@@ -1007,61 +1061,86 @@ export default function DashboardPage() {
           </div>
 
           {/* Filter bar */}
-          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-3">
+          <div className="mt-4 flex flex-wrap items-end gap-3 rounded-lg border border-border bg-card p-3">
             {/* Company admin sees locked org, super admin can select */}
             {isCompanyAdmin ? (
-              <div className="flex h-10 w-48 items-center rounded-md border border-input bg-muted px-3 text-sm">
-                {companyAdminOrgName}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Company</Label>
+                <div className="flex h-10 w-48 items-center rounded-md border border-input bg-muted px-3 text-sm">
+                  {companyAdminOrgName}
+                </div>
               </div>
             ) : (
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Company</Label>
+                <Select
+                  value={selectedOrg}
+                  onValueChange={(val) => {
+                    setSelectedOrg(val)
+                    setSelectedDept("all")
+                  }}
+                >
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="All Companies" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Companies</SelectItem>
+                    {orgs.map((org) => (
+                      <SelectItem key={org.id} value={org.id}>
+                        {org.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Department</Label>
               <Select
-                value={selectedOrg}
-                onValueChange={(val) => {
-                  setSelectedOrg(val)
-                  setSelectedDept("all")
-                }}
+                value={selectedDept}
+                onValueChange={setSelectedDept}
               >
                 <SelectTrigger className="w-48">
-                  <SelectValue placeholder="All Companies" />
+                  <SelectValue placeholder="All Departments" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Companies</SelectItem>
-                  {orgs.map((org) => (
-                    <SelectItem key={org.id} value={org.id}>
-                      {org.name}
+                  <SelectItem value="all">All Departments</SelectItem>
+                  {departments.filter(Boolean).map((dept) => (
+                    <SelectItem key={dept} value={dept}>
+                      {dept}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            )}
+            </div>
 
-            <Select
-              value={selectedDept}
-              onValueChange={setSelectedDept}
-            >
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="All Departments" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Departments</SelectItem>
-                {departments.filter(Boolean).map((dept) => (
-                  <SelectItem key={dept} value={dept}>
-                    {dept}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Completed</Label>
+              <Select value={completionPreset} onValueChange={(value) => handleCompletionPresetChange(value as CompletionPreset)}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Completion Window" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Responses</SelectItem>
+                  <SelectItem value="this-month">This Month</SelectItem>
+                  <SelectItem value="last-30">Last 30 Days</SelectItem>
+                  <SelectItem value="this-quarter">This Quarter</SelectItem>
+                  <SelectItem value="last-quarter">Last Quarter</SelectItem>
+                  <SelectItem value="ytd">Year to Date</SelectItem>
+                  <SelectItem value="custom">Custom Dates</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
             <DashboardDateRangeFilter
               startDate={completionStartDate}
               endDate={completionEndDate}
-              onChange={({ startDate, endDate }) => {
-                setCompletionStartDate(startDate)
-                setCompletionEndDate(endDate)
-              }}
+              onChange={handleCompletionDateRangeChange}
+              label="Custom dates"
             />
 
-            <Badge variant="secondary" className="ml-auto text-xs">
+            <Badge variant="secondary" className="mb-2 ml-auto max-w-full text-xs">
               {filterLabel} &middot; {adminPeriodLabel} &middot; {completionFilterLabel}
             </Badge>
           </div>
@@ -1229,16 +1308,31 @@ export default function DashboardPage() {
         <p className="mt-1 text-muted-foreground">
           Track your AI adoption journey, scorecard progress, and personal performance
         </p>
-        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-3">
+        <div className="mt-4 flex flex-wrap items-end gap-3 rounded-lg border border-border bg-card p-3">
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Completed</Label>
+            <Select value={completionPreset} onValueChange={(value) => handleCompletionPresetChange(value as CompletionPreset)}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Completion Window" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Responses</SelectItem>
+                <SelectItem value="this-month">This Month</SelectItem>
+                <SelectItem value="last-30">Last 30 Days</SelectItem>
+                <SelectItem value="this-quarter">This Quarter</SelectItem>
+                <SelectItem value="last-quarter">Last Quarter</SelectItem>
+                <SelectItem value="ytd">Year to Date</SelectItem>
+                <SelectItem value="custom">Custom Dates</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <DashboardDateRangeFilter
             startDate={completionStartDate}
             endDate={completionEndDate}
-            onChange={({ startDate, endDate }) => {
-              setCompletionStartDate(startDate)
-              setCompletionEndDate(endDate)
-            }}
+            onChange={handleCompletionDateRangeChange}
+            label="Custom dates"
           />
-          <Badge variant="secondary" className="ml-auto text-xs">
+          <Badge variant="secondary" className="mb-2 ml-auto max-w-full text-xs">
             {personalPeriodLabel} &middot; {completionFilterLabel}
           </Badge>
         </div>
