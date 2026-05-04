@@ -51,6 +51,7 @@ import type {
 
 // ── Productivity Hero Section (3 hero cards matching reference design) ──
 export interface ProductivityHeroData {
+  periodLabel?: string
   // This month
   productivityPercent: number      // (weeklyAvgHours / 40) * 100
   lastMonthProductivity: number    // For comparison
@@ -114,6 +115,9 @@ export function ProductivityHero({ data }: { data: ProductivityHeroData }) {
             <p className="text-[11px] font-semibold uppercase tracking-wider text-indigo-300">
               Avg Productivity
             </p>
+            {data.periodLabel && (
+              <p className="mt-1 text-[10px] text-indigo-300/60">{data.periodLabel}</p>
+            )}
             <div className="mt-3 flex items-baseline gap-3">
               <span className="text-4xl font-bold tracking-tight text-white">
                 {data.productivityPercent.toFixed(1)}%
@@ -147,6 +151,9 @@ export function ProductivityHero({ data }: { data: ProductivityHeroData }) {
             <p className="text-[11px] font-semibold uppercase tracking-wider text-cyan-300">
               Hours Saved / Month
             </p>
+            {data.periodLabel && (
+              <p className="mt-1 text-[10px] text-cyan-300/60">{data.periodLabel}</p>
+            )}
             <div className="mt-3 flex items-baseline gap-3">
               <span className="text-4xl font-bold tracking-tight text-white">
                 {formatHours(data.monthlyHours)}
@@ -175,6 +182,9 @@ export function ProductivityHero({ data }: { data: ProductivityHeroData }) {
             <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-300">
               Value Created / Month
             </p>
+            {data.periodLabel && (
+              <p className="mt-1 text-[10px] text-emerald-300/60">{data.periodLabel}</p>
+            )}
             <div className="mt-3 flex items-baseline gap-3">
               <span className="text-4xl font-bold tracking-tight text-white">
                 {formatValue(data.monthlyValue)}

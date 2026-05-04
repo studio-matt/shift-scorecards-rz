@@ -1202,24 +1202,60 @@ export default function DashboardPage() {
   
   // Build ProductivityHero data from hours metrics
   const totalResponses = personalStreak?.totalResponses ?? 0
-  const productivityHeroData: ProductivityHeroData | null = userHoursMetrics ? {
-    productivityPercent: userHoursMetrics.productivityPercent,
-    lastMonthProductivity: userHoursMetrics.lastMonthHours > 0 
-      ? ((userHoursMetrics.lastMonthHours / 4) / 40) * 100  // Weekly avg from last month
-      : 0,
-    monthlyHours: userHoursMetrics.thisMonthHours,
-    lastMonthHours: userHoursMetrics.lastMonthHours,
-    monthlyValue: Math.round(userHoursMetrics.thisMonthHours * effectiveHourlyRate),
-    lastMonthValue: Math.round(userHoursMetrics.lastMonthHours * effectiveHourlyRate),
-    hourlyRate: effectiveHourlyRate,
-    fteEquivalent: userHoursMetrics.thisMonthHours / 160,
-    annualRunRate: userHoursMetrics.thisMonthHours * 12,
-    annualValue: Math.round(userHoursMetrics.thisMonthHours * effectiveHourlyRate * 12),
-    confidenceScore: userHoursMetrics.confidenceScore,
-    lastMonthConfidence: userHoursMetrics.lastMonthConfidence,
-    thisMonthResponses: userHoursMetrics.thisMonthResponses,
-    lastMonthResponses: userHoursMetrics.lastMonthResponses,
-  } : null
+  const shouldShowLatestCompletedMonth =
+    Boolean(userHoursMetrics) &&
+    userHoursMetrics!.thisMonthResponses === 0 &&
+    userHoursMetrics!.lastMonthResponses > 0
+  const latestCompletedMonthName = new Date(new Date().setMonth(new Date().getMonth() - 1)).toLocaleString(
+    "default",
+    { month: "short" },
+  )
+  const displayedUserHoursMetrics: UserHoursMetrics | null =
+    userHoursMetrics && shouldShowLatestCompletedMonth
+      ? {
+          ...userHoursMetrics,
+          thisMonthHours: userHoursMetrics.lastMonthHours,
+          lastMonthHours: userHoursMetrics.lastMonthHours,
+          monthOverMonthChange: 0,
+          monthOverMonthPercent: 0,
+          weeklyAvgHours: Math.round((userHoursMetrics.lastMonthHours / 4) * 10) / 10,
+          productivityPercent: Math.round(((userHoursMetrics.lastMonthHours / 4) / 40) * 1000) / 10,
+          thisMonthResponses: userHoursMetrics.lastMonthResponses,
+        }
+      : userHoursMetrics
+  const productivityHeroData: ProductivityHeroData | null = (() => {
+    if (!userHoursMetrics || !displayedUserHoursMetrics) return null
+    const monthlyHours = displayedUserHoursMetrics.thisMonthHours
+    const monthlyValue = Math.round(monthlyHours * effectiveHourlyRate)
+    const productivityPercent = displayedUserHoursMetrics.productivityPercent
+    const comparisonHours = shouldShowLatestCompletedMonth ? monthlyHours : userHoursMetrics.lastMonthHours
+    const comparisonProductivity = shouldShowLatestCompletedMonth
+      ? productivityPercent
+      : userHoursMetrics.lastMonthHours > 0
+        ? ((userHoursMetrics.lastMonthHours / 4) / 40) * 100
+        : 0
+    const comparisonValue = shouldShowLatestCompletedMonth
+      ? monthlyValue
+      : Math.round(userHoursMetrics.lastMonthHours * effectiveHourlyRate)
+
+    return {
+      periodLabel: shouldShowLatestCompletedMonth ? `${latestCompletedMonthName} results` : undefined,
+      productivityPercent,
+      lastMonthProductivity: comparisonProductivity,
+      monthlyHours,
+      lastMonthHours: comparisonHours,
+      monthlyValue,
+      lastMonthValue: comparisonValue,
+      hourlyRate: effectiveHourlyRate,
+      fteEquivalent: monthlyHours / 160,
+      annualRunRate: monthlyHours * 12,
+      annualValue: Math.round(monthlyHours * effectiveHourlyRate * 12),
+      confidenceScore: displayedUserHoursMetrics.confidenceScore,
+      lastMonthConfidence: displayedUserHoursMetrics.lastMonthConfidence,
+      thisMonthResponses: displayedUserHoursMetrics.thisMonthResponses,
+      lastMonthResponses: displayedUserHoursMetrics.lastMonthResponses,
+    }
+  })()
 
   // Calculate months active for tier system
   const monthsActive = Math.ceil((personalStreak?.totalWeeks ?? 0) / 4)
@@ -1326,14 +1362,14 @@ export default function DashboardPage() {
           <StatCards
             avgScore={userHoursMetrics?.confidenceScore ?? 0}
             fieldAverage={targets.fieldAverage}
-            lastMonthAvg={userHoursMetrics?.lastMonthConfidence ?? 0}
+            lastMonthAvg={displayedUserHoursMetrics?.lastMonthConfidence ?? 0}
             myGoal={8.0}
             streak={personalStreak?.currentStreak ?? 0}
             maxStreak={personalStreak?.maxStreak ?? 0}
             completedSections={personalStreak?.totalResponses ?? 0}
             totalSections={Math.max(personalStreak?.totalWeeks ?? 1, 1)}
             percentile={personalBenchmark?.percentile ?? 0}
-            hoursMetrics={userHoursMetrics}
+            hoursMetrics={displayedUserHoursMetrics}
             hourlyRate={effectiveHourlyRate}
           />
         </LoadingSection>
