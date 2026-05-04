@@ -52,18 +52,18 @@ import type {
 // ── Productivity Hero Section (3 hero cards matching reference design) ──
 export interface ProductivityHeroData {
   periodLabel?: string
-  // This month
+  // Current scorecard period
   productivityPercent: number      // (weeklyAvgHours / 40) * 100
   lastMonthProductivity: number    // For comparison
-  monthlyHours: number             // Total hours saved this month
+  monthlyHours: number             // Total hours saved this scorecard
   lastMonthHours: number           // For comparison
   monthlyValue: number             // hours * hourlyRate
   lastMonthValue: number           // For comparison
   // Additional context
   hourlyRate: number
-  fteEquivalent: number            // monthlyHours / 160
-  annualRunRate: number            // monthlyHours * 12
-  annualValue: number              // monthlyValue * 12
+  fteEquivalent: number            // scorecard hours / 40
+  annualRunRate: number            // scorecard hours * 52
+  annualValue: number              // scorecard value * 52
   perPersonValue?: number          // For org view
   activeParticipants?: number      // For org view
   // Confidence
@@ -75,7 +75,7 @@ export interface ProductivityHeroData {
 }
 
 export function ProductivityHero({ data }: { data: ProductivityHeroData }) {
-  // Calculate month-over-month changes
+  // Calculate scorecard-over-scorecard changes
   const productivityChange = data.productivityPercent - data.lastMonthProductivity
   const hoursChange = data.monthlyHours - data.lastMonthHours
   const hoursChangePercent = data.lastMonthHours > 0 
@@ -100,10 +100,6 @@ export function ProductivityHero({ data }: { data: ProductivityHeroData }) {
     return hrs.toLocaleString(undefined, { maximumFractionDigits: 1 })
   }
 
-  // Get current month name
-  const currentMonth = new Date().toLocaleString("default", { month: "long" })
-  const lastMonth = new Date(new Date().setMonth(new Date().getMonth() - 1)).toLocaleString("default", { month: "short" })
-
   return (
     <div className="flex flex-col gap-4">
       {/* Hero Cards Row */}
@@ -127,7 +123,7 @@ export function ProductivityHero({ data }: { data: ProductivityHeroData }) {
                   <span className={`text-sm font-semibold ${productivityChange >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                     {productivityChange >= 0 ? "+" : ""}{productivityChange.toFixed(1)}pp
                   </span>
-                  <span className="text-[10px] text-indigo-300/70">from {lastMonth}</span>
+                  <span className="text-[10px] text-indigo-300/70">vs previous scorecard</span>
                 </div>
               )}
             </div>
@@ -144,12 +140,12 @@ export function ProductivityHero({ data }: { data: ProductivityHeroData }) {
           </CardContent>
         </Card>
 
-        {/* Card 2: Hours Saved / Month */}
+        {/* Card 2: Hours Saved / Scorecard */}
         <Card className="relative overflow-hidden border-cyan-500/30 bg-gradient-to-br from-cyan-600/20 via-teal-600/15 to-card">
           <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-cyan-500/20 blur-2xl" />
           <CardContent className="relative p-5">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-cyan-300">
-              Hours Saved / Month
+              Hours Saved / Scorecard
             </p>
             {data.periodLabel && (
               <p className="mt-1 text-[10px] text-cyan-300/60">{data.periodLabel}</p>
@@ -164,7 +160,7 @@ export function ProductivityHero({ data }: { data: ProductivityHeroData }) {
                     {hoursChange >= 0 ? "+" : ""}{formatHours(hoursChange)}
                   </span>
                   <span className="text-[10px] text-cyan-300/70">
-                    {hoursChangePercent >= 0 ? "+" : ""}{hoursChangePercent.toFixed(1)}% from {lastMonth}
+                    {hoursChangePercent >= 0 ? "+" : ""}{hoursChangePercent.toFixed(1)}% vs previous scorecard
                   </span>
                 </div>
               )}
@@ -175,12 +171,12 @@ export function ProductivityHero({ data }: { data: ProductivityHeroData }) {
           </CardContent>
         </Card>
 
-        {/* Card 3: Value Created / Month */}
+        {/* Card 3: Value Created / Scorecard */}
         <Card className="relative overflow-hidden border-emerald-500/30 bg-gradient-to-br from-emerald-600/20 via-green-600/15 to-card">
           <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-emerald-500/20 blur-2xl" />
           <CardContent className="relative p-5">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-300">
-              Value Created / Month
+              Value Created / Scorecard
             </p>
             {data.periodLabel && (
               <p className="mt-1 text-[10px] text-emerald-300/60">{data.periodLabel}</p>
@@ -596,10 +592,10 @@ export function PersonalBenchmarkCard({
       <CardHeader className="relative pb-2">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
           <Clock className="h-4 w-4 text-primary" />
-          Your Monthly Progress in Context
+          Your Scorecard Progress in Context
         </CardTitle>
         <CardDescription className="text-[11px]">
-          Hours saved month over month comparison
+          Hours saved compared with the previous scorecard
         </CardDescription>
       </CardHeader>
       <CardContent className="relative flex flex-col gap-4">
@@ -609,7 +605,7 @@ export function PersonalBenchmarkCard({
             <span className="text-xl font-bold text-primary">{formatHours(currentHours)}</span>
           </div>
           <div className="flex-1">
-            <p className="text-sm font-semibold text-foreground">This Month</p>
+            <p className="text-sm font-semibold text-foreground">Current Scorecard</p>
             <div className="mt-1 flex items-center gap-2">
               <VelocityIcon className={`h-3.5 w-3.5 ${velocityColor}`} />
               <span className={`text-xs font-medium ${velocityColor}`}>
@@ -623,12 +619,12 @@ export function PersonalBenchmarkCard({
           </div>
         </div>
 
-        {/* Month over month comparison */}
+        {/* Scorecard-over-scorecard comparison */}
         <div className="flex flex-col gap-2">
           <div className="rounded-md border border-border px-3 py-2">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-foreground">Last Month</p>
+                <p className="text-xs font-medium text-foreground">Previous Scorecard</p>
                 <p className="text-[10px] text-muted-foreground">Previous period hours</p>
               </div>
               <div className="flex items-center gap-2">
@@ -689,7 +685,7 @@ export function HoursSavedCard({
         <div className="flex items-end gap-4">
           <div>
             <p className="text-3xl font-bold text-foreground">{hoursSaved}<span className="text-lg text-muted-foreground"> hrs</span></p>
-            <p className="text-xs text-muted-foreground">this quarter</p>
+            <p className="text-xs text-muted-foreground">for completed scorecards</p>
           </div>
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-800 dark:bg-emerald-950/30">
             <div className="flex items-center gap-1">
@@ -737,7 +733,7 @@ export function HighFivesReceivedCard({
         <div>
           <p className="text-2xl font-bold text-foreground">{count}</p>
           <p className="text-xs text-muted-foreground">
-            High Fives received this month
+            High Fives received recently
           </p>
           {recentFrom && recentFrom.length > 0 && (
             <p className="mt-0.5 text-[10px] text-muted-foreground">

@@ -78,7 +78,7 @@ export function MVPSpotlight({ performer, topPerformers = [] }: { performer: Top
             <Trophy className="h-4 w-4 text-primary" />
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-primary">This Month{"'"}s Top Performers</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-primary">Top Performers This Scorecard</p>
           </div>
         </div>
         

@@ -39,7 +39,7 @@ const METRIC_EXPLANATIONS = {
   totalHoursSaved: (
     <div className="space-y-1">
       <p className="font-semibold">Total Hours Saved</p>
-      <p>Sum of all time savings reported by employees this month.</p>
+      <p>Sum of all time savings reported by employees for the selected scorecard period.</p>
       <ul className="list-disc pl-4 space-y-0.5">
         <li>Collected from "hours saved" questions in scorecards</li>
         <li>Aggregated across all participants</li>
@@ -81,7 +81,7 @@ const METRIC_EXPLANATIONS = {
   activeParticipants: (
     <div className="space-y-1">
       <p className="font-semibold">Active Participants</p>
-      <p>Number of unique users who submitted at least one scorecard this month.</p>
+      <p>Number of unique users who submitted at least one scorecard in the selected scorecard period.</p>
     </div>
   ),
   completionRate: (
@@ -250,7 +250,7 @@ export function StatCards({
               <p className="text-sm font-medium leading-snug text-muted-foreground">Confidence</p>
               <p className="text-2xl font-bold text-foreground">{confidenceScore.toFixed(1)}</p>
               <p className={`mt-1 text-xs ${confidenceChange >= 0 ? "text-emerald-400" : "text-amber-400"}`}>
-                {confidenceChange >= 0 ? "+" : ""}{confidenceChange.toFixed(1)} vs last month
+                {confidenceChange >= 0 ? "+" : ""}{confidenceChange.toFixed(1)} vs previous scorecard
               </p>
             </div>
           </CardContent>
@@ -326,13 +326,13 @@ export function AdminStatCards({ data: s, targets, hoursMetrics, hourlyRate = 75
 
   // Helper to format change text - show "First data" if no previous data exists
   const formatHoursChange = (change: number, lastMonth: number) => {
-    // If last month was 0, this is first data or no comparison available
+    // If previous scorecard was 0, this is first data or no comparison available.
     if (lastMonth === 0) {
       return "First data this period"
     }
     return change >= 0 
-      ? `+${formatHours(change)} from last month`
-      : `${formatHours(change)} from last month`
+      ? `+${formatHours(change)} vs previous scorecard`
+      : `${formatHours(change)} vs previous scorecard`
   }
   
   const formatConfidenceChange = (change: number, lastMonth: number) => {
@@ -340,8 +340,8 @@ export function AdminStatCards({ data: s, targets, hoursMetrics, hourlyRate = 75
       return "First data this period"
     }
     return change >= 0 
-      ? `+${change.toFixed(1)} from last month`
-      : `${change.toFixed(1)} from last month`
+      ? `+${change.toFixed(1)} vs previous scorecard`
+      : `${change.toFixed(1)} vs previous scorecard`
   }
 
   // Hours-based cards when metrics available
@@ -363,7 +363,7 @@ export function AdminStatCards({ data: s, targets, hoursMetrics, hourlyRate = 75
   
   const adminCards = hoursMetrics ? [
     {
-      label: "Hours Saved This Period",
+      label: "Hours Saved / Scorecard",
       value: formatHours(h.monthlyHours ?? 0),
       change: formatHoursChange(h.monthOverMonthChange ?? 0, h.lastMonthHours ?? 0),
       icon: Clock,
@@ -397,7 +397,7 @@ export function AdminStatCards({ data: s, targets, hoursMetrics, hourlyRate = 75
     {
       label: "Active Participants",
       value: (h.activeParticipants ?? 0).toLocaleString(),
-      change: `${h.thisMonthResponses ?? 0} scorecards this month`,
+      change: `${h.thisMonthResponses ?? 0} scorecards in period`,
       icon: Users,
       positive: true,
       explanation: METRIC_EXPLANATIONS.activeParticipants,

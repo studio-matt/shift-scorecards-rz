@@ -71,8 +71,8 @@ import {
   findTimeSavingQuestionIds,
   findTimeSavingMinutesQuestionIds,
   findConfidenceQuestionIds,
-  computeUserHoursMetrics,
-  computeOrgHoursMetrics,
+  computeUserScorecardPeriodHoursMetrics,
+  computeOrgScorecardPeriodHoursMetrics,
   computeWeeklyHoursTrend,
   type AdminStats,
   type MostImprovedEntry,
@@ -91,6 +91,10 @@ import {
   type RawResponse,
 } from "@/lib/dashboard-data"
 import {
+  completionDateLabel,
+  selectScorecardPeriods,
+} from "@/lib/dashboard-scorecard-periods"
+import {
   aggregateDocsToWeeklyHoursTrend,
   aggregateDocsToWeeklyTrend,
   adminStatsFromAggregates,
@@ -107,13 +111,13 @@ import type {
   QuestionResult,
 } from "@/lib/types"
 import {
-  getAggregatesForRange,
   sumAggregates,
   getDepartmentPerformanceFromAggregates,
   getTopPerformersFromAggregates,
 } from "@/lib/aggregates"
 import { loadResponsesForDashboardFallback } from "@/lib/reporting-responses"
 import { Badge } from "@/components/ui/badge"
+import { DashboardDateRangeFilter } from "@/components/dashboard/dashboard-date-range-filter"
 import { dateLikeToIsoString } from "@/lib/date-utils"
 
 import { LoadingSection } from "@/components/ui/section-loader"
@@ -143,7 +147,10 @@ export default function DashboardPage() {
   // Admin filter state
   const [selectedOrg, setSelectedOrg] = useState("all")
   const [selectedDept, setSelectedDept] = useState("all")
-  const [timePeriod, setTimePeriod] = useState("this-month") // Default to monthly since scorecards are monthly
+  const [completionStartDate, setCompletionStartDate] = useState<string | undefined>()
+  const [completionEndDate, setCompletionEndDate] = useState<string | undefined>()
+  const [adminPeriodLabel, setAdminPeriodLabel] = useState<string>("Latest scorecard")
+  const [personalPeriodLabel, setPersonalPeriodLabel] = useState<string>("Latest scorecard")
 
   // Data state
   const [orgs, setOrgs] = useState<Organization[]>([])
@@ -185,6 +192,15 @@ export default function DashboardPage() {
   const [userGoals, setUserGoals] = useState<GoalEntry[]>([])
   const [orgUserDepartments, setOrgUserDepartments] = useState<string[]>([]) // Departments from users in selected org
 
+  const completionDateRange = useMemo(
+    () => ({ startDate: completionStartDate, endDate: completionEndDate }),
+    [completionStartDate, completionEndDate],
+  )
+  const completionFilterLabel = useMemo(
+    () => completionDateLabel(completionDateRange),
+    [completionDateRange],
+  )
+
   // Handle marking a goal as complete
   const handleMarkGoalComplete = useCallback((goalId: string) => {
     setUserGoals(prev => prev.map(g => 
@@ -216,79 +232,6 @@ export default function DashboardPage() {
     }
   }, [user?.id])
 
-  // Helper to filter responses by time period
-  const filterByTimePeriod = useCallback((responses: RawResponse[], period: string) => {
-    const now = new Date()
-    let startDate: Date
-    
-    switch (period) {
-      case "this-month": {
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-        break
-      }
-      case "last-30": {
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-        break
-      }
-      case "this-quarter": {
-        const quarter = Math.floor(now.getMonth() / 3)
-        startDate = new Date(now.getFullYear(), quarter * 3, 1)
-        break
-      }
-      case "last-quarter": {
-        const quarter = Math.floor(now.getMonth() / 3)
-        const lastQuarterStart = quarter === 0 
-          ? new Date(now.getFullYear() - 1, 9, 1)  // Q4 of last year
-          : new Date(now.getFullYear(), (quarter - 1) * 3, 1)
-        const lastQuarterEnd = quarter === 0
-          ? new Date(now.getFullYear(), 0, 1)
-          : new Date(now.getFullYear(), quarter * 3, 1)
-        return responses.filter((r) => {
-          const date = new Date(r.completedAt)
-          return date >= lastQuarterStart && date < lastQuarterEnd
-        })
-      }
-      case "ytd": {
-        startDate = new Date(now.getFullYear(), 0, 1)
-        break
-      }
-      default:
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1) // Default to this month
-    }
-    
-    return responses.filter((r) => new Date(r.completedAt) >= startDate)
-  }, [])
-
-  // Helper to calculate date range based on time period
-  const getDateRange = useCallback((period: string): { startDate: string; endDate: string } => {
-    const now = new Date()
-    const endDate = now.toISOString().split('T')[0]
-    let startDate: Date
-    
-    switch (period) {
-      case "this-week":
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-        break
-      case "this-month":
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-        break
-      case "last-30":
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-        break
-      case "this-quarter":
-        const quarter = Math.floor(now.getMonth() / 3)
-        startDate = new Date(now.getFullYear(), quarter * 3, 1)
-        break
-      case "ytd":
-        startDate = new Date(now.getFullYear(), 0, 1)
-        break
-      default:
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-    }
-    
-    return { startDate: startDate.toISOString().split('T')[0], endDate }
-  }, [])
-
   const loadData = useCallback(async () => {
     // Don't load data until selectedOrg is properly set for non-super-admin users
     // This prevents showing data from all orgs before the user's org is determined
@@ -304,8 +247,8 @@ export default function DashboardPage() {
     setLoadingQuestions(true)
     setLoadingPersonal(true)
     
-    // Get date range for current time period
-    const { startDate, endDate } = getDateRange(timePeriod)
+    const startDate = completionStartDate ?? "1970-01-01"
+    const endDate = completionEndDate ?? new Date().toISOString().split("T")[0]
 
     // Firestore aggregate queries treat missing org as global "all". Coerce dropdown state to an
     // explicit "all" or a non-empty org id so org filters never accidentally roll up to all tenants.
@@ -382,11 +325,22 @@ export default function DashboardPage() {
         const isCompleted = (r: RawResponse) =>
           (r as unknown as { status?: string }).status === "completed" || Boolean(r.completedAt)
         const myCompleted = userRaw.filter(isCompleted)
+        const userPeriods = selectScorecardPeriods(myCompleted, completionDateRange)
+        setPersonalPeriodLabel(userPeriods.currentPeriod?.label ?? "No completed scorecard")
 
-        setUserHoursMetrics(computeUserHoursMetrics(myCompleted, user.id, timeSavingIds, confidenceIds))
-        setPersonalStreak(computePersonalStreak(myCompleted, user.id))
-        setPersonalTrend(computePersonalTrend(myCompleted, user.id))
-        setPersonalBenchmark(computePersonalBenchmark(myCompleted, user.id))
+        setUserHoursMetrics(
+          computeUserScorecardPeriodHoursMetrics(
+            userPeriods.currentResponses,
+            userPeriods.previousResponses,
+            userPeriods.eligibleResponses,
+            user.id,
+            timeSavingIds,
+            confidenceIds,
+          ),
+        )
+        setPersonalStreak(computePersonalStreak(userPeriods.eligibleResponses, user.id))
+        setPersonalTrend(computePersonalTrend(userPeriods.eligibleResponses, user.id))
+        setPersonalBenchmark(computePersonalBenchmark(userPeriods.eligibleResponses, user.id))
 
         const savedStatuses = (userDoc as Record<string, unknown>)?.goalStatuses as
           | Record<string, { status: string }>
@@ -416,7 +370,7 @@ export default function DashboardPage() {
         }
 
         const extractedGoals: GoalEntry[] = []
-        for (const response of myCompleted) {
+        for (const response of userPeriods.currentResponses) {
           const responseId =
             (response as unknown as { id: string }).id || `${response.userId}-${response.completedAt}`
           const template = templateMap.get(response.templateId)
@@ -449,8 +403,8 @@ export default function DashboardPage() {
         setUserGoals(extractedGoals.slice(0, 10))
 
         const { computeUserQuestionResults } = await import("@/lib/dashboard-data")
-        setUserQuestionResults(await computeUserQuestionResults(myCompleted))
-        setRecentScorecards(await computeRecentScorecards(myCompleted))
+        setUserQuestionResults(await computeUserQuestionResults(userPeriods.currentResponses))
+        setRecentScorecards(await computeRecentScorecards(userPeriods.eligibleResponses))
         setLoadingPersonal(false)
         return
       }
@@ -467,15 +421,8 @@ export default function DashboardPage() {
         getDocuments(COLLECTIONS.USERS),
       ])
 
-      const orgLevelDailies = await getAggregatesForRange({
-        startDate,
-        endDate,
-        organizationId: aggregateOrgScope,
-        department: aggregateDeptScope,
-        userId: "all",
-      })
-
-      const aggregateSummed = orgLevelDailies.length ? sumAggregates(orgLevelDailies) : null
+      const orgLevelDailies: never[] = []
+      const aggregateSummed: ReturnType<typeof sumAggregates> | null = null
       
       if (targetsDoc) {
         const t = targetsDoc as Record<string, unknown>
@@ -620,12 +567,22 @@ export default function DashboardPage() {
 
           const orgCompleted = orgSliceRaw.filter(isCompleted)
 
-          const uhm = computeUserHoursMetrics(myCompleted, user.id, timeSavingIds, confidenceIds)
+          const userPeriods = selectScorecardPeriods(myCompleted, completionDateRange)
+          const orgPeriods = selectScorecardPeriods(orgCompleted, completionDateRange)
+          setPersonalPeriodLabel(userPeriods.currentPeriod?.label ?? "No completed scorecard")
+          const uhm = computeUserScorecardPeriodHoursMetrics(
+            userPeriods.currentResponses,
+            userPeriods.previousResponses,
+            userPeriods.eligibleResponses,
+            user.id,
+            timeSavingIds,
+            confidenceIds,
+          )
           setUserHoursMetrics(uhm)
-          setPersonalStreak(computePersonalStreak(orgCompleted, user.id))
-          setPersonalTrend(computePersonalTrend(orgCompleted, user.id))
+          setPersonalStreak(computePersonalStreak(orgPeriods.eligibleResponses, user.id))
+          setPersonalTrend(computePersonalTrend(orgPeriods.eligibleResponses, user.id))
           setPersonalBenchmark(
-            computePersonalBenchmark(orgCompleted, user.id) ??
+            computePersonalBenchmark(orgPeriods.eligibleResponses, user.id) ??
               personalBenchmarkApprox({
                 myAvgConfidence: uhm.confidenceScore,
                 orgAvgConfidence: cohortAvg,
@@ -663,7 +620,7 @@ export default function DashboardPage() {
           }
 
           const extractedGoals: GoalEntry[] = []
-          for (const response of myCompleted) {
+          for (const response of userPeriods.currentResponses) {
             const responseId =
               (response as unknown as { id: string }).id || `${response.userId}-${response.completedAt}`
             const template = templateMap.get(response.templateId)
@@ -697,9 +654,9 @@ export default function DashboardPage() {
           setUserGoals(extractedGoals.slice(0, 10))
 
           const { computeUserQuestionResults } = await import("@/lib/dashboard-data")
-          const userQResults = await computeUserQuestionResults(myCompleted)
+          const userQResults = await computeUserQuestionResults(userPeriods.currentResponses)
           setUserQuestionResults(userQResults)
-          setRecentScorecards(await computeRecentScorecards(myCompleted))
+          setRecentScorecards(await computeRecentScorecards(userPeriods.eligibleResponses))
 
           setLoadingPersonal(false)
         } else {
@@ -720,14 +677,16 @@ export default function DashboardPage() {
           aggregateOrgScope,
           aggregateDeptScope,
           user?.id,
+          { lookbackDays: 3650 },
         )
-        
-        // Filter responses by selected time period
-        const responses = filterByTimePeriod(allResponses, timePeriod)
+        const periodSelection = selectScorecardPeriods(allResponses, completionDateRange)
+        const responses = periodSelection.currentResponses
+        const previousResponses = periodSelection.previousResponses
+        setAdminPeriodLabel(periodSelection.currentPeriod?.label ?? "No completed scorecard")
 
         // Compute department performance from ALL responses (unfiltered by time) for dropdown population
-        // But use time-filtered responses for the actual metrics display
-        const deptFromAll = computeDepartmentPerformance(allResponses)
+        // But use scorecard-period responses for the actual metrics display.
+        const deptFromAll = computeDepartmentPerformance(periodSelection.eligibleResponses)
         
         // Compute all aggregations in parallel using time-filtered responses
         const [stats, trend, dept, performers, improved, questions, recent] =
@@ -787,7 +746,7 @@ export default function DashboardPage() {
           }
         }
 
-        // Compute hours metrics for admin view (all responses or filtered by org)
+        // Compute hours metrics for admin view (selected scorecard period vs previous period)
         const [timeSavingIds, minutesSavingIds, confidenceIds] = await Promise.all([
           findTimeSavingQuestionIds(),
           findTimeSavingMinutesQuestionIds(),
@@ -797,7 +756,14 @@ export default function DashboardPage() {
         // For admin: compute org hours based on current filter
         const selectedOrgDoc = orgDocs.find((o) => o.id === aggregateOrgScope) as unknown as Organization | undefined
         const adminHourlyRate = selectedOrgDoc?.hourlyRate ?? 100
-        const adminOrgHours = computeOrgHoursMetrics(responses, timeSavingIds, confidenceIds, adminHourlyRate, minutesSavingIds)
+        const adminOrgHours = computeOrgScorecardPeriodHoursMetrics(
+          responses,
+          previousResponses,
+          timeSavingIds,
+          confidenceIds,
+          adminHourlyRate,
+          minutesSavingIds,
+        )
         setOrgHoursMetrics(adminOrgHours)
         
         // Compute weekly hours trend for chart
@@ -813,11 +779,23 @@ export default function DashboardPage() {
             user.id,
             user.authId,
           )
-          setPersonalStreak(computePersonalStreak(myRaw, user.id))
-          setPersonalTrend(computePersonalTrend(myRaw, user.id))
-          setPersonalBenchmark(computePersonalBenchmark(myRaw, user.id))
+          const myCompleted = myRaw.filter(
+            (r) => (r as unknown as { status?: string }).status === "completed" || Boolean(r.completedAt),
+          )
+          const userPeriods = selectScorecardPeriods(myCompleted, completionDateRange)
+          setPersonalPeriodLabel(userPeriods.currentPeriod?.label ?? "No completed scorecard")
+          setPersonalStreak(computePersonalStreak(userPeriods.eligibleResponses, user.id))
+          setPersonalTrend(computePersonalTrend(userPeriods.eligibleResponses, user.id))
+          setPersonalBenchmark(computePersonalBenchmark(userPeriods.eligibleResponses, user.id))
 
-          const userHours = computeUserHoursMetrics(myRaw, user.id, timeSavingIds, confidenceIds)
+          const userHours = computeUserScorecardPeriodHoursMetrics(
+            userPeriods.currentResponses,
+            userPeriods.previousResponses,
+            userPeriods.eligibleResponses,
+            user.id,
+            timeSavingIds,
+            confidenceIds,
+          )
           setUserHoursMetrics(userHours)
 
           // Extract goals from user's responses based on question types
@@ -833,7 +811,7 @@ export default function DashboardPage() {
           const userDoc = await getDocument(COLLECTIONS.USERS, user.id)
           const savedStatuses = (userDoc as Record<string, unknown>)?.goalStatuses as Record<string, { status: string }> | undefined
           
-          const userResponses = myRaw.filter((r) => r.userId === user.id)
+          const userResponses = userPeriods.currentResponses.filter((r) => r.userId === user.id)
           const extractedGoals: GoalEntry[] = []
           
           for (const response of userResponses) {
@@ -911,7 +889,7 @@ export default function DashboardPage() {
       setLoadingQuestions(false)
       setLoadingPersonal(false)
     }
-  }, [selectedOrg, selectedDept, user, timePeriod, filterByTimePeriod, isSuperAdmin, isAdmin, getDateRange])
+  }, [selectedOrg, selectedDept, user, completionDateRange, completionStartDate, completionEndDate, isSuperAdmin, isAdmin])
 
   useEffect(() => {
     loadData()
@@ -1005,15 +983,6 @@ export default function DashboardPage() {
     return parts.join(" / ")
   }, [selectedOrg, selectedDept, activeOrg])
 
-  // Scorecards are monthly, so weekly options don't make sense
-  const timePeriodLabel: Record<string, string> = {
-    "this-month": "This Month",
-    "last-30": "Last 30 Days",
-    "this-quarter": "This Quarter",
-    "last-quarter": "Last Quarter",
-    "ytd": "Year to Date",
-  }
-
   if (isAdmin) {
     // For company admins, use their locked organization name (try multiple sources)
     const companyAdminOrgName = isCompanyAdmin 
@@ -1083,21 +1052,17 @@ export default function DashboardPage() {
               </SelectContent>
             </Select>
 
-            <Select value={timePeriod} onValueChange={setTimePeriod}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Time Period" />
-              </SelectTrigger>
-                <SelectContent>
-                <SelectItem value="this-month">This Month</SelectItem>
-                <SelectItem value="last-30">Last 30 Days</SelectItem>
-                <SelectItem value="this-quarter">This Quarter</SelectItem>
-                <SelectItem value="last-quarter">Last Quarter</SelectItem>
-                <SelectItem value="ytd">Year to Date</SelectItem>
-                </SelectContent>
-            </Select>
+            <DashboardDateRangeFilter
+              startDate={completionStartDate}
+              endDate={completionEndDate}
+              onChange={({ startDate, endDate }) => {
+                setCompletionStartDate(startDate)
+                setCompletionEndDate(endDate)
+              }}
+            />
 
             <Badge variant="secondary" className="ml-auto text-xs">
-              {filterLabel} &middot; {timePeriodLabel[timePeriod]}
+              {filterLabel} &middot; {adminPeriodLabel} &middot; {completionFilterLabel}
             </Badge>
           </div>
         </div>
@@ -1202,54 +1167,30 @@ export default function DashboardPage() {
   
   // Build ProductivityHero data from hours metrics
   const totalResponses = personalStreak?.totalResponses ?? 0
-  const shouldShowLatestCompletedMonth =
-    Boolean(userHoursMetrics) &&
-    userHoursMetrics!.thisMonthResponses === 0 &&
-    userHoursMetrics!.lastMonthResponses > 0
-  const latestCompletedMonthName = new Date(new Date().setMonth(new Date().getMonth() - 1)).toLocaleString(
-    "default",
-    { month: "short" },
-  )
-  const displayedUserHoursMetrics: UserHoursMetrics | null =
-    userHoursMetrics && shouldShowLatestCompletedMonth
-      ? {
-          ...userHoursMetrics,
-          thisMonthHours: userHoursMetrics.lastMonthHours,
-          lastMonthHours: userHoursMetrics.lastMonthHours,
-          monthOverMonthChange: 0,
-          monthOverMonthPercent: 0,
-          weeklyAvgHours: Math.round((userHoursMetrics.lastMonthHours / 4) * 10) / 10,
-          productivityPercent: Math.round(((userHoursMetrics.lastMonthHours / 4) / 40) * 1000) / 10,
-          thisMonthResponses: userHoursMetrics.lastMonthResponses,
-        }
-      : userHoursMetrics
+  const displayedUserHoursMetrics: UserHoursMetrics | null = userHoursMetrics
   const productivityHeroData: ProductivityHeroData | null = (() => {
     if (!userHoursMetrics || !displayedUserHoursMetrics) return null
-    const monthlyHours = displayedUserHoursMetrics.thisMonthHours
-    const monthlyValue = Math.round(monthlyHours * effectiveHourlyRate)
+    const scorecardHours = displayedUserHoursMetrics.thisMonthHours
+    const scorecardValue = Math.round(scorecardHours * effectiveHourlyRate)
     const productivityPercent = displayedUserHoursMetrics.productivityPercent
-    const comparisonHours = shouldShowLatestCompletedMonth ? monthlyHours : userHoursMetrics.lastMonthHours
-    const comparisonProductivity = shouldShowLatestCompletedMonth
-      ? productivityPercent
-      : userHoursMetrics.lastMonthHours > 0
-        ? ((userHoursMetrics.lastMonthHours / 4) / 40) * 100
-        : 0
-    const comparisonValue = shouldShowLatestCompletedMonth
-      ? monthlyValue
-      : Math.round(userHoursMetrics.lastMonthHours * effectiveHourlyRate)
+    const comparisonHours = userHoursMetrics.lastMonthHours
+    const comparisonProductivity = userHoursMetrics.lastMonthHours > 0
+      ? (userHoursMetrics.lastMonthHours / 40) * 100
+      : 0
+    const comparisonValue = Math.round(userHoursMetrics.lastMonthHours * effectiveHourlyRate)
 
     return {
-      periodLabel: shouldShowLatestCompletedMonth ? `${latestCompletedMonthName} results` : undefined,
+      periodLabel: `${personalPeriodLabel} · ${completionFilterLabel}`,
       productivityPercent,
       lastMonthProductivity: comparisonProductivity,
-      monthlyHours,
+      monthlyHours: scorecardHours,
       lastMonthHours: comparisonHours,
-      monthlyValue,
+      monthlyValue: scorecardValue,
       lastMonthValue: comparisonValue,
       hourlyRate: effectiveHourlyRate,
-      fteEquivalent: monthlyHours / 160,
-      annualRunRate: monthlyHours * 12,
-      annualValue: Math.round(monthlyHours * effectiveHourlyRate * 12),
+      fteEquivalent: scorecardHours / 40,
+      annualRunRate: scorecardHours * 52,
+      annualValue: Math.round(scorecardHours * effectiveHourlyRate * 52),
       confidenceScore: displayedUserHoursMetrics.confidenceScore,
       lastMonthConfidence: displayedUserHoursMetrics.lastMonthConfidence,
       thisMonthResponses: displayedUserHoursMetrics.thisMonthResponses,
@@ -1288,6 +1229,19 @@ export default function DashboardPage() {
         <p className="mt-1 text-muted-foreground">
           Track your AI adoption journey, scorecard progress, and personal performance
         </p>
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-3">
+          <DashboardDateRangeFilter
+            startDate={completionStartDate}
+            endDate={completionEndDate}
+            onChange={({ startDate, endDate }) => {
+              setCompletionStartDate(startDate)
+              setCompletionEndDate(endDate)
+            }}
+          />
+          <Badge variant="secondary" className="ml-auto text-xs">
+            {personalPeriodLabel} &middot; {completionFilterLabel}
+          </Badge>
+        </div>
       </div>
 
       <div className="flex flex-col gap-6">

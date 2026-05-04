@@ -1942,6 +1942,75 @@ export function computeUserHoursMetrics(
   }
 }
 
+function sumUserPeriodHours(
+  responses: RawResponse[],
+  timeSavingIds: string[],
+): number {
+  let hoursVal = 0
+  for (const response of responses) {
+    for (const qId of timeSavingIds) {
+      const val = response.answers[qId]
+      if (val !== undefined && val !== null && val !== "") {
+        hoursVal += parseTimeValue(val)
+      }
+    }
+  }
+  return hoursVal
+}
+
+function latestConfidenceScore(responses: RawResponse[], confidenceIds: string[]): number {
+  const scores: number[] = []
+  for (const response of responses) {
+    for (const confId of confidenceIds) {
+      const conf = response.answers[confId]
+      const score = typeof conf === "number" ? conf : Number.parseFloat(String(conf ?? ""))
+      if (Number.isFinite(score) && score >= 1 && score <= 10) {
+        scores.push(score)
+      }
+    }
+  }
+  return scores.length > 0 ? scores[scores.length - 1] : 0
+}
+
+export function computeUserScorecardPeriodHoursMetrics(
+  currentResponses: RawResponse[],
+  previousResponses: RawResponse[],
+  allEligibleResponses: RawResponse[],
+  userId: string,
+  timeSavingIds: string[],
+  confidenceIds: string[],
+): UserHoursMetrics {
+  const myCurrent = currentResponses.filter((r) => r.userId === userId)
+  const myPrevious = previousResponses.filter((r) => r.userId === userId)
+  const myEligible = allEligibleResponses.filter((r) => r.userId === userId)
+
+  const totalHours = sumUserPeriodHours(myEligible, timeSavingIds)
+  const currentHours = sumUserPeriodHours(myCurrent, timeSavingIds)
+  const previousHours = sumUserPeriodHours(myPrevious, timeSavingIds)
+  const change = currentHours - previousHours
+  const percent = previousHours > 0 ? (change / previousHours) * 100 : currentHours > 0 ? 100 : 0
+
+  const confidenceScore = latestConfidenceScore(myCurrent, confidenceIds)
+  const previousConfidence = latestConfidenceScore(myPrevious, confidenceIds)
+  const confidenceChange = confidenceScore - previousConfidence
+
+  return {
+    totalHoursSavedAllTime: Math.round(totalHours * 10) / 10,
+    thisMonthHours: Math.round(currentHours * 10) / 10,
+    lastMonthHours: Math.round(previousHours * 10) / 10,
+    monthOverMonthChange: Math.round(change * 10) / 10,
+    monthOverMonthPercent: Math.round(percent * 10) / 10,
+    weeklyAvgHours: Math.round(currentHours * 10) / 10,
+    productivityPercent: Math.round((currentHours / 40) * 1000) / 10,
+    responseCount: myEligible.length,
+    thisMonthResponses: myCurrent.length,
+    lastMonthResponses: myPrevious.length,
+    confidenceScore: Math.round(confidenceScore * 10) / 10,
+    lastMonthConfidence: Math.round(previousConfidence * 10) / 10,
+    confidenceChange: Math.round(confidenceChange * 10) / 10,
+  }
+}
+
 // ── Compute hours metrics for an organization ─────────────────────────
 // Responses should already be filtered by the caller (month, quarter, YTD).
 // Weekly hours are aggregated as the max claim per user per calendar week (`weekOf`), then summed
@@ -2023,6 +2092,42 @@ export function computeOrgHoursMetrics(
     activeParticipants,
     thisMonthResponses: responses.length,
     lastMonthResponses: 0,
+  }
+}
+
+export function computeOrgScorecardPeriodHoursMetrics(
+  currentResponses: RawResponse[],
+  previousResponses: RawResponse[],
+  timeSavingIds: string[],
+  confidenceIds: string[],
+  hourlyRate: number = 100,
+  minutesSavingIds: string[] = [],
+): OrgHoursMetrics {
+  const metrics = computeOrgHoursMetrics(
+    currentResponses,
+    timeSavingIds,
+    confidenceIds,
+    hourlyRate,
+    minutesSavingIds,
+  )
+  const previous = computeOrgHoursMetrics(
+    previousResponses,
+    timeSavingIds,
+    confidenceIds,
+    hourlyRate,
+    minutesSavingIds,
+  )
+  const change = metrics.monthlyHours - previous.monthlyHours
+  const percent = previous.monthlyHours > 0 ? (change / previous.monthlyHours) * 100 : metrics.monthlyHours > 0 ? 100 : 0
+
+  return {
+    ...metrics,
+    lastMonthHours: previous.monthlyHours,
+    monthOverMonthChange: Math.round(change * 10) / 10,
+    monthOverMonthPercent: Math.round(percent * 10) / 10,
+    lastMonthConfidence: previous.avgConfidence,
+    confidenceChange: Math.round((metrics.avgConfidence - previous.avgConfidence) * 10) / 10,
+    lastMonthResponses: previousResponses.length,
   }
 }
 

@@ -162,7 +162,7 @@ export function MostImprovedCard({ showCompany = false, data }: MostImprovedProp
     <Card>
       <CardHeader>
         <CardTitle className="text-base font-semibold">
-          Most Improved This Month
+          Most Improved This Scorecard
         </CardTitle>
       </CardHeader>
       <CardContent>
